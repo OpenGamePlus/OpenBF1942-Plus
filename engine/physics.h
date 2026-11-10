@@ -61,7 +61,10 @@ struct VehicleDef {
     float exit[3] = {-2, 0, 0};  // setSoldierExitLocation, vehicle space
     std::vector<WingDef> wings;
     std::vector<WheelDef> wheels;
-    std::vector<float> hull;    // xyz points, vehicle space; the chassis is their convex hull
+    std::vector<float> hull;    // xyz points, vehicle space
+    // End (in floats) of each part's points in hull: one convex hull per part, joined as a compound (a carrier's deck
+    // and island, a tank's hull and turret). Empty: one convex hull of all points.
+    std::vector<size_t> hull_split;
 };
 
 // Walks an object template tree (first LodObject child only). Throws if it has no hull geometry.

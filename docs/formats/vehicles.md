@@ -119,7 +119,22 @@ Not moved: `Engine` rotation (a car's wheels hang under it), `AnimatedBundle` (t
 
 `BFSoldier` templates (e.g. `USSoldier`: `mass 100`, `speedmod 0.5`, `setAnimationState 0 Lb_Stand`) carry no walking speeds. The engine uses a 1.8 × 0.3 m capsule (Jolt `CharacterVirtual`): runs at 5 m/s, walks at 2.5 m/s, jumps at 4.5 m/s, climbs 0.4 m steps and 50° slopes, and swims with the feet 1.4 m under the surface; all guessed. The lower-body state follows the movement (`Lb_Stand`, `Lb_RunForward/Backward`, `Lb_StrafeLeft/Right`).
 
-Getting in: within 5 m + half the vehicle's length (not yet the `EntryPoint` radius). Getting out: at the vehicle's `setSoldierExitLocation` (Willys: −1.5/0/−0.8, left rear).
+Getting in: the nearest vehicle within 5 m + half its length (not yet the `EntryPoint` radius). Getting out: at the vehicle's `setSoldierExitLocation` (Willys: −1.5/0/−0.8, left rear).
+
+## Parked vehicles
+
+With `--play` or `--drive` every `ObjectSpawner` placement that can move (wheels, wings or floats; stationary guns stay static) becomes a physics vehicle at its retail position, team as in the viewer. `build_object` does not follow spawners inside a vehicle (a destroyer's landing craft are vehicles of their own).
+
+| Fix | Why |
+|---|---|
+| Lift until no hull point or wheel bottom is under the terrain | some retail spawns (M3A1, T95, Sexton, Willys) sit slightly under our terrain and fell through it |
+| One convex hull per collision part, parts over 20 m as 8 m columns (triangles sampled every metre, 1 m overlap) | a carrier's deck, island and mast are one mesh; its single hull covered the deck and threw parked aircraft off |
+| Aircraft brake gently above 0.5 m/s | the hard idle brake nosed tail-draggers over |
+
+Settling sweep, all 78 levels, 1,546 parked vehicles, 5 s: none tipped; 103 only settled vertically (boats to their waterline, aircraft riding their carrier); 16 moved more than 2 m sideways (Aichi Vals ~5 m, Natters on their ramps, Elcos at a pier); 20 fell more than 10 m: LCVPs placed on transports' davits drop into the sea, and two Salerno Willys (unexplained).
+
+## Open questions
+
 
 ## Open questions
 

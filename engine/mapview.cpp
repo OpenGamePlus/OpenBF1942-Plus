@@ -289,8 +289,9 @@ int run(int argc, char** argv) {
                      "  aircraft: W/S throttle (held), arrows pitch (up = nose down) and roll, A/D rudder; right mouse aims turrets\n"
                      "  --shot with --drive: settles 2 s, drives 4 s (last 2 s steering right), prints the track;\n"
                      "  aircraft: 20 s take-off run, pulling up from 12 s to 16 s\n"
-                     "  --play: walk a soldier (WASD, shift walks, space jumps, right mouse looks), E enters / leaves the --drive vehicle;\n"
-                     "  with --shot: runs 2 s towards the vehicle, gets in, drives 2 s, gets out\n");
+                     "  --play: walk a soldier (WASD, shift walks, space jumps, right mouse looks), E gets into / out of the nearest vehicle\n"
+                     "  (parked vehicles are drivable with --play or --drive); with --shot: runs 2 s, gets into the nearest vehicle,\n"
+                     "  drives 2 s, gets out, then reports how far the parked vehicles moved while settling\n");
         return 2;
     }
     std::string shot;
@@ -321,6 +322,7 @@ int run(int argc, char** argv) {
 
     Con con(vfs);
     std::vector<DrawItem> scene;
+    std::vector<SpawnPoint> spawns;
     std::map<std::string, int> skipped;
     if (objects) {
         con.load_game();
@@ -339,46 +341,98 @@ int run(int argc, char** argv) {
         // Third-person view only: the engine swaps these parts by camera and state at runtime.
         scene = build_scene(con, vfs, skipped, [](const std::string& t) {
             return t == "parachute" || t.rfind("1p", 0) == 0 || t.find("1pbody") != std::string::npos;
-        });
+        }, &spawns);
         std::printf("objects: %zu instances -> %zu meshes drawn; skipped:", con.instances.size(), scene.size());
         for (auto& [why, n] : skipped) std::printf(" %s %d,", why.c_str(), n);
         std::printf("\n");
     }
 
-    // Physics: terrain + static meshes; an optional driven vehicle drawn by appending its parts to the scene.
+    // Physics: terrain + static meshes.
     Physics phys(hm, info.world_size, info.water_level);
     if (objects) std::printf("physics: %zu static bodies\n", phys.add_scene(scene, vfs));
-    int vehicle = -1;
-    bool plane = false;
-    float plane_throttle = 0, veh_len = 0, veh_exit[3] = {-2, 0, 0};
-    size_t veh_first = scene.size();
-    size_t veh_parts = 0;
+
+    // Vehicles: the --drive one in front of the camera and, when driving or playing, every parked vehicle that can move
+    // (wheels, wings or floats) from the level's spawners. Their parts are appended to the scene and posed each frame.
+    struct Veh {
+        int id = -1;
+        std::string name;
+        size_t first = 0, parts = 0;
+        bool plane = false;
+        float len = 0, exit[3] = {-2, 0, 0}, throttle = 0;
+        Mat4 start;  // where it was placed
+    };
+    std::vector<Veh> vehicles;
+    int cur = -1;  // the vehicle under control
+    std::map<std::string, std::unique_ptr<VehicleDef>> defs;  // by template; null if it cannot move
+    auto def_for = [&](const std::string& name) -> const VehicleDef* {
+        auto it = defs.find(lower(name));
+        if (it == defs.end()) {
+            std::unique_ptr<VehicleDef> d;
+            try {
+                VehicleDef v = vehicle_def(con, vfs, name);
+                if (!v.wheels.empty() || !v.wings.empty() || !v.floats.empty()) d = std::make_unique<VehicleDef>(std::move(v));
+            } catch (const std::exception&) {
+            }
+            it = defs.emplace(lower(name), std::move(d)).first;
+        }
+        return it->second.get();
+    };
+    // Terrain height under (x, z), bilinear between samples.
+    auto ground = [&](float x, float z) {
+        float cell = info.world_size / static_cast<float>(hm.n), fx = std::clamp(x / cell, 0.0f, static_cast<float>(hm.n - 1)),
+              fz = std::clamp(z / cell, 0.0f, static_cast<float>(hm.n - 1));
+        int c = std::min(static_cast<int>(fx), hm.n - 2), r = std::min(static_cast<int>(fz), hm.n - 2);
+        float u = fx - static_cast<float>(c), w = fz - static_cast<float>(r);
+        return (hm.height(r, c) * (1 - u) + hm.height(r, c + 1) * u) * (1 - w) + (hm.height(r + 1, c) * (1 - u) + hm.height(r + 1, c + 1) * u) * w;
+    };
+    auto add_vehicle = [&](const std::string& name, Mat4 world) {
+        const VehicleDef* def = def_for(name);
+        if (!def) return;
+        // Some retail spawns sit a little under our terrain (M3A1, T95, Sexton fell through it): lift the vehicle until no
+        // hull point or wheel bottom is below the ground under it. Vehicles on bridges and decks are above it already.
+        float lift = 0;
+        auto check = [&](float x, float y, float z) {
+            float wx = world.m[0] * x + world.m[4] * y + world.m[8] * z + world.m[12], wy = world.m[1] * x + world.m[5] * y + world.m[9] * z + world.m[13],
+                  wz = world.m[2] * x + world.m[6] * y + world.m[10] * z + world.m[14];
+            lift = std::max(lift, ground(wx, wz) - wy);
+        };
+        for (size_t i = 0; i + 2 < def->hull.size(); i += 3) check(def->hull[i], def->hull[i + 1], def->hull[i + 2]);
+        for (auto& w : def->wheels)
+            if (w.strength > 0) check(w.pos[0], w.pos[1] - w.radius, w.pos[2]);
+        if (lift > 0) world = translate(0, lift + 0.05f, 0) * world;
+        Veh v;
+        v.id = phys.add_vehicle(*def, world), v.name = name, v.plane = def->plane, v.first = scene.size(), v.start = world;
+        std::copy(def->exit, def->exit + 3, v.exit);
+        for (size_t i = 2; i < def->hull.size(); i += 3) v.len = std::max(v.len, std::fabs(def->hull[i]));
+        for (DrawItem& item : build_object(con, vfs, name, Mat4::identity(), skipped)) ++v.parts, scene.push_back(std::move(item));
+        vehicles.push_back(v);
+    };
+    if (objects && (!drive.empty() || !play.empty())) {
+        std::vector<char> movable(spawns.size());
+        for (size_t i = 0; i < spawns.size(); ++i) movable[i] = def_for(spawns[i].name) != nullptr;
+        scene.erase(std::remove_if(scene.begin(), scene.end(), [&](const DrawItem& d) { return d.spawn >= 0 && movable[static_cast<size_t>(d.spawn)]; }),
+                    scene.end());
+        for (size_t i = 0; i < spawns.size(); ++i)
+            if (movable[i]) add_vehicle(spawns[i].name, spawns[i].world);
+        std::printf("vehicles: %zu of %zu spawners\n", vehicles.size(), spawns.size());
+    }
     if (objects && !drive.empty()) {
         float sx = cx < 0 ? info.world_size * 0.15f : cx, sz = cx < 0 ? info.world_size * 0.15f : cz;
         sx += std::sin(yaw) * 10, sz += std::cos(yaw) * 10;
         float cell = info.world_size / static_cast<float>(hm.n);
         int r = std::clamp(static_cast<int>(sz / cell), 0, hm.n - 1), c = std::clamp(static_cast<int>(sx / cell), 0, hm.n - 1);
-        VehicleDef def = vehicle_def(con, vfs, drive);
-        plane = def.plane;
-        std::copy(def.exit, def.exit + 3, veh_exit);
-        for (size_t i = 2; i < def.hull.size(); i += 3) veh_len = std::max(veh_len, std::fabs(def.hull[i]));
-        vehicle = phys.add_vehicle(def, translate(sx, std::max(hm.height(r, c), info.water_level) + 1, sz) * rotation_ypr(yaw * 57.29578f, 0, 0));
-        for (DrawItem& item : build_object(con, vfs, drive, Mat4::identity(), skipped)) {
-            ++veh_parts;
-            scene.push_back(std::move(item));
-        }
-        std::printf("drive %s: mass %.0f, %zu wheels, %zu hull points, %zu parts\n", drive.c_str(), def.mass, def.wheels.size(),
-                    def.hull.size() / 3, veh_parts);
-        for (auto& w : def.wheels) std::printf("  wheel %.2f %.2f %.2f r %.2f k %.0f c %.0f steer %.0f driven %d\n", w.pos[0], w.pos[1], w.pos[2], w.radius, w.strength, w.damping, w.steer_deg, w.driven);
-        float lo[3] = {1e9f, 1e9f, 1e9f}, hi[3] = {-1e9f, -1e9f, -1e9f};
-        for (size_t i = 0; i < def.hull.size(); ++i) lo[i % 3] = std::min(lo[i % 3], def.hull[i]), hi[i % 3] = std::max(hi[i % 3], def.hull[i]);
-        std::printf("  hull %.2f %.2f %.2f .. %.2f %.2f %.2f\n", lo[0], lo[1], lo[2], hi[0], hi[1], hi[2]);
+        size_t before = vehicles.size();
+        add_vehicle(drive, translate(sx, std::max(hm.height(r, c), info.water_level) + 1, sz) * rotation_ypr(yaw * 57.29578f, 0, 0));
+        if (vehicles.size() == before) throw std::runtime_error("--drive " + drive + ": not a vehicle that can move");
+        if (play.empty()) cur = static_cast<int>(before);
+        const VehicleDef& def = *def_for(drive);
+        std::printf("drive %s: mass %.0f, %zu wheels, %zu wings, %zu floats, %zu hull points, %zu parts\n", drive.c_str(), def.mass,
+                    def.wheels.size(), def.wings.size(), def.floats.size(), def.hull.size() / 3, vehicles.back().parts);
     }
 
     // Playable soldier (--play): a character capsule at the camera spot; its parts are appended like the vehicle's.
     auto hide_1p = [](const std::string& t) { return t == "parachute" || t.rfind("1p", 0) == 0 || t.find("1pbody") != std::string::npos; };
     int player = -1;
-    bool in_vehicle = false;
     size_t sol_first = scene.size(), sol_parts = 0;
     if (objects && !play.empty()) {
         float sx = cx < 0 ? info.world_size * 0.15f : cx, sz = cx < 0 ? info.world_size * 0.15f : cz;
@@ -649,112 +703,119 @@ int run(int argc, char** argv) {
         last = now;
         const Uint8* k = SDL_GetKeyboardState(nullptr);
         auto key = [&](SDL_Scancode a, SDL_Scancode b) { return static_cast<float>(k[a] - k[b]); };
-        // Get in within reach of the vehicle (shortcut: 5 m + half its length, not the EntryPoint radius); out at its
-        // setSoldierExitLocation.
+        // E: get into the nearest vehicle within reach (shortcut: 5 m + half its length, not the EntryPoint radius);
+        // again: out at its setSoldierExitLocation.
         auto get_in_out = [&] {
-            if (player < 0 || vehicle < 0) return;
-            Mat4 t = phys.transform(vehicle);
-            if (in_vehicle) {
+            if (player < 0) return;
+            if (cur >= 0) {
+                const Veh& v = vehicles[static_cast<size_t>(cur)];
+                Mat4 t = phys.transform(v.id);
                 float e[3];
-                for (int i = 0; i < 3; ++i) e[i] = t.m[i] * veh_exit[0] + t.m[4 + i] * veh_exit[1] + t.m[8 + i] * veh_exit[2] + t.m[12 + i];
+                for (int i = 0; i < 3; ++i) e[i] = t.m[i] * v.exit[0] + t.m[4 + i] * v.exit[1] + t.m[8 + i] * v.exit[2] + t.m[12 + i];
+                phys.drive(v.id, 0, 0);
+                phys.look(v.id, 0, 0);
                 phys.place_character(player, e[0], e[1] + 0.5f, e[2]);
                 phys.set_character_active(player, true);
-                in_vehicle = false;
-                std::printf("out of the vehicle at %.1f %.1f %.1f\n", e[0], e[1], e[2]);
+                std::printf("out of %s at %.1f %.1f %.1f\n", v.name.c_str(), e[0], e[1], e[2]);
+                cur = -1;
                 return;
             }
-            float p[3];
+            float p[3], best = 0;
             phys.character_position(player, p);
-            float dx = t.m[12] - p[0], dz = t.m[14] - p[2];
-            if (std::sqrt(dx * dx + dz * dz) > 5 + veh_len * 0.5f) return;
-            in_vehicle = true;
+            for (size_t i = 0; i < vehicles.size(); ++i) {
+                Mat4 t = phys.transform(vehicles[i].id);
+                float dx = t.m[12] - p[0], dz = t.m[14] - p[2], margin = 5 + vehicles[i].len * 0.5f - std::sqrt(dx * dx + dz * dz);
+                if (margin >= 0 && (cur < 0 || margin > best)) cur = static_cast<int>(i), best = margin;
+            }
+            if (cur < 0) return;
             phys.set_character_active(player, false);
-            std::printf("in the vehicle\n");
+            std::printf("in %s\n", vehicles[static_cast<size_t>(cur)].name.c_str());
         };
         // On foot: run (5 m/s) or walk with shift (2.5 m/s) relative to the camera; shortcut: speeds guessed.
         float move_f = 0, move_r = 0;
         auto walk = [&](float forward, float right, bool jump, bool slow) {
             move_f = forward, move_r = right;
+            if (player < 0) return;
             float l = std::sqrt(forward * forward + right * right), sp = (slow ? 2.5f : 5.0f) / std::max(l, 1.0f);
             float fx = std::sin(yaw), fz = std::cos(yaw);
             phys.walk(player, (fx * forward + fz * right) * sp, (fz * forward - fx * right) * sp, jump);
         };
-        if (player >= 0 && vehicle < 0) {
-            if (shot.empty()) {
-                walk(key(SDL_SCANCODE_W, SDL_SCANCODE_S), key(SDL_SCANCODE_D, SDL_SCANCODE_A), k[SDL_SCANCODE_SPACE], k[SDL_SCANCODE_LSHIFT]);
-                phys.step(dt);
+        if (shot.empty()) {
+            if (toggle_vehicle) get_in_out();
+            if (cur >= 0) {
+                Veh& v = vehicles[static_cast<size_t>(cur)];
+                float th = key(SDL_SCANCODE_W, SDL_SCANCODE_S);
+                if (v.plane) v.throttle = std::clamp(v.throttle + th * 0.5f * dt, 0.0f, 1.0f), th = v.throttle;
+                phys.drive(v.id, th, key(SDL_SCANCODE_D, SDL_SCANCODE_A), key(SDL_SCANCODE_UP, SDL_SCANCODE_DOWN),
+                           key(SDL_SCANCODE_RIGHT, SDL_SCANCODE_LEFT));
+                phys.look(v.id, mouse_x / 20.0f, mouse_y / 20.0f);  // mouse right / down = +1 at ~20 px per frame
+                walk(0, 0, false, false);
             } else {
-                for (int i = 0; i < 180; ++i) walk(i >= 60 ? 1.0f : 0.0f, 0, false, false), phys.step(1.0f / 60);
+                walk(key(SDL_SCANCODE_W, SDL_SCANCODE_S), key(SDL_SCANCODE_D, SDL_SCANCODE_A), k[SDL_SCANCODE_SPACE], k[SDL_SCANCODE_LSHIFT]);
+            }
+            phys.step(dt);
+        } else if (player >= 0) {  // demo: settle, run 2 s, get into the nearest vehicle, drive 2 s, get out
+            auto track = [&](const char* what) {
+                float p[3];
+                phys.character_position(player, p);
+                std::printf("%s: soldier %.1f %.1f %.1f%s\n", what, p[0], p[1], p[2], cur >= 0 ? " (in a vehicle)" : "");
+            };
+            for (int i = 0; i < 60; ++i) walk(0, 0, false, false), phys.step(1.0f / 60);
+            track("start");
+            for (int i = 0; i < 120; ++i) walk(1, 0, false, false), phys.step(1.0f / 60);
+            walk(0, 0, false, false);
+            track("ran 2 s");
+            get_in_out();
+            for (int i = 0; i < 120 && cur >= 0; ++i) phys.drive(vehicles[static_cast<size_t>(cur)].id, 1, 0), phys.step(1.0f / 60);
+            get_in_out();
+            for (int i = 0; i < 60; ++i) phys.step(1.0f / 60);
+            track("end");
+            // Parked vehicles after 5 s: those pushed away (spawned inside something) or tipped over.
+            int moved = 0, tipped = 0;
+            for (size_t i = 0; i < vehicles.size(); ++i) {
+                if (static_cast<int>(i) == cur) continue;
+                Mat4 t = phys.transform(vehicles[i].id);
+                const Mat4& w = vehicles[i].start;
+                float dx = t.m[12] - w.m[12], dy = t.m[13] - w.m[13], dz = t.m[14] - w.m[14];
+                if (dx * dx + dy * dy + dz * dz > 4) ++moved, std::printf("  moved: %s %.1f %.1f %.1f\n", vehicles[i].name.c_str(), dx, dy, dz);
+                if (t.m[5] < 0.7f) ++tipped, std::printf("  tipped: %s up %.2f\n", vehicles[i].name.c_str(), t.m[5]);
+            }
+            std::printf("parked vehicles: %zu, moved > 2 m: %d, tipped: %d\n", vehicles.size(), moved, tipped);
+        } else if (cur >= 0) {  // vehicle demo
+            const Veh& v = vehicles[static_cast<size_t>(cur)];
+            int steps = v.plane ? 1200 : 360;
+            for (int i = 0; i < steps; ++i) {
+                if (v.plane) phys.drive(v.id, i < 120 ? 0.0f : 1.0f, 0, i >= 720 && i < 960 ? -0.4f : 0.0f);
+                else phys.drive(v.id, i < 120 ? 0.0f : 1.0f, i < 240 ? 0.0f : 1.0f);
+                phys.look(v.id, i >= 120 ? 1.0f : 0.0f, i >= 120 ? -1.0f : 0.0f);  // turrets swing round, guns up
+                phys.step(1.0f / 60);
+                Mat4 t = phys.transform(v.id);
+                if (i % 30 == 29) std::printf("t %.1f s: pos %.1f %.1f %.1f, up %.2f %.2f %.2f, speed %.1f m/s\n", (i + 1) / 60.0, t.m[12], t.m[13], t.m[14], t.m[4], t.m[5], t.m[6], phys.speed(v.id));
             }
         }
-        if (vehicle >= 0) {
-            if (toggle_vehicle) get_in_out();
-            bool driving = player < 0 || in_vehicle;
-            if (shot.empty() && !driving) {
-                phys.drive(vehicle, 0, 0);
-                walk(key(SDL_SCANCODE_W, SDL_SCANCODE_S), key(SDL_SCANCODE_D, SDL_SCANCODE_A), k[SDL_SCANCODE_SPACE], k[SDL_SCANCODE_LSHIFT]);
-                phys.step(dt);
-            } else if (!shot.empty() && player >= 0) {  // demo: run to the vehicle, get in, drive, get out
-                auto track = [&](const char* what) {
-                    float p[3];
-                    phys.character_position(player, p);
-                    Mat4 t = phys.transform(vehicle);
-                    std::printf("%s: soldier %.1f %.1f %.1f, vehicle %.1f %.1f %.1f\n", what, p[0], p[1], p[2], t.m[12], t.m[13], t.m[14]);
-                };
-                for (int i = 0; i < 60; ++i) walk(0, 0, false, false), phys.step(1.0f / 60);
-                track("start");
-                for (int i = 0; i < 120; ++i) walk(1, 0, false, false), phys.step(1.0f / 60);
-                walk(0, 0, false, false);
-                track("ran 2 s");
-                get_in_out();
-                for (int i = 0; i < 120; ++i) phys.drive(vehicle, in_vehicle ? 1.0f : 0.0f, 0), phys.step(1.0f / 60);
-                track("drove 2 s");
-                get_in_out();
-                for (int i = 0; i < 60; ++i) phys.drive(vehicle, 0, 0), phys.step(1.0f / 60);
-                track("out");
-            } else if (shot.empty()) {
-                float th = key(SDL_SCANCODE_W, SDL_SCANCODE_S);
-                if (plane) plane_throttle = std::clamp(plane_throttle + th * 0.5f * dt, 0.0f, 1.0f), th = plane_throttle;
-                phys.drive(vehicle, th, key(SDL_SCANCODE_D, SDL_SCANCODE_A), key(SDL_SCANCODE_UP, SDL_SCANCODE_DOWN),
-                           key(SDL_SCANCODE_RIGHT, SDL_SCANCODE_LEFT));
-                // Mouse-look inputs: mouse right / down = +1 at ~20 px per frame.
-                phys.look(vehicle, mouse_x / 20.0f, mouse_y / 20.0f);
-                if (player >= 0) walk(0, 0, false, false);
-                phys.step(dt);
-            } else {  // repeatable demo run for --shot
-                int steps = plane ? 1200 : 360;
-                for (int i = 0; i < steps; ++i) {
-                    if (plane) phys.drive(vehicle, i < 120 ? 0.0f : 1.0f, 0, i >= 720 && i < 960 ? -0.4f : 0.0f);
-                    else phys.drive(vehicle, i < 120 ? 0.0f : 1.0f, i < 240 ? 0.0f : 1.0f);
-                    phys.look(vehicle, i >= 120 ? 1.0f : 0.0f, i >= 120 ? -1.0f : 0.0f);  // turrets swing round, guns up
-                    phys.step(1.0f / 60);
-                    Mat4 t = phys.transform(vehicle);
-                    if (i % 30 == 29) std::printf("t %.1f s: pos %.1f %.1f %.1f, up %.2f %.2f %.2f, speed %.1f m/s\n", (i + 1) / 60.0, t.m[12], t.m[13], t.m[14], t.m[4], t.m[5], t.m[6], phys.speed(vehicle));
-                }
-            }
-            Mat4 t = phys.transform(vehicle);
-            // Rebuild the part matrices with the moving parts (wheels, turrets, control surfaces, propellers).
-            std::vector<DrawItem> parts = build_object(con, vfs, drive, t, skipped, [&](const std::string& n, int k) { return phys.joint(vehicle, n, k); });
-            for (size_t i = 0; i < parts.size() && i < veh_parts; ++i) scene[veh_first + i].world = parts[i].world;
-            // Chase camera behind the vehicle, looking along its heading.
+        // Pose every vehicle's parts (wheels, turrets, control surfaces, propellers).
+        for (const Veh& v : vehicles) {
+            std::vector<DrawItem> parts = build_object(con, vfs, v.name, phys.transform(v.id), skipped,
+                                                       [&](const std::string& n, int o) { return phys.joint(v.id, n, o); });
+            for (size_t i = 0; i < parts.size() && i < v.parts; ++i) scene[v.first + i].world = parts[i].world;
+        }
+        if (cur >= 0) {  // chase camera behind the vehicle, distance from its length (Fletcher ~110 m)
+            const Veh& v = vehicles[static_cast<size_t>(cur)];
+            Mat4 t = phys.transform(v.id);
             float hx = t.m[8], hz = t.m[10], hl = std::sqrt(hx * hx + hz * hz);
-            if (player >= 0 && !in_vehicle) hl = 0;  // on foot: the soldier camera below
             if (hl > 1e-3f) hx /= hl, hz /= hl;
-            // Big ships: camera distance from the hull length (Fletcher ~110 m).
-            float back = plane ? 16.0f : std::max(9.0f, veh_len * 1.2f);
-            if (hl > 1e-3f) {
-                cx = t.m[12] - hx * back, cy = t.m[13] + (plane ? 4.5f : std::max(3.5f, back * 0.35f)), cz = t.m[14] - hz * back;
-                yaw = std::atan2(hx, hz), pitch = -0.25f;
-            }
+            float back = v.plane ? 16.0f : std::max(9.0f, v.len * 1.2f);
+            cx = t.m[12] - hx * back, cy = t.m[13] + (v.plane ? 4.5f : std::max(3.5f, back * 0.35f)), cz = t.m[14] - hz * back;
+            yaw = std::atan2(hx, hz), pitch = -0.25f;
         }
         if (player >= 0) {
             float p[3];
             phys.character_position(player, p);
             // The soldier faces the camera direction; hidden far below while in a vehicle.
-            Mat4 w = in_vehicle ? translate(0, -10000, 0) : translate(p[0], p[1], p[2]) * rotation_ypr(yaw * 57.29578f, 0, 0);
+            Mat4 w = cur >= 0 ? translate(0, -10000, 0) : translate(p[0], p[1], p[2]) * rotation_ypr(yaw * 57.29578f, 0, 0);
             std::vector<DrawItem> parts = build_object(con, vfs, play, w, skipped, nullptr, hide_1p);
             for (size_t i = 0; i < parts.size() && i < sol_parts; ++i) scene[sol_first + i].world = parts[i].world;
-            std::string want = !phys.character_on_ground(player) && !in_vehicle ? lower_state
+            std::string want = !phys.character_on_ground(player) && cur < 0 ? lower_state
                              : move_f > 0.1f ? "lb_runforward" : move_f < -0.1f ? "lb_runbackward"
                              : move_r > 0.1f ? "lb_straferight" : move_r < -0.1f ? "lb_strafeleft" : "lb_stand";
             auto an = want != lower_state ? state_anim(want) : nullptr;
@@ -764,12 +825,12 @@ int run(int argc, char** argv) {
                 if (a.biped) scene[a.item].world = scene[a.item].world * rotation_ypr(180, 0, 0);  // as at load
                 if (an && !a.anims.empty()) a.anims[0] = an;
             }
-            if (!in_vehicle) {  // third-person camera over the shoulder
+            if (cur < 0) {  // third-person camera over the shoulder
                 float dx = std::sin(yaw) * std::cos(pitch), dy = std::sin(pitch), dz = std::cos(yaw) * std::cos(pitch);
                 cx = p[0] - dx * 4.5f, cy = p[1] + 1.7f - dy * 4.5f, cz = p[2] - dz * 4.5f;
             }
         }
-        float speed = (k[SDL_SCANCODE_LSHIFT] ? 400.f : 60.f) * dt * (vehicle < 0 && player < 0);
+        float speed = (k[SDL_SCANCODE_LSHIFT] ? 400.f : 60.f) * dt * (cur < 0 && player < 0);
         float fx = std::sin(yaw), fz = std::cos(yaw);
         if (k[SDL_SCANCODE_W]) cx += fx * speed, cz += fz * speed;
         if (k[SDL_SCANCODE_S]) cx -= fx * speed, cz -= fz * speed;

@@ -2,6 +2,12 @@
 
 Append-only. Newest first. At most 3 bullets per stage.
 
+## 2026-11-10 — parked vehicles are drivable
+
+- Spawner placements that can move become physics vehicles; E gets into the nearest. `build_scene` returns spawn points; `build_object` no longer follows nested spawners.
+- Sweep of 1,546 parked vehicles found real defects: spawns under our terrain fell through it (now lifted), a carrier's single convex hull threw its aircraft off (now per-part hulls, big parts as 8 m columns), hard brakes nosed planes over.
+- Open: LCVPs on davits, two Salerno Willys, entry points.
+
 ## 2026-11-10 — soldier on foot (step 7 starts)
 
 - `--play USSoldier`: Jolt `CharacterVirtual` capsule walking on terrain, buildings and vehicles; lower-body animation follows the movement; E gets into the `--drive` vehicle and out at its `setSoldierExitLocation`.

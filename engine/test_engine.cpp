@@ -374,6 +374,20 @@ int main() {
         for (int i = 0; i < 18; ++i) phys.step(1.0f / 60);
         phys.character_position(ch, p);
         assert(p[1] > 0.5f && !phys.character_on_ground(ch));
+        // Hull parts: a 20 x 20 m deck 1 m high with a 10 m tower is a compound; a soldier lands on the deck, not on the
+        // single convex hull's slope up to the tower top.
+        VehicleDef ship;
+        ship.mass = 100000;
+        auto box = [&](float x0, float y0, float z0, float x1, float y1, float z1) {
+            for (int i = 0; i < 8; ++i) ship.hull.insert(ship.hull.end(), {i & 1 ? x1 : x0, i & 2 ? y1 : y0, i & 4 ? z1 : z0});
+            ship.hull_split.push_back(ship.hull.size());
+        };
+        box(-10, 0, -10, 10, 1, 10), box(5, 1, -1, 7, 10, 1);
+        phys.add_vehicle(ship, translate(30, 0.1f, 30));
+        int on_deck = phys.add_character(25, 3, 30);
+        for (int i = 0; i < 120; ++i) phys.step(1.0f / 60);
+        phys.character_position(on_deck, p);
+        assert(std::fabs(p[1] - 1.1f) < 0.15f);
         Physics sea(hm, 128, 10);  // ground 10 m under the surface
         int sw = sea.add_character(64, 12, 64);
         for (int i = 0; i < 300; ++i) sea.step(1.0f / 60);

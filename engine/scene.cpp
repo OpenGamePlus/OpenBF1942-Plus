@@ -21,6 +21,7 @@ struct Anim {
     std::vector<std::string> states;
     std::string root_pos;  // "x-y-z" of the placed instance, truncated: object lightmap names
     bool spawned = false;  // below an ObjectSpawner
+    int spawn = -1;
 };
 
 struct Builder {
@@ -31,6 +32,8 @@ struct Builder {
     std::vector<DrawItem> out;
     long calls = 0;  // total template visits; fan-out (many addTemplate of the same child) is exponential
     const JointFn* joint = nullptr;
+    std::vector<SpawnPoint>* spawns = nullptr;
+    bool follow_spawners = true;
     std::map<std::string, int> seen;  // template visits by name: the occurrence index passed to joint
 
     const ConObject* find(const std::string& sub, const std::string& name) const {
@@ -59,7 +62,7 @@ struct Builder {
                 if (type == "animatedmesh" && (!vfs.has(skin) || !vfs.has(anim.skeleton))) skin.clear();
                 std::string lm = con.level_dir + "/objectlightmaps/" + file + "_" + anim.root_pos + ".tga";
                 if (type != "standardmesh" || anim.root_pos.empty() || !vfs.has(lm)) lm.clear();
-                return void(out.push_back({p, world, type == "animatedmesh" ? skin : "", anim.skeleton, anim.states, lm, owner, anim.spawned}));
+                return void(out.push_back({p, world, type == "animatedmesh" ? skin : "", anim.skeleton, anim.states, lm, owner, anim.spawned, anim.spawn}));
             }
         ++skipped["missing mesh file"];
     }
@@ -77,9 +80,11 @@ struct Builder {
             std::string pick;
             for (auto& [k, a] : t->props)
                 if (k == "setobjecttemplate" && a.size() >= 2 && (pick.empty() || std::atoi(a[0].c_str()) == team)) pick = a[1];
+            if (!follow_spawners) return;
             if (pick.empty()) return void(++skipped["empty spawner"]);
             Anim spawned;
             spawned.spawned = true;
+            if (spawns) spawned.spawn = static_cast<int>(spawns->size()), spawns->push_back({pick, world});
             return object(pick, world, depth + 1, 0, spawned);
         }
         for (auto& [k, a] : t->props) {
@@ -120,8 +125,9 @@ struct Builder {
 }  // namespace
 
 std::vector<DrawItem> build_scene(const Con& con, const Vfs& vfs, std::map<std::string, int>& skipped,
-                                  const std::function<bool(const std::string&)>& hide) {
-    Builder b{con, vfs, skipped, hide, {}, 0, nullptr, {}};
+                                  const std::function<bool(const std::string&)>& hide, std::vector<SpawnPoint>* spawns) {
+    Builder b{con, vfs, skipped, hide, {}, 0, nullptr, nullptr, true, {}};
+    b.spawns = spawns;
     for (auto& inst : con.instances) {
         if (inst.deleted) continue;
         float pos[3] = {}, rot[3] = {}, scl[3] = {1, 1, 1};
@@ -145,8 +151,9 @@ std::vector<DrawItem> build_scene(const Con& con, const Vfs& vfs, std::map<std::
 std::vector<DrawItem> build_object(const Con& con, const Vfs& vfs, const std::string& name, const Mat4& world,
                                    std::map<std::string, int>& skipped, const JointFn& joint,
                                    const std::function<bool(const std::string&)>& hide) {
-    Builder b{con, vfs, skipped, hide, {}, 0, nullptr, {}};
+    Builder b{con, vfs, skipped, hide, {}, 0, nullptr, nullptr, true, {}};
     b.joint = &joint;
+    b.follow_spawners = false;
     b.object(name, world, 0);
     return std::move(b.out);
 }

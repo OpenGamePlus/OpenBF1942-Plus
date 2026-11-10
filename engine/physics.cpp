@@ -17,6 +17,7 @@
 #include <Jolt/Physics/Collision/Shape/MeshShape.h>
 #include <Jolt/Physics/Collision/Shape/OffsetCenterOfMassShape.h>
 #include <Jolt/Physics/Collision/Shape/ScaledShape.h>
+#include <Jolt/Physics/Collision/Shape/StaticCompoundShape.h>
 #include <Jolt/Physics/PhysicsSystem.h>
 #include <Jolt/RegisterTypes.h>
 
@@ -229,6 +230,44 @@ struct Walker {
     }
 };
 
+// A big concave part (a carrier: deck, island and mast in one mesh) as 8 m columns, each a convex hull of the
+// triangles' surface sampled every metre, overlapping its neighbours by 1 m so there are no gaps. Deck columns stay
+// flat at deck height; one hull would cover the deck with the island's top.
+void columns(const std::vector<CollisionMesh>& meshes, const Mat4& world, VehicleDef& def) {
+    const float cell = 8, margin = 1, step = 1;
+    std::map<std::pair<int, int>, std::vector<float>> cols;
+    auto add = [&](const float* q) {  // into its column and the neighbours within the margin
+        int x0 = static_cast<int>(std::floor((q[0] - margin) / cell)), x1 = static_cast<int>(std::floor((q[0] + margin) / cell));
+        int z0 = static_cast<int>(std::floor((q[2] - margin) / cell)), z1 = static_cast<int>(std::floor((q[2] + margin) / cell));
+        for (int cx = x0; cx <= x1; ++cx)
+            for (int cz = z0; cz <= z1; ++cz) cols[{cx, cz}].insert(cols[{cx, cz}].end(), q, q + 3);
+    };
+    for (const CollisionMesh& c : meshes) {
+        size_t nv = c.vertices.size() / 3;
+        for (size_t f = 0; f + 2 < c.faces.size(); f += 3) {
+            if (c.faces[f] >= nv || c.faces[f + 1] >= nv || c.faces[f + 2] >= nv) continue;
+            float t[3][3];
+            for (int k = 0; k < 3; ++k) {
+                const float* v = &c.vertices[static_cast<size_t>(c.faces[f + static_cast<size_t>(k)]) * 3];
+                xform(world, v[0], v[1], v[2], t[k]);
+            }
+            float e = 0;
+            for (int k = 0; k < 3; ++k)
+                e = std::max(e, std::hypot(t[k][0] - t[(k + 1) % 3][0], t[k][1] - t[(k + 1) % 3][1], t[k][2] - t[(k + 1) % 3][2]));
+            if (!std::isfinite(e)) continue;
+            int n = std::clamp(static_cast<int>(std::ceil(e / step)), 1, 200);
+            for (int i = 0; i <= n; ++i)
+                for (int j = 0; i + j <= n; ++j) {
+                    float a = static_cast<float>(i) / static_cast<float>(n), b = static_cast<float>(j) / static_cast<float>(n), q[3];
+                    for (int k = 0; k < 3; ++k) q[k] = t[0][k] + a * (t[1][k] - t[0][k]) + b * (t[2][k] - t[0][k]);
+                    add(q);
+                }
+        }
+    }
+    for (auto& [key, pts] : cols)
+        if (pts.size() >= 12) def.hull.insert(def.hull.end(), pts.begin(), pts.end()), def.hull_split.push_back(def.hull.size());
+}
+
 }  // namespace
 
 VehicleDef vehicle_def(const Con& con, const Vfs& vfs, const std::string& name) {
@@ -254,19 +293,33 @@ VehicleDef vehicle_def(const Con& con, const Vfs& vfs, const std::string& name) 
         // (Tank track meshes reach the wheel bottoms; in the hull they scrape the ground.)
         if (w.gear.count(item.owner)) continue;
         float p[3];
+        size_t before = def.hull.size();
         for (auto& c : m.collision)
             for (size_t v = 0; v + 2 < c.vertices.size(); v += 3) {
                 xform(item.world, c.vertices[v], c.vertices[v + 1], c.vertices[v + 2], p);
-                def.hull.insert(def.hull.end(), p, p + 3);
+                if (std::isfinite(p[0]) && std::isfinite(p[1]) && std::isfinite(p[2])) def.hull.insert(def.hull.end(), p, p + 3);
             }
+        if (def.hull.size() > before) {
+            float lo[2] = {1e30f, 1e30f}, hi[2] = {-1e30f, -1e30f};
+            for (size_t i = before; i < def.hull.size(); i += 3)
+                for (int k = 0; k < 2; ++k) lo[k] = std::min(lo[k], def.hull[i + 2 * k]), hi[k] = std::max(hi[k], def.hull[i + 2 * k]);
+            if (std::max(hi[0] - lo[0], hi[1] - lo[1]) > 20) {  // big part: columns instead of one convex hull
+                def.hull.resize(before);
+                columns(m.collision, item.world, def);
+            } else {
+                def.hull_split.push_back(def.hull.size());
+            }
+        }
         for (int i = 0; i < 8; ++i) {  // fallback if no part has a collision block (cockpits, guns often have none)
             xform(item.world, m.bbox[i & 1 ? 3 : 0], m.bbox[i & 2 ? 4 : 1], m.bbox[i & 4 ? 5 : 2], p);
             boxes.insert(boxes.end(), p, p + 3);
         }
     }
-    if (def.hull.empty()) def.hull = boxes;
-    def.hull.erase(std::remove_if(def.hull.begin(), def.hull.end(), [](float f) { return !std::isfinite(f); }), def.hull.end());
-    def.hull.resize(def.hull.size() / 3 * 3);
+    if (def.hull.empty()) {
+        def.hull_split.clear();
+        for (size_t i = 0; i + 2 < boxes.size(); i += 3)
+            if (std::isfinite(boxes[i]) && std::isfinite(boxes[i + 1]) && std::isfinite(boxes[i + 2])) def.hull.insert(def.hull.end(), &boxes[i], &boxes[i] + 3);
+    }
     if (def.hull.size() < 12) throw std::runtime_error("vehicle " + name + ": no hull geometry");
     if (!(def.mass > 0)) def.mass = 1000;
     return def;
@@ -387,12 +440,30 @@ size_t Physics::add_scene(const std::vector<DrawItem>& items, const Vfs& vfs) {
 }
 
 int Physics::add_vehicle(const VehicleDef& def, const Mat4& world) {
-    Array<Vec3> pts;
-    for (size_t i = 0; i + 2 < def.hull.size(); i += 3) pts.push_back(Vec3(def.hull[i], def.hull[i + 1], def.hull[i + 2]));
-    ConvexHullShapeSettings hs(pts, 0.05f);
-    auto res = hs.Create();
-    if (res.HasError()) throw std::runtime_error(std::string("vehicle hull: ") + res.GetError().c_str());
-    RefConst<Shape> shape = res.Get();
+    auto hull = [&](size_t from, size_t to) -> RefConst<Shape> {
+        Array<Vec3> pts;
+        for (size_t i = from; i + 2 < to && i + 2 < def.hull.size(); i += 3) pts.push_back(Vec3(def.hull[i], def.hull[i + 1], def.hull[i + 2]));
+        if (pts.size() < 4) return nullptr;
+        ConvexHullShapeSettings hs(pts, 0.05f);
+        auto res = hs.Create();
+        return res.HasError() ? nullptr : res.Get();
+    };
+    // One convex hull per part (flat or tiny parts that fail are dropped); a single hull if that leaves nothing.
+    RefConst<Shape> shape;
+    if (def.hull_split.size() > 1) {
+        StaticCompoundShapeSettings cs;
+        size_t from = 0;
+        for (size_t to : def.hull_split) {
+            if (RefConst<Shape> part = hull(from, to)) cs.AddShape(Vec3::sZero(), Quat::sIdentity(), part);
+            from = to;
+        }
+        if (!cs.mSubShapes.empty()) {
+            auto res = cs.Create();
+            if (!res.HasError()) shape = res.Get();
+        }
+    }
+    if (!shape) shape = hull(0, def.hull.size());
+    if (!shape) throw std::runtime_error("vehicle hull: no convex hull");
     // shortcut: centre of mass lowered to wheel-centre height (arcade stability; the hull's volume centre rolls a
     // Willys in ordinary turns). Revisit when the original's rollover behaviour is measured.
     float wy = 0;
@@ -471,7 +542,7 @@ void Physics::Impl::forces(Vehicle& v) {
         RRayCast ray{T * Vec3(w.pos[0], w.pos[1] + rest, w.pos[2]), -up * len};
         ClosestHitCollisionCollector<CastRayCollector> hit;
         sys.GetNarrowPhaseQuery().CastRay(ray, rs, hit, {}, {}, self);
-        v.wheel_offset[i] = -rest;  // hanging free
+        v.wheel_offset[i] = -std::min(rest, 0.2f);  // hanging free; shortcut: drawn droop capped, real travel unknown
         if (!hit.HadHit()) continue;
         float x = len - hit.mHit.mFraction * len;
         v.wheel_offset[i] = x - rest;
@@ -498,7 +569,8 @@ void Physics::Impl::forces(Vehicle& v) {
         if (v.throttle != 0 && v.throttle * vf < -1.0f) Ff = (vf > 0 ? -1.0f : 1.0f) * 0.8f * mu * N;  // braking
         else if (w.driven && driven > 0) Ff = v.throttle * a_drive * d.mass / static_cast<float>(driven);
         // No throttle: engine braking (0.5 s time constant), full hold below 0.5 m/s so parked vehicles do not creep.
-        if (v.throttle == 0) Ff = std::fabs(vf) < 0.5f ? -0.5f * vf * mw / kStep : -2.0f * vf * mw;
+        // Aircraft roll out gently: hard brakes nose a tail-dragger over.
+        if (v.throttle == 0) Ff = std::fabs(vf) < 0.5f ? -0.5f * vf * mw / kStep : -(d.plane ? 0.3f : 2.0f) * vf * mw;
         float lim = mu * N, tot = std::sqrt(Fs * Fs + Ff * Ff);
         if (tot > lim && tot > 0) Fs *= lim / tot, Ff *= lim / tot;
         // Along the ground normal: along the tilted body axis a pitched vehicle would push itself backwards.
