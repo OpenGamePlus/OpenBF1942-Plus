@@ -143,8 +143,12 @@ Game::Game(const Vfs& vfs_, Con& con_, const Heightmap& hm_, const TerrainInfo& 
             }
             Bot b;
             b.team = tm, b.tmpl = team_skins[tm], b.yaw = sp.yaw, b.hp = hitpoints(b.tmpl), b.first = scene.size();
-            b.weapon = weapon_def(con, primary(tm, static_cast<int>(bots.size() % 5)));  // the five classes in turn
+            b.kit = static_cast<int>(bots.size() % 5);  // the five classes in turn
+            b.weapon = weapon_def(con, primary(tm, b.kit));
             b.ammo = Ammo::full(b.weapon);
+            for (const std::string& w : kit_weapons(tm, b.kit))
+                if (WeaponDef g = weapon_def(con, w); g.bounce && g.radius > 0 && g.ttl < 60 && b.grenade.name.empty()) b.grenade = g;
+            b.grenades = Ammo::full(b.grenade);
             std::copy(sp.pos, sp.pos + 3, b.pos);
             b.ch = phys.add_character(sp.pos[0], sp.pos[1] + 0.1f, sp.pos[2]);
             for (DrawItem& item : build_object(con, vfs, b.tmpl, Mat4::identity(), skipped, nullptr, hide_1p)) ++b.parts, scene.push_back(std::move(item));
@@ -497,7 +501,10 @@ void Game::apply_hits() {
             if (!player_dead && h.tag != team) hurt_player(direct(part));
         } else if (h.character >= 0) {
             for (Bot& b : bots)
-                if (b.ch == h.character && !b.dead && h.tag != b.team) hurt_bot(b, direct(part), h.tag);
+                if (b.ch == h.character && !b.dead && h.tag != b.team) {
+                    float hh = h.height * 1.8f / body_height(b.posture);  // as if standing
+                    hurt_bot(b, direct(hh > 1.45f ? 40 : hh > 0.85f ? 41 : 42), h.tag);
+                }
         } else if (h.vehicle >= 0) {
             for (size_t i = 0; i < vehicles.size(); ++i)
                 if (vehicles[i].id == h.vehicle && !vehicles[i].wrecked) {
@@ -557,7 +564,8 @@ void Game::think(float t, float step) {
         phys.place_character(b.ch, sp->pos[0], sp->pos[1] + 0.2f, sp->pos[2]);
         phys.set_character_active(b.ch, true);
         b.dead = false, b.hp = hitpoints(b.tmpl), b.yaw = sp->yaw, b.target = -2, b.seen_at = -1;
-        b.ammo = Ammo::full(b.weapon);
+        b.ammo = Ammo::full(b.weapon), b.grenades = Ammo::full(b.grenade);
+        if (phys.set_posture(b.ch, 0)) b.posture = 0;
         std::copy(sp->pos, sp->pos + 3, b.pos);
     }
     float ppos[3] = {};
@@ -578,11 +586,11 @@ void Game::think(float t, float step) {
             phys.walk(b.ch, 0, 0, false), b.moving = false;
             continue;
         }
-        float eye[3] = {b.pos[0], b.pos[1] + 1.6f, b.pos[2]};
+        float eye[3] = {b.pos[0], b.pos[1] + body_height(b.posture) - 0.2f, b.pos[2]};
         auto aim_point = [&](int who, float out[3], int& ch, int& veh) {
             if (who == -1) return std::copy(ppos, ppos + 3, out), ch = cur >= 0 ? -1 : player, veh = pveh, void();
             const Bot& o = bots[static_cast<size_t>(who)];
-            out[0] = o.pos[0], out[1] = o.pos[1] + 1.2f, out[2] = o.pos[2], ch = o.ch, veh = -1;
+            out[0] = o.pos[0], out[1] = o.pos[1] + body_height(o.posture) * 0.65f, out[2] = o.pos[2], ch = o.ch, veh = -1;
         };
         if (t >= b.next_look) {  // nearest visible opponent; line of sight checked for the three nearest
             b.next_look = t + 0.3f, b.target = -2;
@@ -614,7 +622,23 @@ void Game::think(float t, float step) {
             if (b.seen_at < 0) b.seen_at = t;
             b.yaw = std::atan2(d[0], d[2]) * 57.29578f, b.moving = false;
             phys.walk(b.ch, 0, 0, false);
+            // shortcut: in a fight scouts lie down and the others crouch (the original AI's choice is unread)
+            if (int want = b.kit == 0 ? 2 : 1; b.posture != want && phys.set_posture(b.ch, want)) b.posture = want;
             b.ammo.tick(t, b.weapon);
+            // A grenade at soldiers 12-35 m away, at most every 8 s (guessed): the low arc that lands on them.
+            float hd = std::sqrt(d[0] * d[0] + d[2] * d[2]), v = b.grenade.velocity, gr = 9.81f;
+            float disc = v * v * v * v - gr * (gr * hd * hd + 2 * d[1] * v * v);
+            if (!b.grenade.name.empty() && veh < 0 && hd > 12 && hd < 35 && disc > 0 && t >= b.next_grenade && t - b.seen_at > 1.5f &&
+                b.grenades.take(t)) {
+                b.next_grenade = t + 8;
+                float tan_a = (v * v - std::sqrt(disc)) / (gr * hd), ca = 1 / std::sqrt(1 + tan_a * tan_a), sa = tan_a * ca;
+                float dir[3] = {d[0] / hd * ca + err(rng), sa + err(rng), d[2] / hd * ca + err(rng)}, pos[3], vel[3];
+                for (int i = 0; i < 3; ++i) pos[i] = eye[i] + dir[i] * 0.5f, vel[i] = dir[i] * v;
+                phys.fire(pos, vel, b.grenade.material, b.grenade.material2, b.grenade.ttl, -1, b.ch, b.team, b.grenade.radius, true);
+                sounds.push_back({b.grenade.name, {pos[0], pos[1], pos[2]}});
+                ++grenades_thrown;
+                continue;
+            }
             if (dist > 0.5f && t - b.seen_at > 0.7f && t >= b.next_fire && !b.weapon.name.empty() && b.ammo.take(t)) {
                 b.next_fire = t + 2 * b.weapon.interval;
                 float dir[3] = {d[0] / dist + err(rng), d[1] / dist + err(rng), d[2] / dist + err(rng)};
@@ -626,6 +650,7 @@ void Game::think(float t, float step) {
             continue;
         }
         b.seen_at = -1;
+        if (b.posture != 0 && phys.set_posture(b.ch, 0)) b.posture = 0;  // up again to move on
         // The flag it already runs for, while it can still take it; else the nearest one its team does not hold
         // (two flags at about the same distance would otherwise swap goals every step).
         const ConquestFlag* goal = nullptr;
@@ -787,10 +812,10 @@ void Game::demo_play(float sim_seconds) {
     int alive = 0, running = 0;
     for (const Bot& b : bots) alive += !b.dead, running += !b.dead && b.moving;
     std::printf("after %.0f s: %d of %zu bots alive, %d running for a flag; flags held %d / %d; tickets %.1f / %.1f%s; player %s; "
-                "bot deaths %d / %d; stuck sidesteps %d\n",
+                "bot deaths %d / %d; stuck sidesteps %d; grenades %d\n",
                 now, alive, bots.size(), running, game.owned(1), game.owned(2), game.tickets[1], game.tickets[2],
                 game.winner ? (game.winner == 1 ? ", team 1 won" : ", team 2 won") : "", player_dead ? "dead" : "alive", deaths[1], deaths[2],
-                detours);
+                detours, grenades_thrown);
     // Parked vehicles after 5 s: those pushed away (spawned inside something) or tipped over.
     int moved = 0, tipped = 0;
     for (size_t i = 0; i < vehicles.size(); ++i) {

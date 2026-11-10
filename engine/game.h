@@ -132,6 +132,10 @@ private:
         float died_at = 0;
         WeaponDef weapon;
         Ammo ammo;
+        int kit = 1, posture = 0;  // posture as Physics::set_posture
+        WeaponDef grenade;         // the kit's hand grenade, if any
+        Ammo grenades;
+        float next_grenade = 0;
         float next_fire = 0, seen_at = -1, next_look = 0;
         int target = -2;  // -2 nobody, -1 the player, else a bot
         float check_at = 0, check_pos[2] = {}, detour_until = 0, detour_side = 1;  // getting unstuck
@@ -183,6 +187,7 @@ private:
     NavGrid nav;  // infantry map of the level, 2 m cells; empty: bots run straight
     std::array<int, 3> deaths{0, 0, 0};
     int detours = 0;  // sidesteps taken by stuck bots
+    int grenades_thrown = 0;
     DamageTable damage;
     WeaponDef hand;  // the weapon in hand, and its ammunition
     Ammo hand_ammo;
@@ -194,6 +199,7 @@ private:
     int posture = 0;         // the player's: 0 stand, 1 crouch, 2 prone
     bool lying = false;      // prone toggled on
     float eye_height() const { return posture == 2 ? 0.35f : posture == 1 ? 1.0f : 1.5f; }
+    static float body_height(int p) { return p == 2 ? 0.7f : p == 1 ? 1.2f : 1.8f; }  // as the physics capsules
     struct Placed {  // the player's mines (go off near a vehicle) and explosive packs (go off on detonate)
         int shot = -1;
         float near = 0;
