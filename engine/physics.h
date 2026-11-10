@@ -113,10 +113,11 @@ public:
         float height = 0;
         int armor = -1;       // material of the armour face hit (vehicles), else -1
         int material = 0, material2 = -1;
+        int tag = 0;          // as given to fire (the game uses the shooter's team)
         float pos[3] = {};
     };
     void fire(const float pos[3], const float vel[3], int material, int material2, float ttl, int ignore_vehicle = -1,
-              int ignore_character = -1);
+              int ignore_character = -1, int tag = 0);
     std::vector<Hit> take_hits();                       // since the last call
     // Nothing between a and b except the given soldiers and vehicle (the looker and its target).
     bool line_of_sight(const float a[3], const float b[3], int ignore_character, int target_character, int target_vehicle) const;

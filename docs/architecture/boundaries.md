@@ -15,6 +15,7 @@
 | `engine/math.h` | 4x4 matrices, game rotation convention | std only |
 | `engine/scene.*` | instances → mesh paths + world matrices | `con`, `vfs`, `math` |
 | `engine/damage.*` | MaterialManager damage table | std only |
+| `engine/conquest.*` | flags and tickets | `con` |
 | `engine/physics.*` | Jolt world, vehicle parts as forces ([ADR 0004](adr/0004-jolt-physics.md)) | `scene`, `sm`, `terrain`, `con`, `math`, Jolt |
 | `engine/mapview.cpp` | executable: window, GL, camera | all of the above, SDL2, epoxy |
 | `tools/*.py` | Python reference implementations | `rfa` ← `con` ← `sm`, `tm`, `anim` |

@@ -16,7 +16,7 @@ Clean-room reimplementation of the Refractor 1 engine so Battlefield 1942 runs o
 | 4. Terrain + map objects | done — C++ viewer renders every map with buildings and trees |
 | 5. Skinned meshes + animations | in progress — soldiers and flags animate in the viewer (`--soldier USSoldier`) |
 | 6. Physics + vehicles | in progress — cars, tanks, aircraft and boats in the viewer (`--drive Willy`, `Sherman`, `Spitfire`, `LCVP`); handling not yet calibrated |
-| 7. Gameplay | started — play a team with its kit (`--play 2 --kit 1`) against enemy soldiers that shoot back and run for the flags; drive any parked vehicle (E), fire (left mouse); retail armour and damage tables |
+| 7. Gameplay | started — a conquest game against bots (`--play 2 --kit 1`): flags, tickets, win; drive any parked vehicle (E), fire (left mouse); retail armour and damage tables |
 | 8 | not started (see [roadmap](#roadmap)) |
 
 ## Tools

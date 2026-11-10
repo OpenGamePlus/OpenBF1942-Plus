@@ -16,6 +16,7 @@
 
 #include "anim.h"
 #include "con.h"
+#include "conquest.h"
 #include "damage.h"
 #include "dds.h"
 #include "math.h"
@@ -288,7 +289,7 @@ std::unique_ptr<GpuMesh> upload_tm(const TmMesh& m, Textures& tex) {
 int run(int argc, char** argv) {
     if (argc < 4) {
         std::fprintf(stderr,
-                     "usage: obf_mapview <BF1942_DIR> <mod> <level> [--shot out.ppm] [--cam x y z yaw pitch] [--mode conquest|ctf|tdm|coop] [--soldier <template>] [--drive <vehicle>] [--play <team 1|2 or soldier>] [--kit 0-4] [--fire-ahead] [--collision] [--no-objects]\n"
+                     "usage: obf_mapview <BF1942_DIR> <mod> <level> [--shot out.ppm] [--cam x y z yaw pitch] [--mode conquest|ctf|tdm|coop] [--soldier <template>] [--drive <vehicle>] [--play <team 1|2 or soldier>] [--kit 0-4] [--sim s] [--fire-ahead] [--collision] [--no-objects]\n"
                      "  right mouse: look, WASD/QE: move (or drive), shift: fast, C: collision meshes, esc: quit\n"
                      "  aircraft: W/S throttle (held), arrows pitch (up = nose down) and roll, A/D rudder; right mouse aims turrets\n"
                      "  --shot with --drive: settles 2 s, drives 4 s (last 2 s steering right), prints the track;\n"
@@ -296,7 +297,8 @@ int run(int argc, char** argv) {
                      "  straight ahead, no steering)\n"
                      "  --play: walk a soldier (WASD, shift walks, space jumps, right mouse looks, left mouse fires), E gets into / out of the nearest vehicle\n"
                      "  (parked vehicles are drivable with --play or --drive); with --shot: runs 2 s, gets into the nearest vehicle,\n"
-                     "  drives 2 s, gets out, then reports how far the parked vehicles moved while settling\n");
+                     "  drives 2 s, gets out, then reports how far the parked vehicles moved while settling, then plays --sim seconds\n"
+                     "  (default 10) of conquest and prints flag changes and tickets\n");
         return 2;
     }
     std::string shot;
@@ -305,6 +307,7 @@ int run(int argc, char** argv) {
     std::string mode = "conquest", soldier, drive, play;
     bool look_demo = false;  // --shot vehicle demo: keep the gun straight ahead (--fire-ahead)
     int kit = 1;             // --kit: 0 scout, 1 assault, 2 anti-tank, 3 medic, 4 engineer
+    float sim_seconds = 10;  // --shot with --play: seconds of AI after the demo (--sim)
     for (int i = 4; i < argc; ++i) {
         if (!std::strcmp(argv[i], "--shot") && i + 1 < argc) shot = argv[++i];
         else if (!std::strcmp(argv[i], "--no-objects")) objects = false;
@@ -315,6 +318,7 @@ int run(int argc, char** argv) {
         else if (!std::strcmp(argv[i], "--play") && i + 1 < argc) play = argv[++i];
         else if (!std::strcmp(argv[i], "--fire-ahead")) look_demo = true;
         else if (!std::strcmp(argv[i], "--kit") && i + 1 < argc) kit = std::clamp(std::atoi(argv[++i]), 0, 4);
+        else if (!std::strcmp(argv[i], "--sim") && i + 1 < argc) sim_seconds = std::clamp(static_cast<float>(std::atof(argv[++i])), 0.0f, 3600.0f);
         else if (!std::strcmp(argv[i], "--cam") && i + 5 < argc) {
             cx = std::stof(argv[i + 1]), cy = std::stof(argv[i + 2]), cz = std::stof(argv[i + 3]);
             yaw = std::stof(argv[i + 4]), pitch = std::stof(argv[i + 5]);
@@ -502,72 +506,67 @@ int run(int argc, char** argv) {
         std::printf("play %s (team %d, kit %s): %zu parts\n", soldier_tmpl.c_str(), team,
                     kits.count({team, kit}) ? kits[{team, kit}].c_str() : "-", sol_parts);
     }
-    // Enemies: one soldier of the other team standing at each of its spawn points. A SpawnPoint's setGroup is a
-    // ControlPoint's spawnGroupId; that control point's team owns it (team 0: nobody yet).
-    struct Enemy {
-        int ch = -1;
+    // Conquest (engine/conquest.*): flags change hands, tickets run down. Bots of both teams start on the spawn points
+    // their team owns: a SpawnPoint's setGroup is a ControlPoint's spawnGroupId, owned by that flag's team (0: nobody).
+    Conquest game = conquest_from(con);
+    struct SpawnPt {
+        float pos[3] = {}, yaw = 0;
+        int group = -1;
+    };
+    std::vector<SpawnPt> spawn_points;
+    auto spawn_team = [&](const SpawnPt& sp) {
+        for (auto& f : game.flags)
+            if (f.group == sp.group) return f.team;
+        return 0;
+    };
+    struct Bot {
+        int ch = -1, team = 0;
         std::string tmpl;
         size_t first = 0, parts = 0;
         float hp = 30, yaw = 0, pos[3] = {};
-        bool dead = false;
+        bool dead = false, moving = false;
+        float died_at = 0;
         std::vector<size_t> anims;
-        int team = 0;
+        std::vector<std::vector<std::shared_ptr<Animation>>> anims0;  // as loaded, restored on respawn
         WeaponDef weapon;
-        float next_fire = 0, seen_at = -1;  // AI: when the target came into view
-        bool moving = false;
-        std::string lower_state = "lb_stand";
+        float next_fire = 0, seen_at = -1, next_look = 0;
+        int target = -2;  // -2 nobody, -1 the player, else a bot
+        float check_at = 0, check_pos[2] = {}, detour_until = 0, detour_side = 1;  // getting unstuck
     };
-    // Flags (ControlPoint instances) and the player's team spawn points, for the AI's goals and respawning.
-    struct Flag {
-        float pos[3] = {};
-        int team = 0;
-    };
-    std::vector<Flag> flags;
-    std::vector<std::array<float, 4>> home;  // x y z yaw
-    std::vector<Enemy> enemies;
+    std::vector<Bot> bots;
     if (player >= 0) {
-        std::map<int, int> group_team;
-        for (auto& [n, t] : con.templates["objecttemplate"]) {
-            if (lower(t.type) != "controlpoint") continue;
-            int g = -1, tm = 0;
-            for (auto& [k, a] : t.props)
-                if (!a.empty() && k == "spawngroupid") g = std::atoi(a[0].c_str());
-                else if (!a.empty() && k == "team") tm = std::atoi(a[0].c_str());
-            if (g >= 0) group_team[g] = tm;
-        }
         for (auto& inst : con.instances) {
             const ConObject* t = inst.deleted ? nullptr : object_template(inst.name);
             if (!t || lower(t->type) != "spawnpoint") continue;
-            int g = -1;
+            SpawnPt sp;
             for (auto& [k, a] : t->props)
-                if (k == "setgroup" && !a.empty()) g = std::atoi(a[0].c_str());
-            auto gt = group_team.find(g);
-            float pos[3] = {}, rot[3] = {};
+                if (k == "setgroup" && !a.empty()) sp.group = std::atoi(a[0].c_str());
+            float rot[3] = {};
             for (auto& [k, a] : inst.props)
-                if (k == "absoluteposition" && !a.empty()) parse_vec3(a[0], pos);
+                if (k == "absoluteposition" && !a.empty()) parse_vec3(a[0], sp.pos);
                 else if (k == "rotation" && !a.empty()) parse_vec3(a[0], rot);
-            if (gt != group_team.end() && gt->second == team) home.push_back({pos[0], pos[1], pos[2], rot[0]});
-            if (gt == group_team.end() || gt->second == 0 || gt->second == team || !team_skins.count(gt->second)) continue;
-            Enemy e;
-            e.tmpl = team_skins[gt->second], e.yaw = rot[0], e.hp = hitpoints(e.tmpl), e.first = scene.size(), e.team = gt->second;
-            e.weapon = weapon_def(con, primary(e.team, static_cast<int>(enemies.size() % 5)));  // the five classes in turn
-            std::copy(pos, pos + 3, e.pos);
-            e.ch = phys.add_character(pos[0], pos[1] + 0.1f, pos[2]);
-            for (DrawItem& item : build_object(con, vfs, e.tmpl, Mat4::identity(), skipped, nullptr, hide_1p)) ++e.parts, scene.push_back(std::move(item));
-            enemies.push_back(std::move(e));
+            sp.yaw = rot[0];
+            spawn_points.push_back(sp);
         }
-        for (auto& inst : con.instances) {
-            const ConObject* t = inst.deleted ? nullptr : object_template(inst.name);
-            if (!t || lower(t->type) != "controlpoint") continue;
-            Flag f;
-            for (auto& [k, a] : t->props)
-                if (k == "team" && !a.empty()) f.team = std::atoi(a[0].c_str());
-            for (auto& [k, a] : inst.props)
-                if (k == "absoluteposition" && !a.empty()) parse_vec3(a[0], f.pos);
-            flags.push_back(f);
+        bool skipped_one = false;  // the player takes one of its team's places
+        for (const SpawnPt& sp : spawn_points) {
+            int tm = spawn_team(sp);
+            if (tm == 0 || !team_skins.count(tm)) continue;
+            if (tm == team && !skipped_one) {
+                skipped_one = true;
+                continue;
+            }
+            Bot b;
+            b.team = tm, b.tmpl = team_skins[tm], b.yaw = sp.yaw, b.hp = hitpoints(b.tmpl), b.first = scene.size();
+            b.weapon = weapon_def(con, primary(tm, static_cast<int>(bots.size() % 5)));  // the five classes in turn
+            std::copy(sp.pos, sp.pos + 3, b.pos);
+            b.ch = phys.add_character(sp.pos[0], sp.pos[1] + 0.1f, sp.pos[2]);
+            for (DrawItem& item : build_object(con, vfs, b.tmpl, Mat4::identity(), skipped, nullptr, hide_1p)) ++b.parts, scene.push_back(std::move(item));
+            bots.push_back(std::move(b));
         }
-        std::printf("enemies: %zu soldiers at the other team's spawn points; %zu flags, %zu home spawn points\n", enemies.size(),
-                    flags.size(), home.size());
+        int n1 = static_cast<int>(std::count_if(bots.begin(), bots.end(), [](const Bot& b) { return b.team == 1; }));
+        std::printf("conquest: %zu flags, tickets %.0f / %.0f; bots: %d team 1, %zu team 2; %zu spawn points\n", game.flags.size(),
+                    game.tickets[1], game.tickets[2], n1, bots.size() - static_cast<size_t>(n1), spawn_points.size());
     }
 
     if (SDL_Init(SDL_INIT_VIDEO) != 0) throw std::runtime_error(SDL_GetError());
@@ -740,9 +739,9 @@ int run(int argc, char** argv) {
     std::vector<size_t> player_anims;
     for (size_t ai = 0; ai < animated.size(); ++ai)
         if (animated[ai].item >= sol_first && animated[ai].item < sol_first + sol_parts) player_anims.push_back(ai);
-    for (Enemy& e : enemies)
+    for (Bot& b : bots)
         for (size_t ai = 0; ai < animated.size(); ++ai)
-            if (animated[ai].item >= e.first && animated[ai].item < e.first + e.parts) e.anims.push_back(ai);
+            if (animated[ai].item >= b.first && animated[ai].item < b.first + b.parts) b.anims.push_back(ai), b.anims0.push_back(animated[ai].anims);
     auto state_anim = [&](const std::string& name) -> std::shared_ptr<Animation> {
         auto st = states.find(name);
         if (st == states.end() || !vfs.has(st->second.baf)) return nullptr;
@@ -759,6 +758,7 @@ int run(int argc, char** argv) {
                     hand.velocity, hand.interval, hand.material, damage.materials.size(), damage.mods.size());
     float hand_next = 0;
     float player_hp = hitpoints(soldier_tmpl), respawn_at = -1;
+    std::array<int, 6> hud{-1, -1, -1, -1, -1, -1};  // what the window title shows
     bool player_dead = false;
     std::mt19937 rng(1942);  // AI aim error; fixed seed: --shot runs repeat
     GLuint tracer_vao = 0, tracer_vbo = 0;
@@ -900,52 +900,54 @@ int run(int argc, char** argv) {
                 if (!(l > 1e-6f)) return;
                 float pos[3], vel[3];
                 for (int i = 0; i < 3; ++i) d[i] /= l, pos[i] = m.m[12 + i] + d[i] * (v.has_muzzle ? 1.0f : v.len), vel[i] = d[i] * v.weapon.velocity;
-                phys.fire(pos, vel, v.weapon.material, v.weapon.material2, v.weapon.ttl, v.id);
+                phys.fire(pos, vel, v.weapon.material, v.weapon.material2, v.weapon.ttl, v.id, -1, team);
             } else if (player >= 0 && !hand.name.empty() && t >= hand_next) {
                 hand_next = t + hand.interval;
                 float p[3], d[3] = {std::sin(yaw) * std::cos(pitch), std::sin(pitch), std::cos(yaw) * std::cos(pitch)}, pos[3], vel[3];
                 phys.character_position(player, p);
                 for (int i = 0; i < 3; ++i) pos[i] = p[i] + (i == 1 ? 1.5f : 0.0f) + d[i] * 0.6f, vel[i] = d[i] * hand.velocity;
-                phys.fire(pos, vel, hand.material, hand.material2, hand.ttl, -1, player);
+                phys.fire(pos, vel, hand.material, hand.material2, hand.ttl, -1, player, team);
             }
         };
+        auto game_time = [&] { return shot.empty() ? static_cast<float>(SDL_GetTicks()) / 1000.0f : demo_t; };
+        auto player_dies = [&] {
+            player_dead = true, respawn_at = game_time() + 3;
+            phys.set_character_active(player, false);
+            game.death(team);
+            std::printf("you died\n");
+        };
         // Hits: damage = hit material vs the armour face met (else the vehicle's material), plus the explosion material.
+        // Soldiers take no damage from their own team (shots carry the shooter's team as their tag).
         auto apply_hits = [&] {
             for (const Physics::Hit& h : phys.take_hits()) {
                 if (h.character >= 0 && h.character == player) {
-                    if (player_dead) continue;
+                    if (player_dead || h.tag == team) continue;
                     int part = h.height > 1.45f ? 40 : h.height > 0.85f ? 41 : 42;
                     player_hp -= damage.damage(h.material, part) + (h.material2 >= 0 ? damage.damage(h.material2, part) : 0.0f);
                     std::printf("you are hit: %.1f hp left\n", std::max(0.0f, player_hp));
-                    if (player_hp <= 0) {
-                        player_dead = true, respawn_at = (shot.empty() ? static_cast<float>(SDL_GetTicks()) / 1000.0f : demo_t) + 3;
-                        phys.set_character_active(player, false);
-                        std::printf("you died\n");
-                    }
+                    if (player_hp <= 0) player_dies();
                     continue;
                 }
                 if (h.character >= 0) {
-                    for (Enemy& e : enemies) {
-                        if (e.ch != h.character || e.dead) continue;
+                    for (Bot& b : bots) {
+                        if (b.ch != h.character || b.dead || h.tag == b.team) continue;
                         // Body part by hit height: head 40, chest 41, limbs 42 (setSkeletonCollisionBone materials).
                         // shortcut: heights stand in for the bones; arms count as chest.
                         int part = h.height > 1.45f ? 40 : h.height > 0.85f ? 41 : 42;
-                        float d = damage.damage(h.material, part) + (h.material2 >= 0 ? damage.damage(h.material2, part) : 0.0f);
-                        e.hp -= d;
-                        std::printf("hit %s (%s): %.1f damage, %.1f hp left\n", e.tmpl.c_str(), part == 40 ? "head" : part == 41 ? "chest" : "legs", d,
-                                    std::max(0.0f, e.hp));
-                        if (e.hp > 0) continue;
-                        e.dead = true;
-                        phys.character_position(e.ch, e.pos);
-                        phys.kill_character(e.ch);
+                        b.hp -= damage.damage(h.material, part) + (h.material2 >= 0 ? damage.damage(h.material2, part) : 0.0f);
+                        if (b.hp > 0) continue;
+                        b.dead = true, b.died_at = game_time();
+                        phys.character_position(b.ch, b.pos);
+                        phys.kill_character(b.ch);
+                        game.death(b.team);
                         auto lo = state_anim("lb_diecheststand"), up = state_anim("ub_diecheststand");
-                        for (size_t ai : e.anims) {
+                        for (size_t ai : b.anims) {
                             Animated& a = animated[ai];
                             if (lo && !a.anims.empty()) a.anims[0] = lo;
                             if (up && a.anims.size() > 1) a.anims[1] = up;
-                            a.hold = shot.empty() ? static_cast<float>(SDL_GetTicks()) / 1000.0f : -1000.0f;  // --shot: the end of the fall
+                            a.hold = shot.empty() ? b.died_at : -1000.0f;  // --shot: the end of the fall
                         }
-                        std::printf("%s killed\n", e.tmpl.c_str());
+                        if (h.tag == team) std::printf("%s (team %d) killed\n", b.tmpl.c_str(), b.team);
                     }
                     continue;
                 }
@@ -960,73 +962,142 @@ int run(int argc, char** argv) {
                     if (v.hp > 0) continue;
                     v.wrecked = true;
                     std::printf("%s destroyed\n", v.name.c_str());
-                    if (static_cast<int>(i) == cur && player >= 0) {  // the crew dies with it
-                        get_in_out();
-                        player_dead = true, respawn_at = (shot.empty() ? static_cast<float>(SDL_GetTicks()) / 1000.0f : demo_t) + 3;
-                        phys.set_character_active(player, false);
-                        std::printf("you died\n");
-                    }
+                    if (static_cast<int>(i) == cur && player >= 0) get_in_out(), player_dies();  // the crew dies with it
                     phys.drive(v.id, 0, 0);
                 }
             }
         };
-        // AI (shortcut: no path finding, no squad, no vehicles): an enemy who sees the player (120 m, clear line) turns,
-        // waits 0.7 s, then fires its kit weapon at half its rate with ~2 deg of aim error; otherwise it runs straight to
-        // the nearest flag its team does not hold and waits there. t: game time.
-        auto think = [&](float t) {
-            if (player >= 0 && player_dead && t >= respawn_at && !home.empty()) {  // back at a home spawn point
-                const auto& h = home[std::uniform_int_distribution<size_t>(0, home.size() - 1)(rng)];
-                phys.place_character(player, h[0], h[1] + 0.2f, h[2]);
-                phys.set_character_active(player, true);
-                player_dead = false, player_hp = hitpoints(soldier_tmpl), yaw = h[3] * 3.14159265f / 180.0f;
-                std::printf("respawned\n");
+        // AI (shortcut: no path finding, no squads, no vehicles; numbers guessed). Every 0.3 s a bot picks the nearest
+        // opponent (bot or player) it can see within 120 m; with one it turns, waits 0.7 s and fires its kit weapon at
+        // half the weapon's rate with ~2 deg of aim error. Otherwise it runs at 4 m/s straight for the nearest flag its
+        // team does not hold (main bases cannot change hands) and waits there. The dead come back after 10 s (the
+        // player after 3) on a spawn point their team owns. Then the flags and tickets move on. t: game time.
+        auto think = [&](float t, float step) {
+            auto owned_spawn = [&](int tm) -> const SpawnPt* {
+                std::vector<const SpawnPt*> c;
+                for (const SpawnPt& sp : spawn_points)
+                    if (spawn_team(sp) == tm) c.push_back(&sp);
+                return c.empty() ? nullptr : c[std::uniform_int_distribution<size_t>(0, c.size() - 1)(rng)];
+            };
+            if (player >= 0 && player_dead && t >= respawn_at && !game.winner)
+                if (const SpawnPt* sp = owned_spawn(team)) {
+                    phys.place_character(player, sp->pos[0], sp->pos[1] + 0.2f, sp->pos[2]);
+                    phys.set_character_active(player, true);
+                    player_dead = false, player_hp = hitpoints(soldier_tmpl), yaw = sp->yaw * 3.14159265f / 180.0f;
+                    std::printf("respawned\n");
+                }
+            for (Bot& b : bots) {
+                if (!b.dead) phys.character_position(b.ch, b.pos);
+                if (!b.dead || t - b.died_at < 10 || game.winner) continue;
+                const SpawnPt* sp = owned_spawn(b.team);
+                if (!sp) continue;
+                phys.place_character(b.ch, sp->pos[0], sp->pos[1] + 0.2f, sp->pos[2]);
+                phys.set_character_active(b.ch, true);
+                b.dead = false, b.hp = hitpoints(b.tmpl), b.yaw = sp->yaw, b.target = -2, b.seen_at = -1;
+                std::copy(sp->pos, sp->pos + 3, b.pos);
+                for (size_t k = 0; k < b.anims.size(); ++k) animated[b.anims[k]].anims = b.anims0[k], animated[b.anims[k]].hold = -1;
             }
-            float tgt[3] = {};
-            int tgt_vehicle = -1;
-            bool has_target = player >= 0 && !player_dead;
-            if (has_target && cur >= 0) {
+            float ppos[3] = {};
+            int pveh = -1;
+            bool palive = player >= 0 && !player_dead;
+            if (palive && cur >= 0) {
                 Mat4 m = phys.transform(vehicles[static_cast<size_t>(cur)].id);
-                tgt[0] = m.m[12], tgt[1] = m.m[13] + 1, tgt[2] = m.m[14], tgt_vehicle = vehicles[static_cast<size_t>(cur)].id;
-            } else if (has_target) {
-                phys.character_position(player, tgt);
-                tgt[1] += 1.2f;
+                ppos[0] = m.m[12], ppos[1] = m.m[13] + 1, ppos[2] = m.m[14], pveh = vehicles[static_cast<size_t>(cur)].id;
+            } else if (palive) {
+                phys.character_position(player, ppos);
+                ppos[1] += 1.2f;
             }
             std::normal_distribution<float> err(0.0f, 0.035f);
-            for (Enemy& e : enemies) {
-                if (e.dead) continue;
-                float eye[3] = {e.pos[0], e.pos[1] + 1.6f, e.pos[2]}, d[3] = {tgt[0] - eye[0], tgt[1] - eye[1], tgt[2] - eye[2]};
-                float dist = std::sqrt(d[0] * d[0] + d[1] * d[1] + d[2] * d[2]);
-                bool sees = has_target && dist < 120 && dist > 0.5f &&
-                            phys.line_of_sight(eye, tgt, e.ch, cur >= 0 ? -1 : player, tgt_vehicle);
-                if (sees) {
-                    if (e.seen_at < 0) e.seen_at = t;
-                    e.yaw = std::atan2(d[0], d[2]) * 57.29578f, e.moving = false;
-                    phys.walk(e.ch, 0, 0, false);
-                    if (t - e.seen_at > 0.7f && t >= e.next_fire && !e.weapon.name.empty()) {
-                        e.next_fire = t + 2 * e.weapon.interval;
+            for (size_t bi = 0; bi < bots.size(); ++bi) {
+                Bot& b = bots[bi];
+                if (b.dead) continue;
+                if (game.winner) {
+                    phys.walk(b.ch, 0, 0, false), b.moving = false;
+                    continue;
+                }
+                float eye[3] = {b.pos[0], b.pos[1] + 1.6f, b.pos[2]};
+                auto aim_point = [&](int who, float out[3], int& ch, int& veh) {
+                    if (who == -1) return std::copy(ppos, ppos + 3, out), ch = cur >= 0 ? -1 : player, veh = pveh, void();
+                    const Bot& o = bots[static_cast<size_t>(who)];
+                    out[0] = o.pos[0], out[1] = o.pos[1] + 1.2f, out[2] = o.pos[2], ch = o.ch, veh = -1;
+                };
+                if (t >= b.next_look) {  // nearest visible opponent; line of sight checked for the three nearest
+                    b.next_look = t + 0.3f, b.target = -2;
+                    std::vector<std::pair<float, int>> cand;
+                    auto d2 = [&](const float* q) {
+                        return (q[0] - b.pos[0]) * (q[0] - b.pos[0]) + (q[1] - b.pos[1]) * (q[1] - b.pos[1]) + (q[2] - b.pos[2]) * (q[2] - b.pos[2]);
+                    };
+                    if (palive && team != b.team) cand.push_back({d2(ppos), -1});
+                    for (size_t oi = 0; oi < bots.size(); ++oi)
+                        if (!bots[oi].dead && bots[oi].team != b.team) cand.push_back({d2(bots[oi].pos), static_cast<int>(oi)});
+                    std::sort(cand.begin(), cand.end());
+                    for (size_t c = 0; c < cand.size() && c < 3 && cand[c].first < 120 * 120; ++c) {
+                        float q[3];
+                        int ch, veh;
+                        aim_point(cand[c].second, q, ch, veh);
+                        if (phys.line_of_sight(eye, q, b.ch, ch, veh)) {
+                            b.target = cand[c].second;
+                            break;
+                        }
+                    }
+                }
+                if (b.target == -1 && !palive) b.target = -2;
+                if (b.target >= 0 && bots[static_cast<size_t>(b.target)].dead) b.target = -2;
+                if (b.target != -2) {
+                    float q[3];
+                    int ch, veh;
+                    aim_point(b.target, q, ch, veh);
+                    float d[3] = {q[0] - eye[0], q[1] - eye[1], q[2] - eye[2]}, dist = std::sqrt(d[0] * d[0] + d[1] * d[1] + d[2] * d[2]);
+                    if (b.seen_at < 0) b.seen_at = t;
+                    b.yaw = std::atan2(d[0], d[2]) * 57.29578f, b.moving = false;
+                    phys.walk(b.ch, 0, 0, false);
+                    if (dist > 0.5f && t - b.seen_at > 0.7f && t >= b.next_fire && !b.weapon.name.empty()) {
+                        b.next_fire = t + 2 * b.weapon.interval;
                         float dir[3] = {d[0] / dist + err(rng), d[1] / dist + err(rng), d[2] / dist + err(rng)};
                         float l = std::sqrt(dir[0] * dir[0] + dir[1] * dir[1] + dir[2] * dir[2]), pos[3], vel[3];
-                        for (int i = 0; i < 3; ++i) pos[i] = eye[i] + dir[i] / l * 0.6f, vel[i] = dir[i] / l * e.weapon.velocity;
-                        phys.fire(pos, vel, e.weapon.material, e.weapon.material2, e.weapon.ttl, -1, e.ch);
+                        for (int i = 0; i < 3; ++i) pos[i] = eye[i] + dir[i] / l * 0.6f, vel[i] = dir[i] / l * b.weapon.velocity;
+                        phys.fire(pos, vel, b.weapon.material, b.weapon.material2, b.weapon.ttl, -1, b.ch, b.team);
                     }
                     continue;
                 }
-                e.seen_at = -1;
-                const Flag* goal = nullptr;
+                b.seen_at = -1;
+                const ConquestFlag* goal = nullptr;
                 float best = 1e30f;
-                for (const Flag& f : flags) {
-                    float g = (f.pos[0] - e.pos[0]) * (f.pos[0] - e.pos[0]) + (f.pos[2] - e.pos[2]) * (f.pos[2] - e.pos[2]);
-                    if (f.team != e.team && g < best) best = g, goal = &f;
+                for (const ConquestFlag& f : game.flags) {
+                    float g = (f.pos[0] - b.pos[0]) * (f.pos[0] - b.pos[0]) + (f.pos[2] - b.pos[2]) * (f.pos[2] - b.pos[2]);
+                    if (f.team != b.team && !f.locked && g < best) best = g, goal = &f;
                 }
-                e.moving = goal && best > 8 * 8;
-                if (!e.moving) {
-                    phys.walk(e.ch, 0, 0, false);
+                b.moving = goal && best > 8 * 8;
+                if (!b.moving) {
+                    phys.walk(b.ch, 0, 0, false);
                     continue;
                 }
-                float gx = goal->pos[0] - e.pos[0], gz = goal->pos[2] - e.pos[2], gl = std::sqrt(gx * gx + gz * gz);
-                e.yaw = std::atan2(gx, gz) * 57.29578f;
-                phys.walk(e.ch, gx / gl * 4, gz / gl * 4, false);  // shortcut: 4 m/s, guessed
+                float gx = goal->pos[0] - b.pos[0], gz = goal->pos[2] - b.pos[2], gl = std::sqrt(gx * gx + gz * gz);
+                gx /= gl, gz /= gl;
+                // Stuck (under 2 m in 2 s): sidestep at right angles for 1.5 s, a random side. shortcut: no path finding.
+                if (t >= b.check_at) {
+                    float mx = b.pos[0] - b.check_pos[0], mz = b.pos[2] - b.check_pos[1];
+                    if (mx * mx + mz * mz < 4 && t > b.detour_until)
+                        b.detour_until = t + 1.5f, b.detour_side = std::uniform_int_distribution<int>(0, 1)(rng) ? 1.0f : -1.0f;
+                    b.check_at = t + 2, b.check_pos[0] = b.pos[0], b.check_pos[1] = b.pos[2];
+                }
+                if (t < b.detour_until) std::tie(gx, gz) = std::make_pair(gz * b.detour_side, -gx * b.detour_side);
+                b.yaw = std::atan2(gx, gz) * 57.29578f;
+                phys.walk(b.ch, gx * 4, gz * 4, t < b.detour_until);  // jumping while stuck helps over low walls
             }
+            // Who stands at each flag.
+            std::vector<std::array<int, 3>> present(game.flags.size(), std::array<int, 3>{0, 0, 0});
+            for (size_t i = 0; i < game.flags.size(); ++i) {
+                const ConquestFlag& f = game.flags[i];
+                auto near = [&](const float* q) {
+                    float dx = q[0] - f.pos[0], dy = q[1] - f.pos[1], dz = q[2] - f.pos[2];
+                    return dx * dx + dy * dy + dz * dz <= f.radius * f.radius;
+                };
+                for (const Bot& b : bots)
+                    if (!b.dead && near(b.pos)) ++present[i][static_cast<size_t>(std::clamp(b.team, 0, 2))];
+                if (palive && near(ppos)) ++present[i][static_cast<size_t>(std::clamp(team, 0, 2))];
+            }
+            for (const std::string& ev : game.update(step, present)) std::printf("[%.0f s] %s\n", t, ev.c_str());
         };
         bool firing = SDL_GetMouseState(nullptr, nullptr) & SDL_BUTTON(SDL_BUTTON_LEFT);
         float now_s = static_cast<float>(SDL_GetTicks()) / 1000.0f;
@@ -1044,12 +1115,12 @@ int run(int argc, char** argv) {
             } else {
                 walk(key(SDL_SCANCODE_W, SDL_SCANCODE_S), key(SDL_SCANCODE_D, SDL_SCANCODE_A), k[SDL_SCANCODE_SPACE], k[SDL_SCANCODE_LSHIFT]);
             }
-            think(now_s);
+            think(now_s, dt);
             phys.step(dt);
             apply_hits();
         } else if (player >= 0) {  // demo: settle, run 2 s, get into the nearest vehicle, drive 2 s, get out
             auto tick = [&] {
-                think(demo_t);
+                think(demo_t, 1.0f / 60);
                 phys.step(1.0f / 60);
                 apply_hits();
                 demo_t += 1.0f / 60;
@@ -1064,10 +1135,10 @@ int run(int argc, char** argv) {
             for (int i = 0; i < 120; ++i) {  // aim at the nearest living enemy within 150 m and fire
                 float p[3], best = 150 * 150;
                 phys.character_position(player, p);
-                const Enemy* tgt = nullptr;
-                for (const Enemy& e : enemies) {
-                    float d = (e.pos[0] - p[0]) * (e.pos[0] - p[0]) + (e.pos[2] - p[2]) * (e.pos[2] - p[2]);
-                    if (!e.dead && d < best) best = d, tgt = &e;
+                const Bot* tgt = nullptr;
+                for (const Bot& b : bots) {
+                    float d = (b.pos[0] - p[0]) * (b.pos[0] - p[0]) + (b.pos[2] - p[2]) * (b.pos[2] - p[2]);
+                    if (!b.dead && b.team != team && d < best) best = d, tgt = &b;
                 }
                 if (!tgt) break;
                 float dx = tgt->pos[0] - p[0], dy = tgt->pos[1] + 1.2f - (p[1] + 1.5f), dz = tgt->pos[2] - p[2];
@@ -1088,11 +1159,12 @@ int run(int argc, char** argv) {
             get_in_out();
             for (int i = 0; i < 60; ++i) tick();
             track("end");
-            for (int i = 0; i < 600; ++i) walk(0, 0, false, false), tick();  // 10 s for the AI
+            for (int i = 0; i < static_cast<int>(sim_seconds * 60) && !game.winner; ++i) walk(0, 0, false, false), tick();
             int alive = 0, running = 0;
-            for (const Enemy& e : enemies) alive += !e.dead, running += !e.dead && e.moving;
-            std::printf("after 10 s of AI: %d of %zu enemies alive, %d on their way to a flag; player %s, %.1f hp\n", alive,
-                        enemies.size(), running, player_dead ? "dead" : "alive", std::max(0.0f, player_hp));
+            for (const Bot& b : bots) alive += !b.dead, running += !b.dead && b.moving;
+            std::printf("after %.0f s: %d of %zu bots alive, %d running for a flag; flags held %d / %d; tickets %.1f / %.1f%s; player %s\n",
+                        demo_t, alive, bots.size(), running, game.owned(1), game.owned(2), game.tickets[1], game.tickets[2],
+                        game.winner ? (game.winner == 1 ? ", team 1 won" : ", team 2 won") : "", player_dead ? "dead" : "alive");
             // Parked vehicles after 5 s: those pushed away (spawned inside something) or tipped over.
             int moved = 0, tipped = 0;
             for (size_t i = 0; i < vehicles.size(); ++i) {
@@ -1162,13 +1234,25 @@ int run(int argc, char** argv) {
                 cx = p[0] - dx * 4.5f, cy = p[1] + 1.7f - dy * 4.5f, cz = p[2] - dz * 4.5f;
             }
         }
-        for (Enemy& e : enemies) {  // standing (or fallen) where they are, facing their spawn direction
-            if (!e.dead) phys.character_position(e.ch, e.pos);
-            std::vector<DrawItem> parts = build_object(con, vfs, e.tmpl, translate(e.pos[0], e.pos[1], e.pos[2]) * rotation_ypr(e.yaw, 0, 0),
+        for (Bot& b : bots) {  // running, standing or fallen, facing where they go or aim
+            if (!b.dead) phys.character_position(b.ch, b.pos);
+            std::vector<DrawItem> parts = build_object(con, vfs, b.tmpl, translate(b.pos[0], b.pos[1], b.pos[2]) * rotation_ypr(b.yaw, 0, 0),
                                                        skipped, nullptr, hide_1p);
-            for (size_t i = 0; i < parts.size() && i < e.parts; ++i) scene[e.first + i].world = parts[i].world;
-            for (size_t ai : e.anims)
-                if (animated[ai].biped) scene[animated[ai].item].world = scene[animated[ai].item].world * rotation_ypr(180, 0, 0);
+            for (size_t i = 0; i < parts.size() && i < b.parts; ++i) scene[b.first + i].world = parts[i].world;
+            std::shared_ptr<Animation> run = b.dead ? nullptr : state_anim(b.moving ? "lb_runforward" : "lb_stand");
+            for (size_t k = 0; k < b.anims.size(); ++k) {
+                Animated& a = animated[b.anims[k]];
+                if (a.biped) scene[a.item].world = scene[a.item].world * rotation_ypr(180, 0, 0);
+                if (run && !a.anims.empty() && !b.anims0[k].empty()) a.anims[0] = run;
+            }
+        }
+        if (player >= 0 && (static_cast<int>(game.tickets[1]) != hud[0] || static_cast<int>(game.tickets[2]) != hud[1] ||
+                            static_cast<int>(player_hp) != hud[2] || game.owned(1) != hud[3] || game.owned(2) != hud[4] || game.winner != hud[5])) {
+            hud = {static_cast<int>(game.tickets[1]), static_cast<int>(game.tickets[2]), static_cast<int>(player_hp), game.owned(1), game.owned(2), game.winner};
+            char title[160];  // shortcut: the window title is the HUD until text drawing exists
+            std::snprintf(title, sizeof title, "OpenBF1942-Plus | tickets %d : %d | flags %d : %d | team %d, hp %d%s", hud[0], hud[1], hud[3], hud[4],
+                          team, std::max(0, hud[2]), game.winner ? (game.winner == team ? " | VICTORY" : " | DEFEAT") : "");
+            SDL_SetWindowTitle(win, title);
         }
         float speed = (k[SDL_SCANCODE_LSHIFT] ? 400.f : 60.f) * dt * (cur < 0 && player < 0);
         float fx = std::sin(yaw), fz = std::cos(yaw);

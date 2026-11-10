@@ -400,6 +400,7 @@ struct Physics::Impl {
         Vec3 p, v;
         int material, material2, ignore, ignore_character;
         float ttl;
+        int tag;
     };
     std::vector<Shot> shots;
     std::vector<Physics::Hit> hits;
@@ -808,7 +809,7 @@ void Physics::Impl::projectiles() {
             RRayCast ray{RVec3(s.p), step};
             RayCastResult hit;
             Physics::Hit h;
-            h.material = s.material, h.material2 = s.material2;
+            h.material = s.material, h.material2 = s.material2, h.tag = s.tag;
             if (sys.GetNarrowPhaseQuery().CastRay(ray, hit, {}, {}, filter)) {
                 RVec3 at = ray.GetPointOnRay(hit.mFraction);
                 for (size_t k = 0; k < soldiers.size(); ++k)
@@ -841,11 +842,11 @@ void Physics::Impl::projectiles() {
 }
 
 void Physics::fire(const float pos[3], const float vel[3], int material, int material2, float ttl, int ignore_vehicle,
-                   int ignore_character) {
+                   int ignore_character, int tag) {
     for (int k = 0; k < 3; ++k)
         if (!std::isfinite(pos[k]) || !std::isfinite(vel[k])) return;
     p_->shots.push_back({Vec3(pos[0], pos[1], pos[2]), Vec3(vel[0], vel[1], vel[2]), material, material2, ignore_vehicle,
-                         ignore_character, std::clamp(ttl, 0.0f, 30.0f)});
+                         ignore_character, std::clamp(ttl, 0.0f, 30.0f), tag});
 }
 
 std::vector<Physics::Hit> Physics::take_hits() { return std::exchange(p_->hits, {}); }

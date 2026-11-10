@@ -2,6 +2,12 @@
 
 Append-only. Newest first. At most 3 bullets per stage.
 
+## 2026-11-10 — conquest
+
+- `engine/conquest.*`: flags neutralise and capture by who stands in their radius, tickets bleed and drop per death, a team at 0 loses; spawn points follow their flag. Bots on both teams target the nearest visible opponent; window title is the HUD.
+- Straight-line bots got stuck behind buildings (11 of 11 still "running" after 5 min); a 2 s stuck check with a 1.5 s sidestep fixed most. A simulated El Alamein game ends after ~32 min.
+- Open: path finding, real conquest rules, vehicles for bots, other game modes.
+
 ## 2026-11-10 — first AI, control points
 
 - Enemies see (line of sight), turn, fire with aim error, and otherwise run to the nearest flag their team does not hold; the player takes damage, dies and respawns at home.

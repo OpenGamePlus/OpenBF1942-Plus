@@ -9,6 +9,7 @@
 
 #include "anim.h"
 #include "con.h"
+#include "conquest.h"
 #include "damage.h"
 #include "dds.h"
 #include "math.h"
@@ -464,6 +465,30 @@ int main() {
         Con con(vfs);
         con.run("mode.con", {"host"});
         assert(con.instances.size() == 1 && con.instances[0].name == "CP");
+    }
+
+    // Conquest: neutralise then capture when alone; contested freezes; bases stay; fewer flags bleed tickets.
+    {
+        Conquest q;
+        ConquestFlag base, mid;
+        base.team = 1, base.locked = true, mid.team = 1, mid.to_lose = 5, mid.to_get = 10, mid.name = "Mid";
+        q.flags = {base, mid};
+        q.tickets = {0, 10, 10};
+        std::vector<std::array<int, 3>> attack = {{0, 0, 3}, {0, 0, 1}}, both = {{0, 0, 0}, {0, 1, 1}};
+        std::vector<std::string> ev;
+        for (int i = 0; i < 51; ++i) ev = q.update(0.1f, attack);  // 5 s
+        assert(q.flags[1].team == 0 && q.flags[0].team == 1 && q.tickets[1] == 10);
+        for (int i = 0; i < 95; ++i) q.update(0.1f, attack);
+        assert(q.flags[1].team == 0);
+        for (int i = 0; i < 20; ++i) q.update(0.1f, both);  // contested: frozen
+        for (int i = 0; i < 6; ++i) q.update(0.1f, attack);
+        assert(q.flags[1].team == 2 && q.owned(2) == 1 && q.owned(1) == 1);
+        q.flags[0].team = 0, q.bleed = {0, 60, 60};  // team 1 now holds fewer: 60 tickets a minute
+        for (int i = 0; i < 50; ++i) q.update(0.1f, both);
+        assert(std::fabs(q.tickets[1] - 5) < 0.01f && q.tickets[2] == 10 && !q.winner);
+        for (int i = 0; i < 5; ++i) q.death(1);
+        ev = q.update(0.1f, both);
+        assert(q.winner == 2 && !ev.empty() && ev.back() == "team 2 wins");
     }
 
     // Damage: materialDamage x damageMod(attGroup, defGroup), material groups default to the material number.

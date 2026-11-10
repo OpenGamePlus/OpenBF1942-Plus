@@ -48,15 +48,22 @@ Soldier spawn points: a `SpawnPoint`'s `setGroup` matches a `ControlPoint` templ
 
 Soldiers are hit through a body that follows their capsule. Body part by hit height (shortcut for `setSkeletonCollisionBone`): head above 1.45 m → material 40, chest above 0.85 m → 41, legs → 42. A BAR bullet does 14.4 to a chest: three hits kill (30 hit points). Dead soldiers play `Lb/Ub_DieChestStand` once and stay down.
 
+## Conquest (implemented, rules unverified)
+
+`engine/conquest.*`. Flags are the level's `ControlPoint` instances: `radius`, `team` (0 nobody), `timeToGetControl`, `timeToLoseControl`, `unableToChangeTeam` (main bases), `spawnGroupId`, `setControlPointName`. Tickets: `game.setNumberOfTickets <team> <n>`, `game.setTicketLostPerMin <team> <n>` (El Alamein: 100 each, 5 a minute).
+
+Rules as read from those fields (the retail rules are not documented): soldiers of one team alone inside a flag's radius first neutralise an enemy flag (`timeToLoseControl`), then take a neutral one (`timeToGetControl`); the owner alone undoes progress; both teams present freeze it. A team holding fewer flags loses its `setTicketLostPerMin`; every death costs one ticket; a team at 0 loses. Spawn points belong to the team holding their flag, so captured outposts move the front.
+
 ## AI (implemented, placeholder)
 
-Each enemy soldier, every physics step: if it sees the player (or the player's vehicle) within 120 m with a clear line, it turns, waits 0.7 s, then fires its kit weapon (the five classes in turn) at half the weapon's rate with ~2° of aim error. Otherwise it runs at 4 m/s straight to the nearest flag (`ControlPoint` instance) its team does not hold and waits within 8 m of it. No path finding (`<Map>/Pathfinding/` is not read yet), no vehicles, no squads; all numbers guessed.
+Bots of both teams start on their team's spawn points (the player takes one place). Every 0.3 s a bot picks the nearest opponent (bot or player, on foot or in a vehicle) it can see within 120 m, checking the line of sight to the three nearest; with one it turns, waits 0.7 s and fires its kit weapon (the five classes in turn) at half the weapon's rate with ~2° of aim error. Otherwise it runs at 4 m/s straight for the nearest flag its team does not hold, sidestepping and jumping for 1.5 s when it has moved under 2 m in 2 s. No damage from one's own team. Bots come back 10 s after dying, the player after 3 s, on a spawn point their team owns. No path finding (`<Map>/Pathfinding/` is not read yet), no vehicles, no squads; all numbers guessed.
 
-The player has the soldier template's hit points; killed (or inside a destroyed vehicle), it respawns after 3 s at one of its team's spawn points.
+El Alamein, simulated with `--sim`: outposts change hands from about 3 minutes in, flags go back and forth, and one team runs out of tickets after about 32 minutes. All 78 levels run a 2-minute game (1,689 bots; none on 7 levels whose soldiers start on ships).
 
 ## Open questions
 
 - Explosion radius (`material2` applies to the target hit only), effects (`e_*` templates), sounds.
 - Magazines and reloading; projectile drag; `fireingForce`, `recoil*`.
 - Secondary weapons and switching; held weapon drawing; soldiers spawning on vehicles (carriers); real skeleton hit boxes.
-- AI: path finding maps, the level `ai/` strategies, vehicle use, capturing flags, tickets.
+- AI: path finding maps, the level `ai/` strategies, vehicle use; spawning on ships.
+- Conquest: the real capture and ticket rules; other modes (CTF, TDM, co-op).
