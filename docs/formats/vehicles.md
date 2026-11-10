@@ -134,6 +134,13 @@ Parachute and falls:
 
 Getting in: the nearest vehicle within 5 m + half its length (not yet the `EntryPoint` radius). Getting out: at the vehicle's `setSoldierExitLocation` (Willys: −1.5/0/−0.8, left rear).
 
+Crews (seats):
+- **Seats:** the vehicle's own `PlayerControlObject` is seat 1, the driver. Each `PlayerControlObject` nested in it is another seat: the Sherman's Browning gunner, the Hanomag's MG42 and four passengers, the LCVP's gunner and four passengers, the B-17's two gunners.
+- **What a seat has:** its first `FireArms` is that seat's weapon. Its `RotationalBundle`s answer only to that seat's mouse look. Its `SeatObject` places the seat, and its `setSoldierExitLocation` says where you get out.
+- **Getting in:** you take the driver's seat if it is free, otherwise the first free one. F1–F8 move you to a free seat.
+- **Driving:** only seat 1 drives.
+- **Not used yet:** seat flags such as `c_SeatIsOutside` and the seat animations (`seatAnimationUpperBody`).
+
 ## Parked vehicles
 
 With `--play` or `--drive` every `ObjectSpawner` placement that can move (wheels, wings or floats; stationary guns stay static) becomes a physics vehicle at its retail position, team as in the viewer. `build_object` does not follow spawners inside a vehicle (a destroyer's landing craft are vehicles of their own).

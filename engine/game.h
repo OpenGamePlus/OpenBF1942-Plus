@@ -41,6 +41,7 @@ struct GameInput {
     bool crouch = false;    // held
     bool prone = false;     // pressed this frame: lie down / get up
     bool view = false;      // pressed this frame: first / third person
+    int seat = -1;          // F1..F8 pressed: move to that seat of the vehicle (0-based)
 };
 
 // The lower / upper body animation states a soldier's skinned parts should play; empty: as loaded.
@@ -103,21 +104,27 @@ public:
     std::map<std::string, int> skipped;
 
 private:
+    struct Seat {
+        WeaponDef weapon;
+        Mat4 muzzle;  // posed FireArms part, for firing
+        bool has_muzzle = false;
+        float next_fire = 0, exit[3] = {-2, 0, 0};
+        int who = -2;  // -2 empty, -1 the player, else a bot
+    };
     struct Veh {
         int id = -1;
         std::string name;
         size_t first = 0, parts = 0;
         bool plane = false;
-        float len = 0, exit[3] = {-2, 0, 0}, throttle = 0;
-        float hp = 100, next_fire = 0;
+        float len = 0, throttle = 0;
+        float hp = 100;
         int material = 0;
         bool wrecked = false;
         size_t wreck_first = 0, wreck_parts = 0;  // the wreck detail level, drawn once destroyed
-        WeaponDef weapon;
-        Mat4 muzzle;  // posed FireArms part, for firing
-        bool has_muzzle = false;
+        std::vector<Seat> seats;                  // [0] the driver
         Mat4 start;  // where it was placed
     };
+
     struct Depot {  // SupplyDepot working on soldiers (ammo boxes, medic lockers, half-tracks are not placed by levels)
         float pos[3] = {}, radius = 0, health = 0;  // health: hit points per second (setHealth second value; unverified)
         int team = 0;                                // 0: both
@@ -183,6 +190,8 @@ private:
     std::map<std::string, std::unique_ptr<VehicleDef>> defs;  // by template; null if it cannot move
 
     int player = -1, team = 2;
+    int seat = 0;  // the player's seat in vehicle `cur`
+    void take_seat(int s);
     size_t sol_first = 0, sol_parts = 0;
     std::map<int, std::string> team_skins;
     std::map<std::pair<int, int>, std::string> kits;

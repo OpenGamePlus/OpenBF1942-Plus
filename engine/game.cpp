@@ -242,13 +242,19 @@ void Game::add_vehicle(const std::string& name, Mat4 world) {
     if (lift > 0) world = translate(0, lift + 0.05f, 0) * world;
     Veh v;
     v.id = phys.add_vehicle(*def, world), v.name = name, v.plane = def->plane, v.first = scene.size(), v.start = world;
-    std::copy(def->exit, def->exit + 3, v.exit);
     for (size_t i = 2; i < def->hull.size(); i += 3) v.len = std::max(v.len, std::fabs(def->hull[i]));
     for (DrawItem& item : build_object(con, vfs, name, Mat4::identity(), skipped)) ++v.parts, scene.push_back(std::move(item));
     v.wreck_first = scene.size();
     for (DrawItem& item : build_object(con, vfs, name, Mat4::identity(), skipped, nullptr, nullptr, true))
         ++v.wreck_parts, scene.push_back(std::move(item));
-    v.hp = def->hitpoints, v.material = def->material, v.weapon = def->weapon;
+    v.hp = def->hitpoints, v.material = def->material;
+    for (const SeatDef& sd : def->seats) {
+        Seat st;
+        st.weapon = sd.weapon;
+        std::copy(sd.exit, sd.exit + 3, st.exit);
+        v.seats.push_back(st);
+    }
+    if (v.seats.empty()) v.seats.push_back(Seat{}), v.seats[0].weapon = def->weapon, std::copy(def->exit, def->exit + 3, v.seats[0].exit);
     vehicles.push_back(v);
 }
 
@@ -312,12 +318,14 @@ int Game::spawn_team(const SpawnPt& sp) const {
 void Game::get_in_out() {
     if (player < 0) return;
     if (cur >= 0) {
-        const Veh& v = vehicles[static_cast<size_t>(cur)];
+        Veh& v = vehicles[static_cast<size_t>(cur)];
         Mat4 t = phys.transform(v.id);
+        const float* x = v.seats[static_cast<size_t>(seat)].exit;
         float e[3];
-        for (int i = 0; i < 3; ++i) e[i] = t.m[i] * v.exit[0] + t.m[4 + i] * v.exit[1] + t.m[8 + i] * v.exit[2] + t.m[12 + i];
-        phys.drive(v.id, 0, 0);
-        phys.look(v.id, 0, 0);
+        for (int i = 0; i < 3; ++i) e[i] = t.m[i] * x[0] + t.m[4 + i] * x[1] + t.m[8 + i] * x[2] + t.m[12 + i];
+        if (seat == 0) phys.drive(v.id, 0, 0);
+        phys.look(v.id, 0, 0, seat);
+        v.seats[static_cast<size_t>(seat)].who = -2;
         phys.place_character(player, e[0], e[1] + 0.5f, e[2]);
         phys.set_character_active(player, true);
         std::printf("out of %s at %.1f %.1f %.1f\n", v.name.c_str(), e[0], e[1], e[2]);
@@ -332,8 +340,26 @@ void Game::get_in_out() {
         if (margin >= 0 && (cur < 0 || margin > best)) cur = static_cast<int>(i), best = margin;
     }
     if (cur < 0) return;
+    // The driver's seat if free, else the first free one (shortcut: any seat from any entry point, by distance).
+    Veh& v = vehicles[static_cast<size_t>(cur)];
+    seat = -1;
+    for (size_t i = 0; i < v.seats.size() && seat < 0; ++i)
+        if (v.seats[i].who == -2) seat = static_cast<int>(i);
+    if (seat < 0) return void(cur = -1);
+    v.seats[static_cast<size_t>(seat)].who = -1;
     phys.set_character_active(player, false);
-    std::printf("in %s\n", vehicles[static_cast<size_t>(cur)].name.c_str());
+    std::printf("in %s, seat %d of %zu\n", v.name.c_str(), seat + 1, v.seats.size());
+}
+
+// F1..F8: move to another free seat of the same vehicle.
+void Game::take_seat(int s) {
+    if (cur < 0) return;
+    Veh& v = vehicles[static_cast<size_t>(cur)];
+    if (s < 0 || static_cast<size_t>(s) >= v.seats.size() || s == seat || v.seats[static_cast<size_t>(s)].who != -2) return;
+    if (seat == 0) phys.drive(v.id, 0, 0);
+    phys.look(v.id, 0, 0, seat);
+    v.seats[static_cast<size_t>(seat)].who = -2, v.seats[static_cast<size_t>(s)].who = -1, seat = s;
+    std::printf("seat %d of %zu\n", seat + 1, v.seats.size());
 }
 
 // On foot: run (5 m/s) or walk with shift (2.5 m/s) relative to the camera; shortcut: speeds guessed.
@@ -444,15 +470,17 @@ void Game::placed_charges(bool detonate) {
 void Game::fire(float t) {
     if (cur >= 0) {
         Veh& v = vehicles[static_cast<size_t>(cur)];
-        if (v.wrecked || v.weapon.name.empty() || t < v.next_fire) return;
-        v.next_fire = t + v.weapon.interval;
-        Mat4 m = v.has_muzzle ? v.muzzle : phys.transform(v.id);
+        Seat& st = v.seats[static_cast<size_t>(seat)];
+        const WeaponDef& w = st.weapon;
+        if (v.wrecked || w.name.empty() || t < st.next_fire) return;
+        st.next_fire = t + w.interval;
+        Mat4 m = st.has_muzzle ? st.muzzle : phys.transform(v.id);
         float d[3] = {m.m[8], m.m[9], m.m[10]}, l = std::sqrt(d[0] * d[0] + d[1] * d[1] + d[2] * d[2]);
         if (!(l > 1e-6f)) return;
         float pos[3], vel[3];
-        for (int i = 0; i < 3; ++i) d[i] /= l, pos[i] = m.m[12 + i] + d[i] * (v.has_muzzle ? 1.0f : v.len), vel[i] = d[i] * v.weapon.velocity;
-        phys.fire(pos, vel, v.weapon.material, v.weapon.material2, v.weapon.ttl, v.id, -1, team, v.weapon.radius, v.weapon.bounce);
-        sounds.push_back({v.weapon.name, {pos[0], pos[1], pos[2]}});
+        for (int i = 0; i < 3; ++i) d[i] /= l, pos[i] = m.m[12 + i] + d[i] * (st.has_muzzle ? 1.0f : v.len), vel[i] = d[i] * w.velocity;
+        phys.fire(pos, vel, w.material, w.material2, w.ttl, v.id, -1, team, w.radius, w.bounce);
+        sounds.push_back({w.name, {pos[0], pos[1], pos[2]}});
     } else if (player >= 0 && !hand.name.empty() && t >= hand_next && hand_ammo.take(t)) {
         hand_next = t + hand.interval;
         float p[3], d[3] = {std::sin(cam.yaw) * std::cos(cam.pitch), std::sin(cam.pitch), std::cos(cam.yaw) * std::cos(cam.pitch)}, pos[3], vel[3];
@@ -799,8 +827,9 @@ void Game::step(float t, float dt, const GameInput& in) {
         Veh& v = vehicles[static_cast<size_t>(cur)];
         float th = in.throttle;
         if (v.plane) v.throttle = std::clamp(v.throttle + th * 0.5f * dt, 0.0f, 1.0f), th = v.throttle;
-        phys.drive(v.id, th, in.yaw, in.pitch, in.roll);
-        phys.look(v.id, in.look_x, in.look_y);
+        if (in.seat >= 0) take_seat(in.seat);
+        if (seat == 0) phys.drive(v.id, th, in.yaw, in.pitch, in.roll);
+        phys.look(v.id, in.look_x, in.look_y, seat);
         walk(0, 0, false, false);
     } else {
         walk(in.forward, in.right, in.jump, in.slow);
@@ -908,7 +937,8 @@ void Game::pose() {
                                                    [&](const std::string& n, int o) { return phys.joint(v.id, n, o); });
         for (size_t i = 0; i < parts.size() && i < v.parts; ++i) {
             scene[v.first + i].world = parts[i].world;
-            if (!v.weapon.name.empty() && parts[i].owner == v.weapon.name) v.muzzle = parts[i].world, v.has_muzzle = true;
+            for (Seat& st : v.seats)
+                if (!st.weapon.name.empty() && parts[i].owner == st.weapon.name) st.muzzle = parts[i].world, st.has_muzzle = true;
         }
         std::vector<DrawItem> wreck = build_object(con, vfs, v.name, v.wrecked ? t : hidden, skipped, nullptr, nullptr, true);
         for (size_t i = 0; i < wreck.size() && i < v.wreck_parts; ++i) scene[v.wreck_first + i].world = wreck[i].world;
@@ -1006,7 +1036,8 @@ HudInfo Game::hud_info() const {
     if (cur >= 0) {
         const Veh& v = vehicles[static_cast<size_t>(cur)];
         h.vehicle = v.name, h.vehicle_hp = static_cast<int>(std::ceil(std::max(0.0f, v.hp)));
-        h.weapon = v.weapon.name, h.rounds = -1, h.reloading = false;
+        h.weapon = v.seats[static_cast<size_t>(seat)].weapon.name, h.rounds = -1, h.reloading = false;
+        if (v.seats.size() > 1) h.vehicle += "  seat " + std::to_string(seat + 1) + "/" + std::to_string(v.seats.size());
     }
     for (const auto& [t, m] : feed)
         if (now - t < 6) h.feed.push_back(m);

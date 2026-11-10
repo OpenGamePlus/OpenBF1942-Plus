@@ -123,10 +123,19 @@ struct Walker {
         def.wings.push_back(w);
     }
 
-    void walk(const std::string& name, const Mat4& world, int depth, WheelDef ctx, bool in_gear = false, bool prop = false) {
+    void walk(const std::string& name, const Mat4& world, int depth, WheelDef ctx, bool in_gear = false, bool prop = false, int seat = 0) {
         const ConObject* t = find(con, name);
         if (!t || depth > 16 || ++visits > 10000) return;
         std::string type = lower(t->type);
+        // Crew positions: the root PlayerControlObject is seat 0; each one nested in it starts a seat (gunners, passengers).
+        if (type == "playercontrolobject" && (depth == 0 || def.seats.empty())) seat = 0, def.seats.assign(1, SeatDef{lower(name), {}, {-2, 0, 0}, {}});
+        else if (type == "playercontrolobject") seat = static_cast<int>(def.seats.size()), def.seats.push_back({lower(name), {}, {-2, 0, 0}, {}});
+        if (type == "playercontrolobject")
+            for (auto& [k, a] : t->props)
+                if (k == "setsoldierexitlocation" && !a.empty()) parse_vec3(a[0], def.seats[static_cast<size_t>(seat)].exit);
+        if (type == "seatobject" && static_cast<size_t>(seat) < def.seats.size()) xform(world, 0, 0, 0, def.seats[static_cast<size_t>(seat)].pos);
+        if (type == "firearms" && static_cast<size_t>(seat) < def.seats.size() && def.seats[static_cast<size_t>(seat)].weapon.name.empty())
+            def.seats[static_cast<size_t>(seat)].weapon = weapon_def(con, name);
         std::pair<std::string, int> key{lower(name), seen[lower(name)]++};
         if (prop) def.joints[key].propeller = true;
         if (type == "spring") def.joints[key].wheel = static_cast<int>(def.wheels.size());
@@ -146,6 +155,7 @@ struct Walker {
                 else if (k == "setautomaticreset") j.reset = num(a) != 0;
             }
             for (int i = 0; i < 3; ++i) j.sign[i] = acc[i] < 0 ? -1.0f : 1.0f;
+            j.seat = seat;
             if (j.input[0] || j.input[1] || j.input[2]) def.joints[key] = j;
         }
         bool yaw_input = false;
@@ -229,7 +239,7 @@ struct Walker {
             // Propellers: the meshes hanging straight off an aircraft engine (gear legs are LandingGear, not these).
             bool child_prop = etype == "c_etplane" && (ctype == "lodobject" || ctype == "simpleobject");
             walk(c.name, world * translate(c.pos[0], c.pos[1], c.pos[2]) * rotation_ypr(c.rot[0], c.rot[1], c.rot[2]), depth + 1, ctx,
-                 in_gear, child_prop);
+                 in_gear, child_prop, seat);
         }
     }
 };
@@ -391,7 +401,8 @@ struct Physics::Impl {
     struct Vehicle {
         VehicleDef def;
         BodyID id;
-        float throttle = 0, steer = 0, pitch = 0, roll = 0, look_x = 0, look_y = 0, prop_angle = 0;
+        float throttle = 0, steer = 0, pitch = 0, roll = 0, prop_angle = 0;
+        std::vector<std::array<float, 2>> looks;  // per seat: c_PIMouseLookX / Y
         std::vector<float> wheel_steer, deflection;
         std::vector<float> wheel_spin, wheel_offset;  // degrees; metres along the spring from the model position
         std::map<std::pair<std::string, int>, std::array<float, 3>> angle;  // generic joints, degrees
@@ -743,8 +754,8 @@ void Physics::Impl::animate(Vehicle& v) {
                 case JointDef::Roll: in = v.roll; break;
                 case JointDef::Yaw: in = v.steer; break;
                 case JointDef::Throttle: in = v.throttle; break;
-                case JointDef::LookX: in = v.look_x; break;
-                case JointDef::LookY: in = v.look_y; break;
+                case JointDef::LookX: in = static_cast<size_t>(j.seat) < v.looks.size() ? v.looks[static_cast<size_t>(j.seat)][0] : 0.0f; break;
+                case JointDef::LookY: in = static_cast<size_t>(j.seat) < v.looks.size() ? v.looks[static_cast<size_t>(j.seat)][1] : 0.0f; break;
             }
             in *= j.sign[i];
             float lo = std::min(j.mn[i], j.mx[i]), hi = std::max(j.mn[i], j.mx[i]), step = j.speed[i] * kStep;
@@ -761,9 +772,11 @@ void Physics::Impl::animate(Vehicle& v) {
     }
 }
 
-void Physics::look(int vehicle, float x, float y) {
+void Physics::look(int vehicle, float x, float y, int seat) {
     auto& v = p_->vehicles.at(static_cast<size_t>(vehicle));
-    v.look_x = std::clamp(x, -1.0f, 1.0f), v.look_y = std::clamp(y, -1.0f, 1.0f);
+    if (seat < 0 || seat > 64) return;
+    if (v.looks.size() <= static_cast<size_t>(seat)) v.looks.resize(static_cast<size_t>(seat) + 1, {0.0f, 0.0f});
+    v.looks[static_cast<size_t>(seat)] = {std::clamp(x, -1.0f, 1.0f), std::clamp(y, -1.0f, 1.0f)};
 }
 
 Mat4 Physics::joint(int vehicle, const std::string& name, int occurrence) const {

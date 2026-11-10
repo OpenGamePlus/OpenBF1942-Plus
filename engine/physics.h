@@ -46,6 +46,7 @@ struct JointDef {
     bool reset = false;
     int wheel = -1, wing = -1;  // wheels spin and ride their springs; wings show their deflection
     bool propeller = false;     // spins with the throttle
+    int seat = 0;               // the seat whose controls move it (look inputs)
 };
 
 // The first FireArms with a projectile in a vehicle tree, and that projectile. Spec: docs/formats/weapons.md
@@ -61,6 +62,14 @@ struct WeaponDef {
     float radius = 0;                   // projectile radius: explosion (material2 damage falls off to 0 at it)
     bool bounce = false;                // dieAfterColl 0 (grenades, mines, explosive packs)
     float near = 0;                     // explodeNearEnemyDistance (mines), 0: none
+};
+
+// A crew position: the vehicle's own PlayerControlObject (seat 0, the driver) or one nested in it (gunners, passengers).
+struct SeatDef {
+    std::string name;            // lower-case PlayerControlObject template
+    WeaponDef weapon;            // its first FireArms; empty name: unarmed
+    float exit[3] = {-2, 0, 0};  // setSoldierExitLocation, vehicle space
+    float pos[3] = {};           // its SeatObject, vehicle space (at rest)
 };
 
 struct VehicleDef {
@@ -79,6 +88,7 @@ struct VehicleDef {
     std::vector<float> armor;    // triangles (9 floats), vehicle space: the parts' projectile collision blocks
     std::vector<int> armor_material;  // per triangle
     WeaponDef weapon;            // empty name: unarmed
+    std::vector<SeatDef> seats;  // [0] the driver
     std::vector<WingDef> wings;
     std::vector<WheelDef> wheels;
     std::vector<float> hull;    // xyz points, vehicle space
@@ -106,7 +116,7 @@ public:
     // wing down; pitch +1 = nose down (stick forward).
     void drive(int vehicle, float throttle, float yaw, float pitch = 0, float roll = 0);
     void set_velocity(int vehicle, float x, float y, float z);
-    void look(int vehicle, float x, float y);  // c_PIMouseLookX / Y in [-1, 1] (turrets, guns)
+    void look(int vehicle, float x, float y, int seat = 0);  // c_PIMouseLookX / Y in [-1, 1]: that seat's turrets and guns
     // Local transform of a moving part for build_object (identity for parts that do not move).
     Mat4 joint(int vehicle, const std::string& name, int occurrence) const;
     void step(float dt);  // fixed 60 Hz substeps

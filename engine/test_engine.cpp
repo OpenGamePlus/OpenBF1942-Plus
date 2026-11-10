@@ -274,7 +274,9 @@ int main() {
         hub.input[0] = JointDef::Yaw, hub.mn[0] = -30, hub.mx[0] = 30, hub.speed[0] = 200, hub.reset = true;
         turret.input[0] = JointDef::LookX, turret.speed[0] = 35;
         wheel.wheel = 0;
-        rig.joints[{"hub", 0}] = hub, rig.joints[{"turret", 0}] = turret, rig.joints[{"wheel", 0}] = wheel;
+        JointDef mg = turret;  // a gunner's machine gun: moves with seat 1's look only
+        mg.seat = 1;
+        rig.joints[{"hub", 0}] = hub, rig.joints[{"turret", 0}] = turret, rig.joints[{"wheel", 0}] = wheel, rig.joints[{"mg", 0}] = mg;
         int r = phys.add_vehicle(rig, translate(100, 2, 30));
         for (int i = 0; i < 120; ++i) phys.step(1.0f / 60);
         phys.drive(r, 1, 1);
@@ -284,6 +286,10 @@ int main() {
         assert(std::fabs(phys.joint(r, "turret", 0).m[8] - 0.5736f) < 0.02f);     // sin 35: 1 s at 35 deg/s
         assert(phys.joint(r, "wheel", 0).m[5] < 0.999f);                           // rolled
         assert(phys.joint(r, "other", 0).m[0] == 1 && phys.joint(r, "hub", 1).m[0] == 1);  // not a joint: identity
+        assert(phys.joint(r, "mg", 0).m[0] == 1);                                   // the driver's look leaves seat 1 alone
+        phys.look(r, 0, 0), phys.look(r, -1, 0, 1);
+        for (int i = 0; i < 60; ++i) phys.step(1.0f / 60);
+        assert(std::fabs(phys.joint(r, "mg", 0).m[8] + 0.5736f) < 0.02f && std::fabs(phys.joint(r, "turret", 0).m[8] - 0.5736f) < 0.02f);
         phys.drive(r, 0, 0);
         for (int i = 0; i < 30; ++i) phys.step(1.0f / 60);
         assert(std::fabs(phys.joint(r, "hub", 0).m[8]) < 0.01f);                  // automatic reset

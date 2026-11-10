@@ -40,7 +40,7 @@ int run(int argc, char** argv) {
                      "  --shot with --drive: settles 2 s, drives 4 s (last 2 s steering right), prints the track;\n"
                      "  aircraft: 20 s take-off run, pulling up from 12 s to 16 s; the vehicle fires from 2 s (--fire-ahead: gun\n"
                      "  straight ahead, no steering)\n"
-                     "  --play: walk a soldier (WASD, shift walks, space jumps, right mouse looks, left mouse fires, R reloads, 1-9 weapons, G detonates explosive packs, left ctrl crouches, Z lies down, V first / third person), E gets into / out of the nearest vehicle\n"
+                     "  --play: walk a soldier (WASD, shift walks, space jumps, right mouse looks, left mouse fires, R reloads, 1-9 weapons, G detonates explosive packs, left ctrl crouches, Z lies down, V first / third person), E gets into / out of the nearest vehicle, F1-F8 change seat\n"
                      "  (parked vehicles are drivable with --play or --drive); with --shot: runs 2 s, gets into the nearest vehicle,\n"
                      "  drives 2 s, gets out, then reports how far the parked vehicles moved while settling, then plays --sim seconds\n"
                      "  (default 10) of conquest and prints flag changes and tickets\n");
@@ -203,6 +203,8 @@ int run(int argc, char** argv) {
             in.crouch = k[SDL_SCANCODE_LCTRL], in.prone = toggle_prone, in.view = toggle_view;
             for (int n = 0; n < 9; ++n)
                 if (k[SDL_SCANCODE_1 + n]) in.select = n;
+            for (int n = 0; n < 8; ++n)
+                if (k[SDL_SCANCODE_F1 + n]) in.seat = n;
             in.fire = SDL_GetMouseState(nullptr, nullptr) & SDL_BUTTON(SDL_BUTTON_LEFT);
             game.step(static_cast<float>(SDL_GetTicks()) / 1000.0f, dt, in);
         } else {
