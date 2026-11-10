@@ -262,6 +262,10 @@ void Game::add_vehicle(const std::string& name, Mat4 world) {
         Seat st;
         st.weapon = sd.weapon;
         std::copy(sd.exit, sd.exit + 3, st.exit), std::copy(sd.pos, sd.pos + 3, st.pos);
+        st.at = sd.at, st.show = sd.show;
+        // Seat poses (animationStatesVehicle.con): a seat's own states, else sitting / standing by its flags.
+        st.lower = !sd.lower.empty() ? sd.lower : sd.show == 3 || sd.show == 2 ? "lb_standinvehicle" : "lb_sitinvehicle";
+        st.upper = !sd.upper.empty() ? sd.upper : "ub_sitinvehicle";
         v.seats.push_back(st);
     }
     if (v.seats.empty()) v.seats.push_back(Seat{}), v.seats[0].weapon = def->weapon, std::copy(def->exit, def->exit + 3, v.seats[0].exit);
@@ -637,6 +641,19 @@ void Game::seat_point(const Veh& v, size_t s, float out[3]) const {
     const float* p = v.seats[s].pos;
     for (int i = 0; i < 3; ++i) out[i] = m.m[i] * p[0] + m.m[4 + i] * p[1] + m.m[8 + i] * p[2] + m.m[12 + i];
     out[1] += 1.0f;  // the head over the seat
+}
+
+const Game::Seat* Game::shown_seat(int veh, int s) const {
+    if (veh < 0 || s < 0) return nullptr;
+    const Veh& v = vehicles[static_cast<size_t>(veh)];
+    const Seat& st = v.seats[static_cast<size_t>(s)];
+    return v.wrecked || !st.show ? nullptr : &st;
+}
+
+// The SeatObject marks the pelvis: the model's origin goes the pose's pelvis height below it (sitting 0.83 m, standing
+// 1.0 m, measured on 3PWillySitLower / 3PStandLower); checked on a Willys: both seated, facing forward.
+Mat4 Game::seated(int veh, const Seat& st) const {
+    return phys.transform(vehicles[static_cast<size_t>(veh)].id) * st.at * translate(0, st.show >= 2 ? -1.0f : -0.83f, 0);
 }
 
 void Game::refresh_muzzles(Veh& v) {  // as pose() does, for runs that do not draw
@@ -1134,7 +1151,9 @@ void Game::pose() {
         phys.character_position(player, p);
         // The soldier faces the camera direction; hidden far below while in a vehicle or seen in first person.
         bool fp = first_person && cur < 0;
-        Mat4 w = cur >= 0 || fp ? translate(0, -10000, 0) : translate(p[0], p[1], p[2]) * rotation_ypr(cam.yaw * 57.29578f, 0, 0);
+        const Seat* in_seat = shown_seat(cur, seat);  // seated where the seat shows its soldier (Willys, gunners on top)
+        Mat4 w = in_seat ? seated(cur, *in_seat)
+                 : cur >= 0 || fp ? translate(0, -10000, 0) : translate(p[0], p[1], p[2]) * rotation_ypr(cam.yaw * 57.29578f, 0, 0);
         std::vector<DrawItem> parts = build_object(con, vfs, soldier_tmpl, w, skipped, nullptr, hide_1p);
         for (size_t i = 0; i < parts.size() && i < sol_parts; ++i) scene[sol_first + i].world = parts[i].world;
         if (phys.character_on_ground(player) || cur >= 0) {  // in the air: keep the last state
@@ -1153,6 +1172,7 @@ void Game::pose() {
         SoldierView me;
         me.first = sol_first, me.parts = sol_parts, me.lower = lower_state, me.upper = held.empty() ? "" : upper;
         if (!held.empty()) arm_states(me, held, hand, hand_ammo, last_shot, posture);
+        if (in_seat) me.lower = in_seat->lower, me.upper = in_seat->upper, me.weapon.clear();
         if (cur < 0 && slot < loadout_items.size()) me.held_first = loadout_items[slot].first, me.held_parts = loadout_items[slot].second;
         // First person: the 1p arms and body hang from the camera at the eye (center1pHands), with the states'
         // first-person animations; the held weapon follows their right hand.
@@ -1183,7 +1203,9 @@ void Game::pose() {
     }
     for (Bot& b : bots) {  // running, standing or fallen, facing where they go or aim; crews are not drawn (shortcut)
         if (!b.dead && b.veh < 0) phys.character_position(b.ch, b.pos);
-        Mat4 bw = b.veh >= 0 ? translate(0, -10000, 0) : translate(b.pos[0], b.pos[1], b.pos[2]) * rotation_ypr(b.yaw, 0, 0);
+        const Seat* bseat = b.dead ? nullptr : shown_seat(b.veh, b.vseat);
+        Mat4 bw = bseat ? seated(b.veh, *bseat)
+                  : b.veh >= 0 ? translate(0, -10000, 0) : translate(b.pos[0], b.pos[1], b.pos[2]) * rotation_ypr(b.yaw, 0, 0);
         std::vector<DrawItem> parts = build_object(con, vfs, b.tmpl, bw,
                                                    skipped, nullptr, hide_1p);
         for (size_t i = 0; i < parts.size() && i < b.parts; ++i) scene[b.first + i].world = parts[i].world;
@@ -1196,6 +1218,7 @@ void Game::pose() {
             std::string upper = b.posture == 2 ? "ub_lie" + w : b.posture == 1 ? "ub_crouch" + w : b.moving ? "ub_runforward" + w : "ub_standaim" + w;
             v.lower = lower_b, v.upper = w.empty() ? "" : upper;
             if (!w.empty()) arm_states(v, w, b.weapon, b.ammo, b.last_shot, b.posture);
+            if (bseat) v.lower = bseat->lower, v.upper = bseat->upper, v.weapon.clear(), v.held_parts = 0;  // c_AsmHideWeapon
             soldiers.push_back(v);
         }
     }

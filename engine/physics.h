@@ -70,6 +70,9 @@ struct SeatDef {
     WeaponDef weapon;            // its first FireArms; empty name: unarmed
     float exit[3] = {-2, 0, 0};  // setSoldierExitLocation, vehicle space
     float pos[3] = {};           // its SeatObject, vehicle space (at rest)
+    Mat4 at = Mat4::identity();  // the SeatObject's transform, vehicle space
+    int show = 0;                // seatFlags: 0 hidden (inside), 1 sitting (full body), 2 half body, 3 standing
+    std::string lower, upper;    // seatAnimationLowerBody / UpperBody, lower-case; empty: by `show`
 };
 
 struct VehicleDef {

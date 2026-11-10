@@ -6,7 +6,7 @@ Append-only. Newest first. At most 3 bullets per stage.
 
 - Nested `PlayerControlObject`s read as seats: each has its own weapon, mouse-look parts, `SeatObject` position and exit. The player enters the first free seat and changes with F1–F8.
 - Bots board land vehicles and drive them to flags on the tank path-finding map. Armed seats aim with the seat's mouse-look and fire. Stuck drivers back out, then give up. Over 78 levels: 718 boardings, captures 57 → 78, bot deaths 368 → 173 (crews resist rifles).
-- Open: pilots and boats, seated soldiers drawn, seat animations, entry points.
+- Seated soldiers drawn per `seatFlags` with the seat animations, pelvis on the `SeatObject` (checked on a Willys). Open: pilots and boats, entry points.
 
 ## 2026-11-10 — fire and reload animations (roadmap B2)
 

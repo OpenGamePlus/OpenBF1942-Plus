@@ -139,7 +139,9 @@ Crews (seats):
 - **What a seat has:** its first `FireArms` is that seat's weapon. Its `RotationalBundle`s answer only to that seat's mouse look. Its `SeatObject` places the seat, and its `setSoldierExitLocation` says where you get out.
 - **Getting in:** you take the driver's seat if it is free, otherwise the first free one. F1–F8 move you to a free seat.
 - **Driving:** only seat 1 drives.
-- **Not used yet:** seat flags such as `c_SeatIsOutside` and the seat animations (`seatAnimationUpperBody`).
+- **Seated soldiers:** a seat with `seatFlags c_SeatShowFullBodySoldier` shows a sitting soldier. `…HalfBody…` or `…StandingSoldier` show one standing. A seat without a show flag, such as a tank driver inside, shows nobody.
+- **Seat animations:** the seat's own `seatAnimationLowerBody` / `UpperBody` (`Lb_PassengerInWilly`), else `Lb_SitInVehicle` or `Lb_StandInVehicle` with `Ub_SitInVehicle` (`animationStatesVehicle.con`, whose `c_AsmHideWeapon` hides the hand weapon).
+- **Placement:** the `SeatObject` marks the pelvis. The model goes 0.83 m below it sitting and 1.0 m standing (measured on the poses). Checked on a Willys: driver and passenger seated, facing forward. Half-body seats are drawn whole.
 
 ## Parked vehicles
 

@@ -109,6 +109,9 @@ private:
         Mat4 muzzle;  // posed FireArms part, for firing
         bool has_muzzle = false;
         float next_fire = 0, exit[3] = {-2, 0, 0}, pos[3] = {};  // pos: the SeatObject, vehicle space
+        Mat4 at;                     // the SeatObject's transform, vehicle space
+        int show = 0;                // as SeatDef::show
+        std::string lower, upper;    // the seated soldier's animation states
         int who = -2;  // -2 empty, -1 the player, else a bot
     };
     struct Veh {
@@ -213,6 +216,8 @@ private:
     void leave(Bot& b);
     void refresh_muzzles(Veh& v);
     void seat_point(const Veh& v, size_t s, float out[3]) const;
+    const Seat* shown_seat(int veh, int s) const;  // the seat if its soldier is drawn (seatFlags), else null
+    Mat4 seated(int veh, const Seat& st) const;     // where a seated soldier's model goes
     std::array<int, 3> deaths{0, 0, 0};
     int detours = 0;  // sidesteps taken by stuck bots
     int grenades_thrown = 0, boardings = 0, wrecks = 0;

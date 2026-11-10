@@ -128,12 +128,29 @@ struct Walker {
         if (!t || depth > 16 || ++visits > 10000) return;
         std::string type = lower(t->type);
         // Crew positions: the root PlayerControlObject is seat 0; each one nested in it starts a seat (gunners, passengers).
-        if (type == "playercontrolobject" && (depth == 0 || def.seats.empty())) seat = 0, def.seats.assign(1, SeatDef{lower(name), {}, {-2, 0, 0}, {}});
-        else if (type == "playercontrolobject") seat = static_cast<int>(def.seats.size()), def.seats.push_back({lower(name), {}, {-2, 0, 0}, {}});
+        if (type == "playercontrolobject") {
+            SeatDef sd;
+            sd.name = lower(name);
+            if (depth == 0 || def.seats.empty()) seat = 0, def.seats.assign(1, sd);
+            else seat = static_cast<int>(def.seats.size()), def.seats.push_back(sd);
+        }
         if (type == "playercontrolobject")
             for (auto& [k, a] : t->props)
                 if (k == "setsoldierexitlocation" && !a.empty()) parse_vec3(a[0], def.seats[static_cast<size_t>(seat)].exit);
-        if (type == "seatobject" && static_cast<size_t>(seat) < def.seats.size()) xform(world, 0, 0, 0, def.seats[static_cast<size_t>(seat)].pos);
+        if (type == "seatobject" && static_cast<size_t>(seat) < def.seats.size()) {
+            SeatDef& sd = def.seats[static_cast<size_t>(seat)];
+            xform(world, 0, 0, 0, sd.pos);
+            sd.at = world;
+            for (auto& [k, a] : t->props) {
+                if (a.empty()) continue;
+                std::string v = lower(a[0]);
+                if (k == "seatflags" && v == "c_seatshowfullbodysoldier") sd.show = 1;
+                else if (k == "seatflags" && (v == "c_seatshowhalfbodysoldier" || v == "c_seathalfbodysoldier")) sd.show = 2;
+                else if (k == "seatflags" && v == "c_seatshowstandingsoldier") sd.show = 3;
+                else if (k == "seatanimationlowerbody") sd.lower = v;
+                else if (k == "seatanimationupperbody") sd.upper = v;
+            }
+        }
         if (type == "firearms" && static_cast<size_t>(seat) < def.seats.size() && def.seats[static_cast<size_t>(seat)].weapon.name.empty())
             def.seats[static_cast<size_t>(seat)].weapon = weapon_def(con, name);
         std::pair<std::string, int> key{lower(name), seen[lower(name)]++};
