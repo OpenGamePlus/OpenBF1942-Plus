@@ -250,7 +250,6 @@ private:
     size_t fp_first = 0, fp_parts = 0;        // first-person arms and body (far below in third person)
     bool first_person = false;
     float hands[3] = {-0.12f, -1.56f, 0.1f};  // center1pHands: the 1p rig's origin from the camera
-    float fov1p = 0;                            // set1pFov (0.47): the arms' field of view
     float chute_k = 0;                         // setParachuteDrag / mass of the player's soldier
     float fall_damage(int character, float full);  // hit points lost on the last landing
     bool lying = false;      // prone toggled on

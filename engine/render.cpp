@@ -666,6 +666,8 @@ void Renderer::Impl::draw(const std::vector<DrawItem>& scene, const Camera& cam,
                 if (a.anims0.empty()) continue;
                 a.anims = a.anims0, a.hold = sv.hold, a.upper_speed = 0, a.upper_hold = sv.upper_hold, a.span = sv.span;
                 if (auto an = sv.lower.empty() ? nullptr : state_anim(sv.lower, sv.first_person)) a.anims[0] = an;
+                // First person: the 1p arms' animations only; the legs' 3p states lifted the hands (and the gun) into view.
+                if (sv.first_person) a.anims[0] = nullptr;
                 float us = 0;
                 if (auto an = sv.upper.empty() || a.anims.size() < 2 ? nullptr : state_anim(sv.upper, sv.first_person, &us))
                     a.anims[1] = an, a.upper_speed = us;

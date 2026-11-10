@@ -2,6 +2,10 @@
 
 Append-only. Newest first. At most 3 bullets per stage.
 
+## 2026-11-10 — first-person arms matched to the original
+
+- Against the El Alamein screenshot (Thompson): `set1pFov` read as the field of view drew the arms nearly twice as large, and the legs' 3p animation lifted the gun. Now the 1p animation plays alone, with a 0.75 rad field of view and no `center1pHands` x, all fitted by eye.
+
 ## 2026-11-10 — same-spot comparison with the original
 
 - Our camera was matched to the maintainer's Berlin screenshot, using the parked tanks and the tank stoppers (`rh_tsp_M1`) as landmarks. The field of view is the same; buildings and haze match within 10 %.

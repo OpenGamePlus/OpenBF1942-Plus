@@ -85,5 +85,6 @@ Reloads (the arms and the weapon's own animation) are stretched to the weapon's 
 
 - **Parts drawn:** the soldier template's `1p*` children (hands) and `*1PBody` (sleeves). The third-person body is hidden.
 - **Animations:** each state's second `addAnimation` is its first-person one (`1PStandAimThompson.baf`). `copyState2`'s fifth argument names the weapon used for it.
-- **Placement:** the rig hangs from the camera at the eye, offset by the soldier's `center1pHands` (−0.12/−1.56/0.1). It is posed as usual, so the weapon in its right hand points straight ahead (checked: gun axis (0, 0.05, 1)).
-- **Drawing:** the rig and weapon are drawn after the scene, over a cleared depth buffer, with a 5 cm near plane. The field of view is `set1pFov` (0.47), read as vertical radians; that reading is unverified.
+- **Placement:** the rig hangs from the camera at the eye, offset by the soldier's `center1pHands` (−0.12/−1.56/0.1) without its x. It is posed with the 1p arm animation only, the legs left at rest, so the weapon points straight ahead (gun axis 1.6° up).
+- **Drawing:** the rig and weapon are drawn after the scene, over a cleared depth buffer, with a 5 cm near plane and a 0.75 rad field of view.
+- **Fitted by eye:** the dropped x, the legs at rest and the 0.75 rad field of view were matched to the maintainer's original-client screenshot (El Alamein, Thompson). With `set1pFov` (0.47) the arms were drawn nearly twice as large, and the legs' 3p animation lifted the gun into view.

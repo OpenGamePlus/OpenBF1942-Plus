@@ -88,7 +88,6 @@ Game::Game(const Vfs& vfs_, Con& con_, const Heightmap& hm_, const TerrainInfo& 
                 if (k == "setparachutedrag" && !a.empty()) drag = static_cast<float>(std::atof(a[0].c_str()));
                 else if (k == "mass" && !a.empty()) mass = std::max(1.0f, static_cast<float>(std::atof(a[0].c_str())));
                 else if (k == "center1phands" && !a.empty()) parse_vec3(a[0], hands);
-                else if (k == "set1pfov" && !a.empty()) fov1p = static_cast<float>(std::atof(a[0].c_str()));
             chute_k = std::isfinite(drag) ? std::max(0.0f, drag) / mass : 0.0f;
         }
         std::printf("play %s (team %d, kit %s): %zu parts\n", soldier_tmpl.c_str(), team,
@@ -1244,12 +1243,14 @@ void Game::pose() {
         // First person: the 1p arms and body hang from the camera at the eye (center1pHands), with the states'
         // first-person animations; the held weapon follows their right hand.
         Mat4 eye = translate(p[0], p[1] + eye_height(), p[2]) * rotation_ypr(cam.yaw * 57.29578f, -cam.pitch * 57.29578f, 0);
-        Mat4 rig = fp ? eye * translate(hands[0], hands[1], hands[2]) : translate(0, -10000, 0);
+        // shortcut: center1pHands' x (-0.12) is left out and the arms' field of view is 0.75 rad, both fitted by eye to
+        // an original-client screenshot (El Alamein, Thompson); set1pFov (0.47) drew them nearly twice as large.
+        Mat4 rig = fp ? eye * translate(0, hands[1], hands[2]) : translate(0, -10000, 0);
         std::vector<DrawItem> fparts = build_object(con, vfs, soldier_tmpl, rig, skipped, nullptr, hide_3p);
         for (size_t i = 0; i < fparts.size() && i < fp_parts; ++i) scene[fp_first + i].world = fparts[i].world;
         if (fp) {
             SoldierView mine = me;
-            mine.first = fp_first, mine.parts = fp_parts, mine.first_person = true, mine.fov = fov1p;
+            mine.first = fp_first, mine.parts = fp_parts, mine.first_person = true, mine.fov = 0.75f;
             soldiers.push_back(mine);
         } else {
             soldiers.push_back(me);
