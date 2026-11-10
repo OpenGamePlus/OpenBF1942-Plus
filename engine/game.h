@@ -48,6 +48,7 @@ struct SoldierView {
     size_t first = 0, parts = 0;  // its items in the scene
     std::string lower, upper;
     float hold = -1;
+    size_t held_first = 0, held_parts = 0;  // the weapon in its right hand (items with a bone); the renderer places them
 };
 
 // Rounds in the weapon and spare magazines. numOfMag read as all magazines, the loaded one included (unverified).
@@ -127,6 +128,7 @@ private:
         int ch = -1, team = 0;
         std::string tmpl;
         size_t first = 0, parts = 0;
+        size_t held_first = 0, held_parts = 0;  // its primary weapon's draw items
         float hp = 30, yaw = 0, pos[3] = {};
         bool dead = false, moving = false;
         float died_at = 0;
@@ -193,6 +195,8 @@ private:
     Ammo hand_ammo;
     std::vector<std::pair<WeaponDef, Ammo>> loadout;  // the kit's weapons that fire; the held one's ammo lives in hand_ammo
     size_t slot = 0;
+    std::vector<std::pair<size_t, size_t>> loadout_items;  // per slot: first draw item, count (held weapon models)
+    size_t add_weapon_items(const std::string& weapon);    // appends a hand weapon's parts far below; returns the count
     void select(size_t i);
     void refill_loadout();
     bool fire_held = false;  // trigger held last step (fireOnce weapons)

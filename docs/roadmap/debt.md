@@ -19,9 +19,9 @@
 | Texture `alternativePath` lookup | unverified | tried as `<alt>/<file name>` before the given path |
 | Tree sprite orientation | unverified | `corner.y` sign chosen visually |
 | Viewer draws LOD 0 / first `LodObject` child only, distance cull 1.5 km | shortcut | per-mesh `setLodDistance` exists in geometry templates |
-| Effects, held weapons not drawn | not implemented | later steps |
+| Effects not drawn | not implemented | later steps |
 | Spawner team in the viewer | shortcut | instance `setTeam`, else first `setObjectTemplate`; no game state |
-| Soldier root bone and standing pose | unverified | root replaced by identity, 180° turn; ≈ 20° hip flexion in the stand pose, see [anim.md](../formats/anim.md#soldier-root-unverified) |
+| Animation rotations and held weapons | unverified | `.baf` quaternions read conjugated and biped roots turned from Max space, chosen from pose checks; held weapons turned 180° on their main bone, fitted; see [anim.md](../formats/anim.md#held-weapons-unverified) |
 | Animation frame rate and state machine | shortcut | 25 fps guessed; first animation of a state, looping; no transitions; weapon states by prefix |
 | `animations/animationstates.con` loading | unverified | the viewer runs it after the object folders |
 | Object lightmap blend | unverified | 2 × lightmap replaces the sun term on lightmapped meshes |
@@ -44,7 +44,7 @@
 | Collision blocks | open question | static collision uses the first block of each mesh; the last is more detailed (armour materials); which one the original uses for soldiers is unknown, see [pathfinding.md](../formats/pathfinding.md#use-in-the-engine) |
 | Conquest rules | unverified | capture, ticket bleed and win rules read from field names; conquest mode only |
 | Parked vehicles | shortcut | lifted onto the terrain; LCVPs on davits drop into the sea; two Salerno Willys fall 50–70 m (unexplained); column hulls approximate concave parts |
-| Soldier movement | shortcut | speeds, jump, swim depth guessed; entry by distance, not `EntryPoint`; crouch and prone speeds and capsules guessed, prone capsule upright, bot postures and grenade range / rate guessed; parachute key, drag reading and fall damage guessed, bots take none; no ladders, jump or swim animations, held weapon |
+| Soldier movement | shortcut | speeds, jump, swim depth guessed; entry by distance, not `EntryPoint`; crouch and prone speeds and capsules guessed, prone capsule upright, bot postures and grenade range / rate guessed; parachute key, drag reading and fall damage guessed, bots take none; no ladders, jump or swim animations |
 | Moving parts | shortcut | propeller rpm guessed; drawn wheel droop capped at 0.2 m; tracks, hands, gear retraction, engine rotation not drawn |
 | Boat model | unverified | water drag rates, ship thrust = Σ torque / 4; float rest heights match retail spawns, see [vehicles.md](../formats/vehicles.md#boats-implemented-unverified) |
 | Aircraft model | unverified | wing force constants, regulator as 1 g shared, thrust = Σ torque / 4; see [vehicles.md](../formats/vehicles.md#aircraft-implemented-unverified) |

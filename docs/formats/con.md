@@ -61,7 +61,9 @@ How `Object.create` instances become meshes (`engine/scene.cpp`):
 
 | Animated meshes | `AnimatedMesh` geometry = `standardMesh/<file>.sm` + `setSkin`; skeleton (`createSkeleton`) and states (`setAnimationState`) come from the owning template or a parent | flags wave on control points; soldiers via `--soldier` |
 
-Not drawn yet: effects, weapons held by soldiers.
+| Skeleton parts | `useSkeletonPartAsMain <bone>` on a template, `bindToSkeletonPart <bone>` after an `addTemplate`: the part follows that bone (hand weapons) | visually, see [anim.md](anim.md#held-weapons-unverified) |
+
+Not drawn yet: effects.
 
 Parity: `engine/con.cpp` and `tools/con.py` produce the same instance count on all 78 levels.
 

@@ -22,6 +22,7 @@ struct Anim {
     std::string root_pos;  // "x-y-z" of the placed instance, truncated: object lightmap names
     bool spawned = false;  // below an ObjectSpawner
     int spawn = -1;
+    std::string bone;      // useSkeletonPartAsMain, or the bindToSkeletonPart under which the node was added
 };
 
 struct Builder {
@@ -63,7 +64,7 @@ struct Builder {
                 if (type == "animatedmesh" && (!vfs.has(skin) || !vfs.has(anim.skeleton))) skin.clear();
                 std::string lm = con.level_dir + "/objectlightmaps/" + file + "_" + anim.root_pos + ".tga";
                 if (type != "standardmesh" || anim.root_pos.empty() || !vfs.has(lm)) lm.clear();
-                return void(out.push_back({p, world, type == "animatedmesh" ? skin : "", anim.skeleton, anim.states, lm, owner, anim.spawned, anim.spawn}));
+                return void(out.push_back({p, world, type == "animatedmesh" ? skin : "", anim.skeleton, anim.states, lm, owner, anim.spawned, anim.spawn, anim.bone}));
             }
         ++skipped["missing mesh file"];
     }
@@ -90,6 +91,7 @@ struct Builder {
         }
         for (auto& [k, a] : t->props) {
             if (k == "createskeleton" && !a.empty()) anim.skeleton = Vfs::key(a[0]);
+            if (k == "useskeletonpartasmain" && !a.empty()) anim.bone = lower(a[0]);
             if (k == "setanimationstate" && !a.empty()) {  // "[index] <state>"
                 size_t index = a.size() > 1 ? static_cast<size_t>(std::max(0, std::atoi(a[0].c_str()))) : 0;
                 if (index < 8) {
@@ -101,6 +103,7 @@ struct Builder {
         struct Child {
             std::string name;
             float pos[3] = {}, rot[3] = {};
+            std::string bone;
         };
         bool invisible = false;
         for (auto& [k, a] : t->props)
@@ -110,10 +113,11 @@ struct Builder {
             if (a.empty()) continue;
             // createInvisible 1: physical only (e.g. the Elco's beaching wheels).
             if (k == "geometry" && !invisible) geometry(a[0], world, anim, lower(name));
-            else if (k == "addtemplate") children.push_back({a[0]});
+            else if (k == "addtemplate") children.push_back({a[0], {}, {}, {}});
             // setPosition/setRotation after addTemplate place that child relative to the parent.
             else if (k == "setposition" && !children.empty()) parse_vec3(a[0], children.back().pos);
             else if (k == "setrotation" && !children.empty()) parse_vec3(a[0], children.back().rot);
+            else if (k == "bindtoskeletonpart" && !children.empty()) children.back().bone = lower(a[0]);
         }
         // LodObject children are alternative detail levels (complex, simple, wreck); draw the first only.
         // shortcut: no distance-based switching yet (the lodSelector templates define it).
@@ -122,8 +126,12 @@ struct Builder {
             bool to_wreck = wreck && children.size() >= 3 && lower(children.back().name).find("wreck") != std::string::npos;
             children.erase(to_wreck ? children.begin() : children.begin() + 1, to_wreck ? children.end() - 1 : children.end());
         }
-        for (auto& c : children)
-            if (!hide || !hide(lower(c.name))) object(c.name, world * translate(c.pos[0], c.pos[1], c.pos[2]) * rotation_ypr(c.rot[0], c.rot[1], c.rot[2]), depth + 1, 0, anim);
+        for (auto& c : children) {
+            if (hide && hide(lower(c.name))) continue;
+            Anim ca = anim;
+            if (!c.bone.empty()) ca.bone = c.bone;
+            object(c.name, world * translate(c.pos[0], c.pos[1], c.pos[2]) * rotation_ypr(c.rot[0], c.rot[1], c.rot[2]), depth + 1, 0, ca);
+        }
     }
 };
 

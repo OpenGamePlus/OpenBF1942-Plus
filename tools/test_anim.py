@@ -56,9 +56,9 @@ class AnimTest(unittest.TestCase):
         self.assertAlmostEqual(bones[0][4][0], 2.0)  # position decoded with 2^prec
         ske = parse_ske(ske_bytes())
         recs, skn_names = parse_skn(skn_bytes())
-        # Frame 0: Tip at x = 2, rotated 90 deg about z, so offset (0, 0.5, 0) -> (-0.5, 0, 0).
+        # Frame 0: Tip at x = 2, quaternion 90 deg about z applied conjugated (-90 deg): (0, 0.5, 0) -> (0.5, 0, 0).
         p = skin([(1, 0.5, 0)], recs, skn_names, pose(ske, [(names, nframes, bones)], 0))[0]
-        self.assertAlmostEqual(p[0], 1.5, places=3)
+        self.assertAlmostEqual(p[0], 2.5, places=3)
         self.assertAlmostEqual(p[1], 0, places=3)
 
     def test_truncated_animation_rejected(self):

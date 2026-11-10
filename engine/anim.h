@@ -41,7 +41,7 @@ Skeleton ske_parse(const std::vector<uint8_t>& data);
 Skin skn_parse(const std::vector<uint8_t>& data);
 Animation baf_parse(const std::vector<uint8_t>& data);
 
-// World matrix per skeleton bone. biped_root: replace the root by a pure lift of its length (soldiers, see spec).
+// World matrix per skeleton bone. biped_root: turn 3ds Max space (up -z, facing +y) to Y-up facing +z (soldiers).
 std::vector<Mat4> pose(const Skeleton& s, const std::vector<const Animation*>& anims, float frame, bool biped_root = false);
 
 // Mesh vertex -> skin record (by position; exact, then within 1 mm), -1 = rigid.

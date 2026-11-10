@@ -40,7 +40,10 @@ Mat4 from_rows(const float a[12]) {  // row-major [R | t] -> column-major Mat4
     return m;
 }
 
+// The rotation of the conjugate quaternion (-x, -y, -z, w): read straight, soldiers lean back with their hips bent
+// and weapons cross their hands; conjugated, legs line up with the torso and the left hand lies on the barrel axis.
 Mat4 quat_local(float x, float y, float z, float w, float px, float py, float pz) {
+    x = -x, y = -y, z = -z;
     Mat4 m = Mat4::identity();
     m.m[0] = 1 - 2 * (y * y + z * z), m.m[4] = 2 * (x * y - z * w), m.m[8] = 2 * (x * z + y * w);
     m.m[1] = 2 * (x * y + z * w), m.m[5] = 1 - 2 * (x * x + z * z), m.m[9] = 2 * (y * z - x * w);
@@ -154,9 +157,11 @@ std::vector<Mat4> pose(const Skeleton& s, const std::vector<const Animation*>& a
                 local[i] = quat_local(v[0], v[1], v[2], v[3], v[4], v[5], v[6]);
             }
     }
-    if (biped_root && !s.empty()) {  // keep only the root's height: |t| is the pelvis height in metres
-        const float* t = &local[0].m[12];
-        local[0] = translate(0, std::sqrt(t[0] * t[0] + t[1] * t[1] + t[2] * t[2]), 0);
+    // Biped rigs animate in 3ds Max space: up -z, facing +y. A quarter turn about x makes them Y-up facing +z.
+    if (biped_root && !s.empty()) {
+        Mat4 c = Mat4::identity();
+        c.m[5] = 0, c.m[6] = 1, c.m[9] = -1, c.m[10] = 0;  // (x, y, z) -> (x, -z, y)
+        local[0] = c * local[0];
     }
     std::vector<Mat4> world(s.size());
     for (size_t i = 0; i < s.size(); ++i)

@@ -251,6 +251,7 @@ struct Animated {
     bool biped = false;
     float hold = -1;  // >= 0: play once from this time and stay on the last frame (deaths)
     std::vector<std::shared_ptr<Animation>> anims0;  // as loaded from the item's states
+    std::vector<Mat4> bones;  // last pose (model space)
 };
 
 // Tree mesh: all three groups share one buffer; group 3 sprites carry corner offsets.
@@ -290,6 +291,8 @@ struct Renderer::Impl {
     std::vector<int> anim_of_item;  // scene item -> animated index, or -1
     std::map<std::string, State> states;
     std::map<std::string, std::shared_ptr<Animation>> anims;
+    std::map<std::string, std::shared_ptr<Skeleton>> skeletons;  // by path
+    std::map<size_t, Mat4> held;  // this frame's held-weapon parts
     GLint u_sprite = -1, u_has_lm = -1, u_vp = -1, u_model = -1, u_mode = -1, u_right = -1, u_cam = -1;
     const Vfs& vfs;
 
@@ -408,8 +411,21 @@ Renderer::Impl::Impl(const Vfs& vfs_, Con& con, const Heightmap& hm, const Terra
     // Animation states: createState <name>, then addAnimation <baf> <speed> <flags>; the first animation is used.
     {
         std::string cur;
+        auto swap = [](std::string s, const std::string& from, const std::string& to) {
+            for (size_t at = s.find(from); at != std::string::npos; at = s.find(from, at + to.size())) s.replace(at, from.size(), to);
+            return s;
+        };
         for (auto& [method, args] : con.settings["animationstatemachine"]) {
             if (method == "createstate" && !args.empty()) cur = lower(args[0]);
+            // copyState2 <new> <from> [<3p weapon> <speed> <1p weapon> <speed>]: the state just made, for another
+            // weapon: <from> replaced in its name and animation paths (Ub_StandAimThompson -> Ub_StandAimBar1918).
+            if (method == "copystate2" && args.size() >= 2 && states.count(cur)) {
+                std::string to = lower(args[0]), from = lower(args[1]), name = swap(cur, from, to);
+                State st = states[cur];
+                std::string baf = swap(st.baf, from, lower(args.size() >= 3 ? args[2] : args[0]));
+                if (vfs.has(baf)) st.baf = baf;
+                if (name != cur && !states.count(name)) states[name] = st;
+            }
             if (method == "addanimation" && !args.empty() && !cur.empty() && !states.count(cur))
                 {
                 float sp = args.size() > 1 ? static_cast<float>(std::atof(args[1].c_str())) : 1.0f;
@@ -419,7 +435,6 @@ Renderer::Impl::Impl(const Vfs& vfs_, Con& con, const Heightmap& hm, const Terra
     }
     item_mesh.assign(scene.size(), nullptr);
     anim_of_item.assign(scene.size(), -1);
-    std::map<std::string, std::shared_ptr<Skeleton>> skeletons;
     std::map<std::string, std::shared_ptr<Skin>> skins;
     int anim_errors = 0;
     for (size_t i = 0; i < scene.size(); ++i) {
@@ -446,8 +461,8 @@ Renderer::Impl::Impl(const Vfs& vfs_, Con& con, const Heightmap& hm, const Terra
                 a.anims.push_back(an);
                 a.speed = st->second.speed;
             }
-            // Biped rigs (soldiers): root is 3ds Max space; drop it and turn to face +z (docs/formats/anim.md).
-            a.biped = !sk->empty() && (*sk)[0].name == "Bip01";  // turned when drawn
+            // Biped rigs (soldiers): 3ds Max space turned Y-up facing +z by pose() (docs/formats/anim.md).
+            a.biped = !sk->empty() && (*sk)[0].name == "Bip01";
             a.phase = static_cast<float>(i % 17);  // shortcut: stands in for setUserRandomStartTime
             item_mesh[i] = a.gpu.get();
             a.anims0 = a.anims;
@@ -573,6 +588,7 @@ void Renderer::Impl::draw(const std::vector<DrawItem>& scene, const Camera& cam,
                 frame = std::clamp((seconds - a.hold) * 25.0f * a.speed, 0.0f, static_cast<float>(frames) - 1.01f);
             }
             auto world = pose(*a.skeleton, list, frame, a.biped);
+            a.bones = world;
             skin_apply(*a.skin, a.map, a.to_ske, world, a.base, 10, skinned);
             verts10 = a.base;
             for (size_t v = 0; v < skinned.size() / 3; ++v) std::memcpy(&verts10[v * 10], &skinned[v * 3], 12);
@@ -580,10 +596,43 @@ void Renderer::Impl::draw(const std::vector<DrawItem>& scene, const Camera& cam,
             glBufferSubData(GL_ARRAY_BUFFER, 0, static_cast<GLsizeiptr>(verts10.size() * 4), verts10.data());
         }
 
+        // Held weapons: parts on their weapon-skeleton bones, the weapon's main bone (Base) on the soldier's right hand.
+        // The main bone's frame is turned 180 degrees about y: as stored, the barrel points back through the body and
+        // the left hand lies on its axis behind the grip; turned, the hand is on the forestock (unverified reading).
+        held.clear();
+        for (const SoldierView& sv : soldiers) {
+            const Animated* body = nullptr;
+            int rh = -1;
+            for (size_t i = sv.first; i < sv.first + sv.parts && i < anim_of_item.size() && !body; ++i) {
+                if (anim_of_item[i] < 0) continue;
+                const Animated& a = animated[static_cast<size_t>(anim_of_item[i])];
+                for (size_t b = 0; b < a.skeleton->size() && !a.bones.empty() && !body; ++b)
+                    if ((*a.skeleton)[b].name == "Bip01 R Hand") body = &a, rh = static_cast<int>(b);
+            }
+            if (!body) continue;
+            Mat4 at_hand = scene[body->item].world * body->bones[static_cast<size_t>(rh)];
+            for (size_t i = sv.held_first; i < sv.held_first + sv.held_parts && i < scene.size(); ++i) {
+                const DrawItem& it = scene[i];
+                auto& ws = skeletons[it.skeleton];
+                if (!ws && vfs.has(it.skeleton)) ws = std::make_shared<Skeleton>(ske_parse(vfs.read(it.skeleton)));
+                if (!ws || ws->size() < 2) continue;
+                Mat4 sub = Mat4::identity();  // locals below the main bone down to the part's bone
+                for (size_t b = 0; b < ws->size(); ++b) {
+                    if (lower((*ws)[b].name) != it.bone) continue;
+                    for (int k = static_cast<int>(b); k > 0 && (*ws)[static_cast<size_t>(k)].parent > 0; k = (*ws)[static_cast<size_t>(k)].parent)
+                        sub = (*ws)[static_cast<size_t>(k)].local * sub;
+                    break;
+                }
+                held[i] = at_hand * (*ws)[1].local * rotation_ypr(180, 0, 0) * sub;
+            }
+        }
+
         glUniform1i(u_mode, 2);
         for (size_t i = 0; i < scene.size(); ++i) {
             const DrawItem& item = scene[i];
-            float dx = item.world.m[12] - cam.x, dz = item.world.m[14] - cam.z;
+            auto hw = held.find(i);
+            const Mat4& at = hw != held.end() ? hw->second : item.world;
+            float dx = at.m[12] - cam.x, dz = at.m[14] - cam.z;
             if (dx * dx + dz * dz > 1500.f * 1500.f) continue;  // shortcut: plain distance cull, no LOD
             if (!item_mesh[i] || !item_mesh[i]->vao) continue;
             const GpuMesh& g = *item_mesh[i];
@@ -596,7 +645,8 @@ void Renderer::Impl::draw(const std::vector<DrawItem>& scene, const Camera& cam,
                 glBindTexture(GL_TEXTURE_2D, lm);
                 glActiveTexture(GL_TEXTURE0);
             }
-            Mat4 model = anim_of_item[i] >= 0 && animated[static_cast<size_t>(anim_of_item[i])].biped ? item.world * rotation_ypr(180, 0, 0) : item.world;
+            Mat4 model = item.world;
+            if (hw != held.end()) model = hw->second;
         glUniformMatrix4fv(u_model, 1, GL_FALSE, model.m);
             glBindVertexArray(g.vao);
             for (auto& p : g.parts) {

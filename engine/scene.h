@@ -20,6 +20,7 @@ struct DrawItem {
     std::string owner;     // lower-case name of the object template that holds the geometry
     bool spawned = false;  // placed by an ObjectSpawner (a vehicle), not part of the static level
     int spawn = -1;        // index into build_scene's spawn points, if spawned
+    std::string bone;      // skeleton bone it follows: bindToSkeletonPart / useSkeletonPartAsMain (hand weapons)
 };
 
 // What an ObjectSpawner places (the template its team would get) and where.

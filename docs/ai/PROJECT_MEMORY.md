@@ -2,6 +2,11 @@
 
 Append-only. Newest first. At most 3 bullets per stage.
 
+## 2026-11-10 — animation fix and held weapons (roadmap B2)
+
+- `.baf` quaternions are now read conjugated, and biped roots get a quarter turn from Max space instead of being dropped. Soldiers no longer lean back about 28°; legs, height and knees check out. Rejected: our own two-hand barrel rule, which hid the real error.
+- Soldiers hold their weapon on its skeleton (`useSkeletonPartAsMain`, `bindToSkeletonPart`, `copyState2` per-weapon arm states); a 180° turn on the main bone was fitted from the left-hand position. Open: first person, reload / fire arm animations.
+
 ## 2026-11-10 — parachutes and fall damage (roadmap B2)
 
 - `setParachuteDrag` read as quadratic drag (24 / 100 kg: 6.4 m/s descent). Space while falling opens it, and the model is drawn above the soldier. Landings above 10 m/s hurt; guessed.

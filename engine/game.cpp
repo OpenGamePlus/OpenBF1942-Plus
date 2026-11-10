@@ -161,6 +161,7 @@ Game::Game(const Vfs& vfs_, Con& con_, const Heightmap& hm_, const TerrainInfo& 
             std::copy(sp.pos, sp.pos + 3, b.pos);
             b.ch = phys.add_character(sp.pos[0], sp.pos[1] + 0.1f, sp.pos[2]);
             for (DrawItem& item : build_object(con, vfs, b.tmpl, Mat4::identity(), skipped, nullptr, hide_1p)) ++b.parts, scene.push_back(std::move(item));
+            b.held_first = scene.size(), b.held_parts = add_weapon_items(b.weapon.name);
             bots.push_back(std::move(b));
         }
         int n1 = static_cast<int>(std::count_if(bots.begin(), bots.end(), [](const Bot& b) { return b.team == 1; }));
@@ -173,6 +174,8 @@ Game::Game(const Vfs& vfs_, Con& con_, const Heightmap& hm_, const TerrainInfo& 
     for (const std::string& w : kit_weapons(team, opt.kit)) loadout.push_back({weapon_def(con, w), Ammo::full(weapon_def(con, w))});
     if (loadout.empty() && !hand.name.empty()) loadout.push_back({hand, Ammo::full(hand)});
     if (!loadout.empty()) hand = loadout[0].first;
+    if (player >= 0)
+        for (auto& [w, a] : loadout) loadout_items.push_back({scene.size(), add_weapon_items(w.name)});
     hand_ammo = Ammo::full(hand);
     player_hp = hitpoints(soldier_tmpl);
     if (cam.x < 0) cam.x = info.world_size * 0.15f, cam.y = 300, cam.z = info.world_size * 0.15f;  // default: corner, looking across
@@ -255,6 +258,14 @@ float Game::hitpoints(const std::string& n) const {
         for (auto& [k, a] : t->props)
             if (k == "hitpoints" && !a.empty()) hp = static_cast<float>(std::atof(a[0].c_str()));
     return std::isfinite(hp) && hp > 0 ? hp : 30.0f;
+}
+
+size_t Game::add_weapon_items(const std::string& weapon) {
+    if (weapon.empty()) return 0;
+    size_t n = 0;
+    for (DrawItem& item : build_object(con, vfs, weapon, translate(0, -10000, 0), skipped))
+        if (!item.bone.empty()) ++n, scene.push_back(std::move(item));  // parts on a bone only: the held model
+    return n;
 }
 
 std::vector<std::string> Game::kit_weapons(int tm, int kt) const {
@@ -908,7 +919,13 @@ void Game::pose() {
                 lower_state = move_f > 0.1f ? "lb_runforward" : move_f < -0.1f ? "lb_runbackward"
                             : move_r > 0.1f ? "lb_straferight" : move_r < -0.1f ? "lb_strafeleft" : "lb_stand";
         }
-        soldiers.push_back({sol_first, sol_parts, lower_state, posture == 2 ? "ub_lie" : posture == 1 ? "ub_crouch" : "", -1});
+        // Upper body: the held weapon's state (copyState2 names them by weapon: Ub_StandAimBar1918).
+        std::string held = cur < 0 ? hand.name : "";
+        std::string upper = posture == 2 ? "ub_lie" + held : posture == 1 ? "ub_crouch" + held
+                          : std::fabs(move_f) > 0.1f || std::fabs(move_r) > 0.1f ? "ub_runforward" + held : "ub_standaim" + held;
+        SoldierView me{sol_first, sol_parts, lower_state, held.empty() ? "" : upper, -1};
+        if (cur < 0 && slot < loadout_items.size()) me.held_first = loadout_items[slot].first, me.held_parts = loadout_items[slot].second;
+        soldiers.push_back(me);
         if (chute_parts) {
             bool open = cur < 0 && phys.parachute_open(player);
             // The model's origin is its harness: at the shoulders (1.3 m, fitted by eye on a screenshot).
@@ -926,8 +943,13 @@ void Game::pose() {
         std::vector<DrawItem> parts = build_object(con, vfs, b.tmpl, translate(b.pos[0], b.pos[1], b.pos[2]) * rotation_ypr(b.yaw, 0, 0),
                                                    skipped, nullptr, hide_1p);
         for (size_t i = 0; i < parts.size() && i < b.parts; ++i) scene[b.first + i].world = parts[i].world;
-        if (b.dead) soldiers.push_back({b.first, b.parts, "lb_diecheststand", "ub_diecheststand", opt.shot ? -1000.0f : b.died_at});
-        else soldiers.push_back({b.first, b.parts, b.moving ? "lb_runforward" : "lb_stand", "", -1});
+        if (b.dead) soldiers.push_back({b.first, b.parts, "lb_diecheststand", "ub_diecheststand", opt.shot ? -1000.0f : b.died_at, b.held_first, b.held_parts});
+        else {
+            const std::string& w = b.weapon.name;
+            const char* lower_b = b.posture == 2 ? "lb_lie" : b.posture == 1 ? "lb_crouch" : b.moving ? "lb_runforward" : "lb_stand";
+            std::string upper = b.posture == 2 ? "ub_lie" + w : b.posture == 1 ? "ub_crouch" + w : b.moving ? "ub_runforward" + w : "ub_standaim" + w;
+            soldiers.push_back({b.first, b.parts, lower_b, w.empty() ? "" : upper, -1, b.held_first, b.held_parts});
+        }
     }
 }
 

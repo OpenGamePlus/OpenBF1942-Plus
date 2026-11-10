@@ -203,7 +203,7 @@ int main() {
         skin_apply(skin, map, bone_index(skin, ske), pose(ske, {}, 0), verts, 3, out);
         assert(std::fabs(out[0] - 1) < 1e-5f && std::fabs(out[1] - 0.5f) < 1e-5f);  // rest: unchanged
         skin_apply(skin, map, bone_index(skin, ske), pose(ske, {&a}, 0), verts, 3, out);
-        assert(std::fabs(out[0] - 1.5f) < 1e-3f && std::fabs(out[1]) < 1e-3f);    // frame 0: rotated, moved
+        assert(std::fabs(out[0] - 2.5f) < 1e-3f && std::fabs(out[1]) < 1e-3f);    // frame 0: rotated (conjugated), moved
         d.resize(d.size() - 2);
         assert(throws([&] { baf_parse(d); }));
     }

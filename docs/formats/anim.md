@@ -40,7 +40,7 @@ The stored pose is *not* the skin's bind pose (the flag skeleton holds a waving 
 
 Every channel decodes to exactly `nframes` values; `total_words` = sum of the channel `words`.
 
-Values: quaternion component = `v / 32767` (unit length, verified); position = `v / 2^prec` metres (verified: thigh offset 0.094 m matches the skeleton). A bone's local transform is `T(p) · R(q)` with the standard (x, y, z, w) quaternion matrix for column vectors — verified visually (knees bend forward in the run cycle; the conjugate gives impossible poses).
+Values: quaternion component = `v / 32767` (unit length, verified); position = `v / 2^prec` metres (verified: thigh offset 0.094 m matches the skeleton). A bone's local transform is `T(p) · R(q*)`, with the rotation matrix of the **conjugate** quaternion (−x, −y, −z, w) for column vectors. We checked this in the data, not against the original: with the root rule below, the legs line up with the torso (3° instead of 11°), feet to head is 1.52 m (1.37 m read straight), knees bend forward in all 26 samples of the run cycle, and the left hand lies on the axis of the held weapon (see below). Read straight, soldiers leaned back about 28° and held weapons crossways.
 
 Bones not driven by any active animation keep the skeleton's local matrix. Soldiers combine a lower-body animation (`Bip01`, pelvis, legs, `Spine Root`) with an upper-body one (spine, arms, head).
 
@@ -50,6 +50,21 @@ Bones not driven by any active animation keep the skeleton's local matrix. Soldi
 
 The viewer plays the first animation of each state, looping at 25 frames per second × speed — the frame rate is a guess. Transitions, idles and weapon selection are not implemented.
 
-## Soldier root (unverified)
+## Soldier root
 
-The root `Bip01` carries 3ds Max space (translation `(0, 0, -1)`, ≈ -90° about z). Replacing it by a pure upward translation of its length (the pelvis height, 0.93–1.0 m) leaves the skeleton Y-up, standing on the object origin and facing -z; the viewer then turns it 180° about y. The standing pose shows ≈ 20° hip flexion that could not be confirmed against the original game.
+Biped animations (`Bip01` root) are in 3ds Max space: up is −z, facing +y, the feet near z = −0.1 and the pelvis at z = −1.0. `pose()` keeps the animated root and turns everything a quarter turn about x, mapping (x, y, z) to (x, −z, y). The result is Y-up, facing +z, standing on the object origin, with no further turn when drawn.
+
+## Held weapons (unverified)
+
+Hand weapons have their own skeleton:
+- The root is `Bip01 R Hand`. It is the hand's local transform from the soldier rig (translation 0.305 along the forearm) and is not used.
+- A main bone (`Base`, `Thompson`, `Bar1918`; `useSkeletonPartAsMain`) is a child of the root, with parts under it (`trigger`, `mag`, `clip`; `bindToSkeletonPart` on the child template).
+- The soldier skeleton has a `Thompson` bone under `Bip01 R Hand` with the same local transform as `thompson.ske`'s main bone.
+
+We draw each part at:
+
+`soldier hand × main bone local × R_y(180°) × locals below it`
+
+Without the 180° turn the barrel points back through the body and the left hand sits on the barrel axis behind the grip. With it, the left hand is on the forestock (M1 Garand: butt 0.29 m behind the grip, left hand 0.27 m ahead, muzzle 0.82 m ahead). The turn is fitted, not explained.
+
+Upper-body states are per weapon: `copyState2 <new> <from> [<3p> <speed> <1p> <speed>]` copies the state just created, replacing `<from>` in its name and animation paths (e.g. `Ub_StandAimThompson` → `Ub_StandAimBar1918`, with the `bar1918` animations when they exist). There are 1,217 calls.
