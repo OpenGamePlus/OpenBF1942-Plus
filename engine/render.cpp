@@ -428,7 +428,10 @@ Renderer::Impl::Impl(const Vfs& vfs_, Con& con, const Heightmap& hm, const Terra
             double sum[3] = {};
             for (size_t i = 0; i + 3 < d.rgba.size(); i += 4)
                 for (int k = 0; k < 3; ++k) sum[k] += d.rgba[i + static_cast<size_t>(k)];
-            for (int k = 0; k < 3; ++k) detail_gain[k] = static_cast<float>(255.0 * static_cast<double>(d.w) * d.h / std::max(sum[k], 1.0));
+            // One gain for all channels (mean brightness to 1): the detail keeps its tint. Per-channel gains erased the
+            // desert detail's warm cast (142/134/118) and left the sand paler than the original's.
+            double luma = (sum[0] + sum[1] + sum[2]) / 3.0;
+            for (int k = 0; k < 3; ++k) detail_gain[k] = static_cast<float>(255.0 * static_cast<double>(d.w) * d.h / std::max(luma, 1.0));
             GLuint dt;
             glGenTextures(1, &dt);
             glActiveTexture(GL_TEXTURE3);
