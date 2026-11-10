@@ -2,6 +2,10 @@
 
 Append-only. Newest first. At most 3 bullets per stage.
 
+## 2026-11-10 — repository moved
+
+- The repository moved to the account `OpenGamePlus` (private, history kept); commits are now signed with that account's noreply address. Its `gh` token has no `workflow` scope: changing `.github/workflows/` needs `gh auth refresh -s workflow`.
+
 ## 2026-11-10 — Berlin ground still open
 
 - The original's Berlin street is about 2.4 times our colour tile there, while El Alamein's sand matches tile ×1. Ruled out: a ×2 on the terrain, denser fog, a shifted colour map, patched tiles. Lead: `Terrain.ShadowAmbient` (per level).
