@@ -37,6 +37,7 @@ struct GameInput {
     float forward = 0, right = 0;                      // on foot
     bool jump = false, slow = false, fire = false, use = false, reload = false;
     int select = -1;  // number key: kit weapon slot (0-based), -1 none
+    bool detonate = false;  // explosive packs placed by the player
 };
 
 // The lower / upper body animation states a soldier's skinned parts should play; empty: as loaded.
@@ -188,6 +189,12 @@ private:
     void select(size_t i);
     void refill_loadout();
     bool fire_held = false;  // trigger held last step (fireOnce weapons)
+    struct Placed {  // the player's mines (go off near a vehicle) and explosive packs (go off on detonate)
+        int shot = -1;
+        float near = 0;
+    };
+    std::vector<Placed> placed;
+    void placed_charges(bool detonate);
     float hand_next = 0, player_hp = 30, respawn_at = -1, now = 0;
     bool player_dead = false;
     std::vector<std::pair<float, std::string>> feed;  // (game time, message): kills, captures, destroyed vehicles

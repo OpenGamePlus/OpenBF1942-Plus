@@ -15,7 +15,9 @@ Status: **damage formula checked against the retail tables' own comments and kno
 | `fireOnce` | one round per trigger pull | M1 Garand 1 |
 | `ammoType` | which supply depots refill it | rifles 1 |
 
-Projectile `radius` (29 projectiles, all explosive: grenades 15, bazooka 4, shells 10–20, bombs 20–30, depth charge 100): the explosion. We apply the projectile's `material2` damage to every soldier and vehicle within it, scaled linearly from full at the centre to 0 at the edge (unverified), and no longer add it to the direct hit. Shots with a radius whose `timeToLive` runs out explode where they are (grenade fuses). `minDamage`, `distToStartLoseDamage`, `distToMinDamage`, `forceOnExplosion` and `explodeNearEnemyDistance` are not read yet.
+Projectile `radius` (29 projectiles, all explosive: grenades 15, bazooka 4, shells 10–20, bombs 20–30, depth charge 100): the explosion. We apply the projectile's `material2` damage to every soldier and vehicle within it, scaled linearly from full at the centre to 0 at the edge (unverified), and no longer add it to the direct hit. Shots with a radius whose `timeToLive` runs out explode where they are (grenade fuses).
+
+Projectiles with `dieAfterColl 0` bounce instead of hitting and come to rest: grenades (3 s fuse), landmines (360 s) and explosive packs (240 s). We use a restitution of 0.3 and keep 60 % of the sliding speed (guessed). Mines go off when any vehicle comes within `explodeNearEnemyDistance` (3 m) of it; friendly vehicles set them off too. The player's explosive packs go off with G; the original uses the alternate fire. `minDamage`, `distToStartLoseDamage`, `distToMinDamage` and `forceOnExplosion` are not read yet.
 
 Kits: the player carries every kit weapon that fires (e.g. Allied assault: BAR 1918, Colt, knife, grenades), keys 1–9, each with its own magazines.
 

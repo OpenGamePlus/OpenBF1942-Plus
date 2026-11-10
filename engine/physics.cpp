@@ -298,9 +298,11 @@ WeaponDef weapon_def(const Con& con, const std::string& name) {
         if (k == "material") wd.material = std::atoi(a[0].c_str());
         else if (k == "material2") wd.material2 = std::atoi(a[0].c_str());
         else if (k == "radius") wd.radius = std::clamp(num(a), 0.0f, 100.0f);
+        else if (k == "dieaftercoll") wd.bounce = std::atoi(a[0].c_str()) == 0;
+        else if (k == "explodenearenemydistance") wd.near = std::clamp(num(a), 0.0f, 100.0f);
         else if (k == "timetolive") {  // CRD_NONE/<seconds>/...
             auto s = a[0].find('/');
-            if (s != std::string::npos) wd.ttl = std::clamp(static_cast<float>(std::atof(a[0].c_str() + s + 1)), 0.1f, 30.0f);
+            if (s != std::string::npos) wd.ttl = std::clamp(static_cast<float>(std::atof(a[0].c_str() + s + 1)), 0.1f, 360.0f);
         }
     }
     return wd;
@@ -408,7 +410,11 @@ struct Physics::Impl {
         float ttl;
         int tag;
         float radius;
+        bool bounce;
+        int id;
+        bool resting = false;
     };
+    int next_shot = 1;
     std::vector<Shot> shots;
     std::vector<Physics::Hit> hits;
     void projectiles();
@@ -803,6 +809,10 @@ void Physics::Impl::projectiles() {
         s.ttl -= kStep;
         Vec3 v1 = s.v + g * kStep, step = (s.v + v1) * (0.5f * kStep);
         bool done = s.ttl <= 0;
+        if (!done && s.resting) {
+            ++i;
+            continue;
+        }
         if (!done) {
             BodyID ignore = s.ignore >= 0 && static_cast<size_t>(s.ignore) < vehicles.size() ? vehicles[static_cast<size_t>(s.ignore)].id : BodyID();
             BodyID ignore_c = s.ignore_character >= 0 && static_cast<size_t>(s.ignore_character) < soldiers.size()
@@ -817,7 +827,24 @@ void Physics::Impl::projectiles() {
             RayCastResult hit;
             Physics::Hit h;
             h.material = s.material, h.material2 = s.material2, h.tag = s.tag, h.radius = s.radius;
-            if (sys.GetNarrowPhaseQuery().CastRay(ray, hit, {}, {}, filter)) {
+            if (s.bounce && sys.GetNarrowPhaseQuery().CastRay(ray, hit, {}, {}, filter)) {
+                // shortcut: restitution 0.3, tangential speed kept at 60 %; rests below 1 m/s (on moving vehicles too)
+                RVec3 at = ray.GetPointOnRay(hit.mFraction);
+                Vec3 n = -step.Normalized();
+                {
+                    BodyLockRead lock(sys.GetBodyLockInterface(), hit.mBodyID);
+                    if (lock.Succeeded()) n = lock.GetBody().GetWorldSpaceSurfaceNormal(hit.mSubShapeID2, at);
+                }
+                Vec3 vn = n * v1.Dot(n), vt = v1 - vn;
+                s.p = Vec3(at) + n * 0.05f, s.v = vt * 0.6f - vn * 0.3f, s.ignore = -1, s.ignore_character = -1;
+                if (s.v.Length() < 1.0f) s.resting = true, s.v = Vec3::sZero();
+                ++i;
+                continue;
+            } else if (s.bounce && s.p.GetY() + step.GetY() < water) {
+                s.resting = true, s.v = Vec3::sZero(), s.p.SetY(water);  // shortcut: floats on the surface
+                ++i;
+                continue;
+            } else if (!s.bounce && sys.GetNarrowPhaseQuery().CastRay(ray, hit, {}, {}, filter)) {
                 RVec3 at = ray.GetPointOnRay(hit.mFraction);
                 for (size_t k = 0; k < soldiers.size(); ++k)
                     if (soldiers[k].ch->GetInnerBodyID() == hit.mBodyID) {
@@ -854,12 +881,29 @@ void Physics::Impl::projectiles() {
     }
 }
 
-void Physics::fire(const float pos[3], const float vel[3], int material, int material2, float ttl, int ignore_vehicle,
-                   int ignore_character, int tag, float radius) {
+int Physics::fire(const float pos[3], const float vel[3], int material, int material2, float ttl, int ignore_vehicle,
+                  int ignore_character, int tag, float radius, bool bounce) {
     for (int k = 0; k < 3; ++k)
-        if (!std::isfinite(pos[k]) || !std::isfinite(vel[k])) return;
+        if (!std::isfinite(pos[k]) || !std::isfinite(vel[k])) return -1;
+    int id = p_->next_shot++;
+    // Lifetimes up to 6 minutes: mines (360 s) and explosive packs (240 s) wait that long.
     p_->shots.push_back({Vec3(pos[0], pos[1], pos[2]), Vec3(vel[0], vel[1], vel[2]), material, material2, ignore_vehicle,
-                         ignore_character, std::clamp(ttl, 0.0f, 30.0f), tag, std::max(0.0f, radius)});
+                         ignore_character, std::clamp(ttl, 0.0f, 360.0f), tag, std::max(0.0f, radius), bounce, id});
+    return id;
+}
+
+bool Physics::shot_position(int id, float out[3]) const {
+    for (auto& s : p_->shots)
+        if (s.id == id) {
+            out[0] = s.p.GetX(), out[1] = s.p.GetY(), out[2] = s.p.GetZ();
+            return true;
+        }
+    return false;
+}
+
+void Physics::explode(int id) {
+    for (auto& s : p_->shots)
+        if (s.id == id) s.ttl = 0, s.resting = false;
 }
 
 std::vector<Physics::Hit> Physics::take_hits() { return std::exchange(p_->hits, {}); }

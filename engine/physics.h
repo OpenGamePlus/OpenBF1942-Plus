@@ -59,6 +59,8 @@ struct WeaponDef {
     bool fire_once = false;             // fireOnce: one round per trigger pull
     int ammo_type = 0;                  // ammoType: which supply depots refill it
     float radius = 0;                   // projectile radius: explosion (material2 damage falls off to 0 at it)
+    bool bounce = false;                // dieAfterColl 0 (grenades, mines, explosive packs)
+    float near = 0;                     // explodeNearEnemyDistance (mines), 0: none
 };
 
 struct VehicleDef {
@@ -122,8 +124,12 @@ public:
         float pos[3] = {};
         float radius = 0;     // explosion radius as given to fire; also reported when the shot's time runs out
     };
-    void fire(const float pos[3], const float vel[3], int material, int material2, float ttl, int ignore_vehicle = -1,
-              int ignore_character = -1, int tag = 0, float radius = 0);
+    // Returns the shot's id. bounce (dieAfterColl 0): bounces off whatever it meets and comes to rest, until its
+    // time runs out or explode(); no hit on contact.
+    int fire(const float pos[3], const float vel[3], int material, int material2, float ttl, int ignore_vehicle = -1,
+             int ignore_character = -1, int tag = 0, float radius = 0, bool bounce = false);
+    bool shot_position(int id, float out[3]) const;  // false once it is gone
+    void explode(int id);                            // ends it at the next step (a hit there if it has a radius)
     std::vector<Hit> take_hits();                       // since the last call
     // Nothing between a and b except the given soldiers and vehicle (the looker and its target).
     bool line_of_sight(const float a[3], const float b[3], int ignore_character, int target_character, int target_vehicle) const;

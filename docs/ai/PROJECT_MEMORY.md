@@ -5,7 +5,7 @@ Append-only. Newest first. At most 3 bullets per stage.
 ## 2026-11-10 — explosions and kit weapons (roadmap B2)
 
 - Projectile `radius` read: `material2` damage hits everything within it, falling off linearly (unverified); fuses that run out explode. Over 78 levels bot deaths 236 → 258.
-- The player carries the whole kit (keys 1–9), each weapon with its own magazines. Open: grenades bouncing, placed mines and explosive packs, bots using secondary weapons.
+- The player carries the whole kit (keys 1–9), each weapon with its own magazines. `dieAfterColl 0` projectiles bounce and rest: grenades on their fuse, mines near vehicles, explosive packs on G. Open: bots using secondary weapons.
 
 ## 2026-11-10 — magazines and reload (roadmap B2, first part)
 

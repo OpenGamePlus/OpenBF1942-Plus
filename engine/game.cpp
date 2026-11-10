@@ -385,6 +385,28 @@ int Game::nearest_depot(const float pos[3], int tm, const WeaponDef& w) const {
     return best;
 }
 
+// Mines go off when a vehicle comes within explodeNearEnemyDistance (any vehicle: friendly ones too); packs on detonate.
+void Game::placed_charges(bool detonate) {
+    for (size_t i = 0; i < placed.size();) {
+        float p[3];
+        if (!phys.shot_position(placed[i].shot, p)) {
+            placed[i] = placed.back(), placed.pop_back();
+            continue;
+        }
+        bool go = detonate && placed[i].near <= 0;
+        for (const Veh& v : vehicles) {
+            if (go || placed[i].near <= 0 || v.wrecked) continue;
+            Mat4 m = phys.transform(v.id);
+            float dx = m.m[12] - p[0], dy = m.m[13] - p[1], dz = m.m[14] - p[2];
+            // shortcut: from the vehicle's centre
+            float r = placed[i].near + v.len;  // len: the hull's half length
+            go = dx * dx + dy * dy + dz * dz < r * r;
+        }
+        if (go) phys.explode(placed[i].shot);
+        ++i;
+    }
+}
+
 void Game::fire(float t) {
     if (cur >= 0) {
         Veh& v = vehicles[static_cast<size_t>(cur)];
@@ -395,14 +417,15 @@ void Game::fire(float t) {
         if (!(l > 1e-6f)) return;
         float pos[3], vel[3];
         for (int i = 0; i < 3; ++i) d[i] /= l, pos[i] = m.m[12 + i] + d[i] * (v.has_muzzle ? 1.0f : v.len), vel[i] = d[i] * v.weapon.velocity;
-        phys.fire(pos, vel, v.weapon.material, v.weapon.material2, v.weapon.ttl, v.id, -1, team, v.weapon.radius);
+        phys.fire(pos, vel, v.weapon.material, v.weapon.material2, v.weapon.ttl, v.id, -1, team, v.weapon.radius, v.weapon.bounce);
         sounds.push_back({v.weapon.name, {pos[0], pos[1], pos[2]}});
     } else if (player >= 0 && !hand.name.empty() && t >= hand_next && hand_ammo.take(t)) {
         hand_next = t + hand.interval;
         float p[3], d[3] = {std::sin(cam.yaw) * std::cos(cam.pitch), std::sin(cam.pitch), std::cos(cam.yaw) * std::cos(cam.pitch)}, pos[3], vel[3];
         phys.character_position(player, p);
         for (int i = 0; i < 3; ++i) pos[i] = p[i] + (i == 1 ? 1.5f : 0.0f) + d[i] * 0.6f, vel[i] = d[i] * hand.velocity;
-        phys.fire(pos, vel, hand.material, hand.material2, hand.ttl, -1, player, team, hand.radius);
+        int id = phys.fire(pos, vel, hand.material, hand.material2, hand.ttl, -1, player, team, hand.radius, hand.bounce);
+        if (id >= 0 && hand.bounce && hand.ttl > 60) placed.push_back({id, hand.near});  // not a grenade: waits for a trigger
         sounds.push_back({hand.name, {pos[0], pos[1], pos[2]}});
     }
 }
@@ -591,7 +614,7 @@ void Game::think(float t, float step) {
                 float dir[3] = {d[0] / dist + err(rng), d[1] / dist + err(rng), d[2] / dist + err(rng)};
                 float l = std::sqrt(dir[0] * dir[0] + dir[1] * dir[1] + dir[2] * dir[2]), pos[3], vel[3];
                 for (int i = 0; i < 3; ++i) pos[i] = eye[i] + dir[i] / l * 0.6f, vel[i] = dir[i] / l * b.weapon.velocity;
-                phys.fire(pos, vel, b.weapon.material, b.weapon.material2, b.weapon.ttl, -1, b.ch, b.team, b.weapon.radius);
+                phys.fire(pos, vel, b.weapon.material, b.weapon.material2, b.weapon.ttl, -1, b.ch, b.team, b.weapon.radius, b.weapon.bounce);
                 sounds.push_back({b.weapon.name, {pos[0], pos[1], pos[2]}});
             }
             continue;
@@ -679,6 +702,7 @@ void Game::step(float t, float dt, const GameInput& in) {
     if (in.use) get_in_out();
     if (player >= 0) {
         if (in.select >= 0 && cur < 0) select(static_cast<size_t>(in.select));
+        placed_charges(in.detonate);
         hand_ammo.tick(t, hand);
         if (in.reload) hand_ammo.reload(t, hand);
     }

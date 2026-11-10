@@ -466,6 +466,15 @@ int main() {
         for (int i = 0; i < 40; ++i) phys.step(1.0f / 60);
         hits = phys.take_hits();
         assert(hits.size() == 1 && hits[0].radius == 15 && hits[0].material2 == 205 && hits[0].tag == 2 && hits[0].pos[1] > 35);
+        float toss[3] = {30, 3, 30}, fwd[3] = {4, 2, 0};
+        int g = phys.fire(toss, fwd, 70, 205, 300, -1, -1, 2, 15, true);  // bounces, comes to rest, waits
+        for (int i = 0; i < 300; ++i) phys.step(1.0f / 60);
+        float rest[3];
+        assert(phys.take_hits().empty() && phys.shot_position(g, rest) && rest[1] < 0.3f && rest[1] > -0.1f && rest[0] > 31);
+        phys.explode(g);
+        phys.step(1.0f / 60);
+        hits = phys.take_hits();
+        assert(hits.size() == 1 && hits[0].radius == 15 && !phys.shot_position(g, rest));
     }
 
     // Navigation: level-0 map tiles (free, blocked, bits), coarse grid, A* around a wall with string pulling.
