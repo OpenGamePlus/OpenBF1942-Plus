@@ -46,6 +46,22 @@ Retail data contains junk lines (`***`, `-`, typos like `wrem`, `srem`, a UTF-16
 
 Checked on every `run`/`include` in the three mods; the remaining misses are files absent from retail data (optional `*Mod.inc` hooks, typos, Coral Sea control points).
 
+## Object placement
+
+How `Object.create` instances become meshes (`engine/scene.cpp`):
+
+| Step | Rule | Verified |
+|---|---|---|
+| Instance transform | `T(absolutePosition) · R(rotation) · S(geometry.scale)` | visually (Berlin, Wake) |
+| Rotation | `yaw/pitch/roll` in degrees, Direct3D left-handed order: roll (z), pitch (x), yaw (y) | visually: L-shaped corner buildings match baked shadows |
+| Geometry | `ObjectTemplate.geometry` → `GeometryTemplate` (`StandardMesh` → `standardMesh/<file>.sm`, `TreeMesh` → `treeMesh/<file>.tm`); level folder first | yes, 0 errors on all levels |
+| Children | `addTemplate X`; the following `setPosition`/`setRotation` place that child relative to the parent | visually: tanks and the B-17 assemble correctly |
+| Spawners | `ObjectSpawner` template: `setObjectTemplate <team> <template>`; the instance's `setTeam` picks one | the viewer shows the instance's team, else the first listed; in game the control point owner decides |
+
+Not drawn yet: `AnimatedMesh` geometry (flags, soldiers), effects.
+
+Parity: `engine/con.cpp` and `tools/con.py` produce the same instance count on all 78 levels.
+
 ## Mods
 
 `Mods/<mod>/init.con` (loose file) lists `game.addModPath` entries; the first has the highest priority (XPack1: `Mods/XPack1/`, then `Mods/BF1942/`).

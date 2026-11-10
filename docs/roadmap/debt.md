@@ -16,5 +16,11 @@
 | `texOffsetX/Y`, material map, detail texture, terrain LOD | not implemented | see [terrain.md](../formats/terrain.md) |
 | Water drawn on every map | unverified | Berlin has `waterLevel` but no `Water.*` settings |
 | Little-endian hosts only | accepted | `memcpy` of file integers in C++ |
+| Texture `alternativePath` lookup | unverified | tried as `<alt>/<file name>` before the given path |
+| Tree sprite orientation | unverified | `corner.y` sign chosen visually |
+| Viewer draws LOD 0 only, distance cull 1.5 km | shortcut | per-mesh `setLodDistance` exists in geometry templates |
+| `AnimatedMesh`, effects not drawn | not implemented | step 5 and later |
+| Spawner team in the viewer | shortcut | instance `setTeam`, else first `setObjectTemplate`; no game state |
+| TM collision block layout | open question | skipped by anchoring geometry at the end of file |
 | No model viewer in the engine | deliberate | step 3 exports OBJ for Blender; rendering starts with the map viewer |
 | Networking protocol | risk | undocumented; roadmap step 8 |

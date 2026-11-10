@@ -9,10 +9,11 @@ AGENTS.md            agent entry point
 CMakeLists.txt       engine build (library obf, obf_mapview, test_engine)
 README.md            English; README.es.md Spanish translation
 docs/                formats/, architecture/adr/, roadmap/, ai/
-engine/              C++ engine: rfa, vfs, dds, terrain, mapview.cpp, test_engine.cpp
+engine/              C++ engine: rfa, vfs, dds, terrain, con, sm, tm, scene, math.h, mapview.cpp, test_engine.cpp
 tools/rfa.py         RFA archive reader (list, extract)
 tools/con.py         CON interpreter + virtual file system (mod/level loader)
 tools/sm.py          static mesh reader, .rs shader parser, OBJ export
+tools/tm.py          tree mesh reader
 tools/check_docs.py  documentation checker
 tools/test_*.py      unit tests (synthetic data only)
 ```
@@ -24,9 +25,11 @@ tools/test_*.py      unit tests (synthetic data only)
 | RFA archives | done, verified on the full retail install | [rfa.md](../formats/rfa.md) |
 | CON scripts | interpreter done; all 78 levels load with every placed object resolved | [con.md](../formats/con.md) |
 | Static meshes (`.sm`, `.rs`) | done; all 2,527 meshes parse, OBJ export with textures | [sm.md](../formats/sm.md) |
-| Textures (`.dds`/`.tga`) | DXT1 decoded in C++; other DDS formats and TGA not yet | — |
+| Tree meshes (`.tm`) | done; all 130 parse (Python + C++), drawn with sprite billboards | [tm.md](../formats/tm.md) |
+| Textures (`.dds`/`.tga`) | C++: DDS DXT1/3/5, uncompressed TGA | — |
 | Terrain | C++ viewer: heightmap, colour tiles, water plane; all 78 levels open | [terrain.md](../formats/terrain.md) |
-| Map objects in the viewer, animation | not started | — |
+| Map objects in the viewer | static and tree meshes, child templates, spawned vehicles; no animated meshes, LOD | [con.md](../formats/con.md#object-placement) |
+| Animation | not started | — |
 | Engine (C++) | `obf` library + `obf_mapview` | [boundaries.md](../architecture/boundaries.md) |
 
 ## Commands
@@ -36,7 +39,7 @@ tools/test_*.py      unit tests (synthetic data only)
 | Tests | `python3 -m unittest discover tools` |
 | Build engine | `cmake -S . -B build && cmake --build build -j` |
 | Engine tests | `ctest --test-dir build` |
-| Map viewer | `build/obf_mapview <BF1942_DIR> <mod> <level> [--shot out.ppm] [--cam x y z yaw pitch]` |
+| Map viewer | `build/obf_mapview <BF1942_DIR> <mod> <level> [--shot out.ppm] [--cam x y z yaw pitch] [--no-objects]` |
 | Doc checks | `python3 tools/check_docs.py` |
 | List archive | `python3 tools/rfa.py list <archive.rfa>` |
 | Extract archive | `python3 tools/rfa.py extract <archive.rfa> <out_dir>` |
@@ -52,5 +55,6 @@ tools/test_*.py      unit tests (synthetic data only)
 - `Con.templates[subsystem][lower name] = {type, name, props}`; `Con.instances = [{template, props}]`; `props = [(method, args)]`, method lower-cased.
 - `Vfs.files`: lower-cased path -> bytes or archive pointer; `Vfs.read(path) -> bytes`.
 - `sm.parse(bytes) -> {version, bbox, collision: [bytes], lods: [[{name, prim, fvf, stride, alpha, vertices, indices}]], end}`; vertices are float tuples in file order.
-- C++ (`namespace obf`): `lzo1x_decompress`, `rfa_index`, `rfa_read`; `Vfs::mount_mod/has/read/key`; `dds_decode -> Image{w,h,rgb}`; `parse_terrain_con -> TerrainInfo`; `load_heightmap -> Heightmap::height(row, col)`. All throw `std::runtime_error` on bad data.
+- C++ (`namespace obf`): `lzo1x_decompress`, `rfa_index`, `rfa_read`; `Vfs::mount_mod/add/has/read/paths/key`; `dds_decode`, `tga_decode -> Image{w,h,rgba}`; `parse_terrain_con -> TerrainInfo`; `load_heightmap -> Heightmap::height(row, col)`; `Con::load_game/load_level/run/execute` with `templates`, `instances`, `settings`; `sm_parse`, `sm_triangles`, `rs_parse`; `tm_parse`; `build_scene -> [DrawItem{mesh, world}]`. All throw `std::runtime_error` on bad data.
+- `tm.parse(bytes) -> {bbox, groups: [[(first, count, texture)] x 3], vertices, indices}`.
 - `sm.triangles(material) -> [(a, b, c)]` for lists and strips; `sm.parse_rs(text) -> {material lower: {shader, key: value}}`.

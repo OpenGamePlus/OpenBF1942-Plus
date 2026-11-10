@@ -13,7 +13,7 @@ Reimplementación clean-room del motor Refractor 1 para que Battlefield 1942 fun
 | 1. Archivos (RFA) | hecho — listar/extraer, verificado con la instalación original completa |
 | 2. Scripts (`.con`) | hecho — intérprete; cargan todos los mapas de los tres mods |
 | 3. Mallas estáticas (`.sm`) | hecho — todas las mallas se leen; exportación OBJ abre en Blender |
-| 4. Terreno | en curso — el visor C++ muestra todos los mapas; aún sin objetos |
+| 4. Terreno + objetos | hecho — el visor C++ muestra todos los mapas con edificios y árboles |
 | 5–8 | sin empezar (ver [hoja de ruta](#hoja-de-ruta)) |
 
 ## Herramientas

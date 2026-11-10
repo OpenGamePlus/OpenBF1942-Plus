@@ -13,7 +13,7 @@ Clean-room reimplementation of the Refractor 1 engine so Battlefield 1942 runs o
 | 1. Archives (RFA) | done — list/extract, verified on the full retail install |
 | 2. Scripts (`.con`) | done — interpreter; every level of the three mods loads |
 | 3. Static meshes (`.sm`) | done — every mesh parses; OBJ export opens in Blender |
-| 4. Terrain | in progress — C++ viewer renders every map; objects not placed yet |
+| 4. Terrain + map objects | done — C++ viewer renders every map with buildings and trees |
 | 5–8 | not started (see [roadmap](#roadmap)) |
 
 ## Tools

@@ -2,6 +2,12 @@
 
 Append-only. Newest first. At most 3 bullets per stage.
 
+## 2026-11-10 — map objects in the viewer
+
+- C++ ports of the CON interpreter (parity with Python on all 78 levels) and `.sm`; new `.tm` format; `scene` places instances, children and spawner vehicles.
+- Rotation convention (D3D yaw/pitch/roll) checked against baked building shadows in Berlin; tree sprites are group 3 of `.tm`.
+- Rejected: decoding the collision tree to skip it in `.tm` — the geometry is found from the end of the file instead.
+
 ## 2026-11-09 — C++ engine start: terrain viewer
 
 - `obf_mapview` (SDL2, OpenGL 3.3, epoxy) renders heightmap, colour tiles and water; all 78 levels open; RFA/LZO/VFS ported with bounds checks.

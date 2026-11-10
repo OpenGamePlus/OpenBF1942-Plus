@@ -57,9 +57,25 @@ void Vfs::mount_mod(const std::string& game_dir, const std::string& mod) {
     }
 }
 
-bool Vfs::has(const std::string& path) const { return files_.count(key(path)) != 0; }
+std::vector<std::string> Vfs::paths(const std::string& prefix) const {
+    std::vector<std::string> out;
+    for (auto& [k, e] : files_)
+        if (k.compare(0, prefix.size(), prefix) == 0 && !mem_.count(k)) out.push_back(k);
+    for (auto& [k, d] : mem_)
+        if (k.compare(0, prefix.size(), prefix) == 0) out.push_back(k);
+    return out;
+}
+
+void Vfs::add(const std::string& path, std::vector<uint8_t> data) { mem_[key(path)] = std::move(data); }
+
+bool Vfs::has(const std::string& path) const {
+    std::string k = key(path);
+    return mem_.count(k) || files_.count(k);
+}
 
 std::vector<uint8_t> Vfs::read(const std::string& path) const {
+    auto m = mem_.find(key(path));
+    if (m != mem_.end()) return m->second;
     auto it = files_.find(key(path));
     if (it == files_.end()) throw std::runtime_error("not found in VFS: " + path);
     return rfa_read(it->second);

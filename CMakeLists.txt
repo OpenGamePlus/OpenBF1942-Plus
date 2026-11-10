@@ -14,7 +14,7 @@ find_package(PkgConfig REQUIRED)
 pkg_check_modules(SDL2 REQUIRED IMPORTED_TARGET sdl2)
 pkg_check_modules(EPOXY REQUIRED IMPORTED_TARGET epoxy)
 
-add_library(obf STATIC engine/rfa.cpp engine/vfs.cpp engine/dds.cpp engine/terrain.cpp)
+add_library(obf STATIC engine/rfa.cpp engine/vfs.cpp engine/dds.cpp engine/terrain.cpp engine/con.cpp engine/sm.cpp engine/scene.cpp engine/tm.cpp)
 target_include_directories(obf PUBLIC engine)
 
 add_executable(obf_mapview engine/mapview.cpp)
