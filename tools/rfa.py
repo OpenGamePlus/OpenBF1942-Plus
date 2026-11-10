@@ -107,6 +107,14 @@ def read_dir(data):
     return bool(compressed), entries
 
 
+def read_index(f):
+    """Directory of an open archive without reading file data; offsets stay absolute."""
+    f.seek(0)
+    dir_off, compressed = struct.unpack("<II", f.read(8))
+    f.seek(dir_off)
+    return read_dir(struct.pack("<II", 8, compressed) + f.read())  # re-point header at the tail
+
+
 def read_file(data, compressed, size, off):
     if not compressed:
         out = data[off:off + size]

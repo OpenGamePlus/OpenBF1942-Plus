@@ -11,7 +11,7 @@ Reimplementación clean-room del motor Refractor 1 para que Battlefield 1942 fun
 | Paso | Estado |
 |---|---|
 | 1. Archivos (RFA) | hecho — listar/extraer, verificado con la instalación original completa |
-| 2. Scripts (`.con`) | en curso — lenguaje inventariado |
+| 2. Scripts (`.con`) | hecho — intérprete; cargan todos los mapas de los tres mods |
 | 3–8 | sin empezar (ver [hoja de ruta](#hoja-de-ruta)) |
 
 ## Herramientas
@@ -21,6 +21,7 @@ Python 3, solo librería estándar.
 ```
 python3 tools/rfa.py list    "<BF1942_DIR>/Mods/bf1942/Archives/ai.rfa"
 python3 tools/rfa.py extract "<BF1942_DIR>/Mods/bf1942/Archives/ai.rfa" out/
+python3 tools/con.py "<BF1942_DIR>" bf1942 Wake    # cargar un mapa, ver resumen
 python3 -m unittest discover tools     # tests
 python3 tools/check_docs.py            # chequeo de documentación
 ```

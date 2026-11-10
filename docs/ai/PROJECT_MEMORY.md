@@ -2,6 +2,12 @@
 
 Append-only. Newest first. At most 3 bullets per stage.
 
+## 2026-11-09 — CON interpreter
+
+- `tools/con.py`: VFS over the mod stack + interpreter with an active-object model; all 78 levels load and every placed object resolves to a template.
+- Path rule settled from data: script folder, then level folder, then mod root; a test caught `->` targets being substituted.
+- Open: the level load sequence and object file order are assumed; no game logic, the props are only recorded.
+
 ## 2026-11-09 — documentation system
 
 - Added AI memory layer, ADRs, format specs and `tools/check_docs.py`; English docs, README also in Spanish.

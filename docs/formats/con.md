@@ -1,6 +1,6 @@
 # CON script language
 
-Status: **survey only** — inventory of all `.con`/`.inc` files in the retail archives; no interpreter yet.
+Status: **interpreter working** — `tools/con.py` loads all 78 levels of bf1942, XPack1 and XPack2; every placed object resolves to a defined template.
 
 `.con` scripts drive the engine: object templates, map object placement, game rules, renderer settings. One command per line.
 
@@ -30,15 +30,32 @@ Most used subsystems (line counts): `Object` 152k, `ObjectTemplate` 144k, `Mater
 | `v_arg1..N` | arguments of the current `run`/`include` |
 | `if v == X` / `else` / `endIf` | conditional |
 | `echo` | prints; used as `echo v_arg1 -> v_name` |
+| `cmd ... -> v_x` | stores the command result in `v_x`; the target is a name, never substituted |
 
 ## Tolerance
 
 Retail data contains junk lines (`***`, `-`, typos like `wrem`, `srem`, a UTF-16 BOM). The interpreter must ignore unknown lines without aborting.
 
-## Entry points (partial)
+## Path resolution (verified)
 
-- `Mods/<mod>/init.con` — mod identity, music, mod paths (loose file, not in an archive).
-- `bf1942/game/Startup.con`, `bf1942/game/Init.con` — game start (in `Game.rfa`).
-- `bf1942/levels/<Map>/Init.con` — level; runs `Init/Terrain`, `Init/SkyAndSun`, game-mode folders (`Conquest/`, `Ctf/`, `SinglePlayer/`).
+`run`/`include` targets are case-insensitive, `\` or `/`, `..` allowed. Tried in order, first hit wins:
 
-Open: relative `run` paths resolve against the script folder or the mod root — both forms appear, not yet verified.
+1. folder of the running script
+2. folder of the current level (`bf1942/levels/<Map>/`), used by `GameTypes/*.con`
+3. mod root
+
+Checked on every `run`/`include` in the three mods; the remaining misses are files absent from retail data (optional `*Mod.inc` hooks, typos, Coral Sea control points).
+
+## Mods
+
+`Mods/<mod>/init.con` (loose file) lists `game.addModPath` entries; the first has the highest priority (XPack1: `Mods/XPack1/`, then `Mods/BF1942/`).
+
+## What the engine loads by itself
+
+No script runs these; `tools/con.py` reproduces them:
+
+| Step | Scripts | Verified |
+|---|---|---|
+| Game | `bf1942/game/Init.con` | yes |
+| Object templates | every `objects/**/` folder: `Geometries.con`, `Network.con`, `Physics.con`, `Weapons.con`, `Effects.con`, `Objects.con` | folders yes, order assumed |
+| Level | `<Map>/Init.con`, `<Map>/StaticObjects.con`, game mode (`GameTypes/<mode>.con`, else `<mode>.con`) with arg `host` | sequence assumed |

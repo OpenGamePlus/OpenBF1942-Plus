@@ -11,7 +11,7 @@ Clean-room reimplementation of the Refractor 1 engine so Battlefield 1942 runs o
 | Step | State |
 |---|---|
 | 1. Archives (RFA) | done — list/extract, verified on the full retail install |
-| 2. Scripts (`.con`) | in progress — language surveyed |
+| 2. Scripts (`.con`) | done — interpreter; every level of the three mods loads |
 | 3–8 | not started (see [roadmap](#roadmap)) |
 
 ## Tools
@@ -21,6 +21,7 @@ Python 3, standard library only.
 ```
 python3 tools/rfa.py list    "<BF1942_DIR>/Mods/bf1942/Archives/ai.rfa"
 python3 tools/rfa.py extract "<BF1942_DIR>/Mods/bf1942/Archives/ai.rfa" out/
+python3 tools/con.py "<BF1942_DIR>" bf1942 Wake    # load a level, print summary
 python3 -m unittest discover tools     # tests
 python3 tools/check_docs.py            # documentation checks
 ```
