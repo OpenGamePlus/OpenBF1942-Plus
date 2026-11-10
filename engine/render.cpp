@@ -84,7 +84,9 @@ void main() {
     vec4 base;
     if (mode >= 2) {
         base = texture(tex, tuv);
-        if (base.a < 0.5) discard;  // fences, foliage
+        // Fences, wire, foliage: cut-out by the full-size texture's alpha. Mipmapped alpha averages thin wire with the
+        // clear background and dropped barbed wire under the threshold beyond ~10 m.
+        if (textureLod(tex, tuv, 0.0).a < 0.5) discard;
     } else {
         vec2 uv = clamp(wpos.xz / world, 0.0, 0.9999) * float(ntiles);
         ivec2 t = ivec2(floor(uv));
