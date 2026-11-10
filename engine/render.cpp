@@ -271,6 +271,7 @@ std::unique_ptr<GpuMesh> upload_tm(const TmMesh& m, Textures& tex) {
 struct State {
     std::string baf;
     float speed = 1;
+    std::string baf1p;  // the state's second animation: first person
 };
 
 }  // namespace
@@ -297,11 +298,13 @@ struct Renderer::Impl {
     const Vfs& vfs;
 
     Impl(const Vfs& vfs, Con& con, const Heightmap& hm, const TerrainInfo& info, const std::vector<DrawItem>& scene, bool objects);
-    std::shared_ptr<Animation> state_anim(const std::string& name) {
+    std::shared_ptr<Animation> state_anim(const std::string& name, bool first_person = false) {
         auto st = states.find(name);
-        if (st == states.end() || !vfs.has(st->second.baf)) return nullptr;
-        auto& an = anims[st->second.baf];
-        if (!an) an = std::make_shared<Animation>(baf_parse(vfs.read(st->second.baf)));
+        if (st == states.end()) return nullptr;
+        const std::string& baf = first_person && !st->second.baf1p.empty() ? st->second.baf1p : st->second.baf;
+        if (!vfs.has(baf)) return nullptr;
+        auto& an = anims[baf];
+        if (!an) an = std::make_shared<Animation>(baf_parse(vfs.read(baf)));
         return an;
     }
     void draw(const std::vector<DrawItem>& scene, const Camera& cam, int W, int H, float seconds, bool show_collision,
@@ -424,12 +427,14 @@ Renderer::Impl::Impl(const Vfs& vfs_, Con& con, const Heightmap& hm, const Terra
                 State st = states[cur];
                 std::string baf = swap(st.baf, from, lower(args.size() >= 3 ? args[2] : args[0]));
                 if (vfs.has(baf)) st.baf = baf;
+                std::string baf1p = swap(st.baf1p, from, lower(args.size() >= 5 ? args[4] : args[0]));
+                if (vfs.has(baf1p)) st.baf1p = baf1p;
                 if (name != cur && !states.count(name)) states[name] = st;
             }
-            if (method == "addanimation" && !args.empty() && !cur.empty() && !states.count(cur))
-                {
+            if (method == "addanimation" && !args.empty() && !cur.empty()) {
                 float sp = args.size() > 1 ? static_cast<float>(std::atof(args[1].c_str())) : 1.0f;
-                states[cur] = {Vfs::key(args[0]), std::isfinite(sp) ? sp : 1.0f};
+                if (!states.count(cur)) states[cur] = {Vfs::key(args[0]), std::isfinite(sp) ? sp : 1.0f, ""};
+                else if (states[cur].baf1p.empty()) states[cur].baf1p = Vfs::key(args[0]);
             }
         }
     }
@@ -569,8 +574,8 @@ void Renderer::Impl::draw(const std::vector<DrawItem>& scene, const Camera& cam,
                 Animated& a = animated[static_cast<size_t>(anim_of_item[i])];
                 if (a.anims0.empty()) continue;
                 a.anims = a.anims0, a.hold = sv.hold;
-                if (auto an = sv.lower.empty() ? nullptr : state_anim(sv.lower)) a.anims[0] = an;
-                if (auto an = sv.upper.empty() || a.anims.size() < 2 ? nullptr : state_anim(sv.upper)) a.anims[1] = an;
+                if (auto an = sv.lower.empty() ? nullptr : state_anim(sv.lower, sv.first_person)) a.anims[0] = an;
+                if (auto an = sv.upper.empty() || a.anims.size() < 2 ? nullptr : state_anim(sv.upper, sv.first_person)) a.anims[1] = an;
             }
         // Skinning on the CPU; 25 frames per second times the state speed.
         // shortcut: the .baf frame rate is a guess; --shot renders at t = 1 s so captures are repeatable.
@@ -627,14 +632,22 @@ void Renderer::Impl::draw(const std::vector<DrawItem>& scene, const Camera& cam,
             }
         }
 
-        glUniform1i(u_mode, 2);
-        for (size_t i = 0; i < scene.size(); ++i) {
+        // First-person arms and their weapon: drawn last, over everything, with their own field of view.
+        std::vector<char> overlay(scene.size(), 0);
+        float fov1p = 0;
+        for (const SoldierView& sv : soldiers) {
+            if (!sv.first_person) continue;
+            fov1p = sv.fov > 0 ? sv.fov : 1.0f;
+            for (size_t i = sv.first; i < sv.first + sv.parts && i < scene.size(); ++i) overlay[i] = 1;
+            for (size_t i = sv.held_first; i < sv.held_first + sv.held_parts && i < scene.size(); ++i) overlay[i] = 1;
+        }
+        auto draw_item = [&](size_t i) {
             const DrawItem& item = scene[i];
             auto hw = held.find(i);
             const Mat4& at = hw != held.end() ? hw->second : item.world;
             float dx = at.m[12] - cam.x, dz = at.m[14] - cam.z;
-            if (dx * dx + dz * dz > 1500.f * 1500.f) continue;  // shortcut: plain distance cull, no LOD
-            if (!item_mesh[i] || !item_mesh[i]->vao) continue;
+            if (dx * dx + dz * dz > 1500.f * 1500.f) return;  // shortcut: plain distance cull, no LOD
+            if (!item_mesh[i] || !item_mesh[i]->vao) return;
             const GpuMesh& g = *item_mesh[i];
             glUniform1i(u_mode, item.skin.empty() ? 2 : 3);
             glUniform1i(u_sprite, item.mesh.size() > 3 && item.mesh.compare(item.mesh.size() - 3, 3, ".tm") == 0);
@@ -660,7 +673,10 @@ void Renderer::Impl::draw(const std::vector<DrawItem>& scene, const Camera& cam,
                 glDrawElements(GL_LINES, g.col_count, GL_UNSIGNED_INT, nullptr);
                 glEnable(GL_DEPTH_TEST);
             }
-        }
+        };
+        glUniform1i(u_mode, 2);
+        for (size_t i = 0; i < scene.size(); ++i)
+            if (!overlay[i]) draw_item(i);
 
         glUniformMatrix4fv(u_model, 1, GL_FALSE, identity.m);
         glBindVertexArray(vao);
@@ -681,6 +697,14 @@ void Renderer::Impl::draw(const std::vector<DrawItem>& scene, const Camera& cam,
                 glUniform1i(u_mode, 5);
                 glDrawArrays(GL_LINES, 0, static_cast<GLsizei>(lines.size() / 10));
             }
+        }
+        if (fov1p > 0) {  // the 1p rig sits 0.2-0.5 m from the eye: a near plane of 5 cm, depth cleared
+            glClear(GL_DEPTH_BUFFER_BIT);
+            Mat4 vp1 = perspective(fov1p, static_cast<float>(W) / static_cast<float>(H), 0.05f, 50.0f) * view(cam.x, cam.y, cam.z, cam.yaw, cam.pitch);
+            glUniformMatrix4fv(u_vp, 1, GL_FALSE, vp1.m);
+            for (size_t i = 0; i < scene.size(); ++i)
+                if (overlay[i]) draw_item(i);
+            glUniformMatrix4fv(u_vp, 1, GL_FALSE, vp.m);
         }
 }
 

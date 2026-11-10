@@ -15,6 +15,7 @@ namespace {
 
 // Third-person view only: the engine swaps these parts by camera and state at runtime.
 bool hide_1p(const std::string& t) { return t == "parachute" || t.rfind("1p", 0) == 0 || t.find("1pbody") != std::string::npos; }
+bool hide_3p(const std::string& t) { return t == "parachute" || !(t.rfind("1p", 0) == 0 || t.find("1pbody") != std::string::npos); }
 
 }  // namespace
 
@@ -75,6 +76,10 @@ Game::Game(const Vfs& vfs_, Con& con_, const Heightmap& hm_, const TerrainInfo& 
             ++sol_parts;
             scene.push_back(std::move(item));
         }
+        fp_first = scene.size();
+        for (DrawItem& item : build_object(con, vfs, soldier_tmpl, translate(0, -10000, 0), skipped, nullptr, hide_3p))
+            ++fp_parts, scene.push_back(std::move(item));
+        first_person = !opt.shot && fp_parts > 0;  // live play starts in first person, as the original
         chute_first = scene.size();
         for (DrawItem& item : build_object(con, vfs, "Parachute", translate(0, -10000, 0), skipped)) ++chute_parts, scene.push_back(std::move(item));
         if (const ConObject* st = object_template(soldier_tmpl)) {
@@ -82,6 +87,8 @@ Game::Game(const Vfs& vfs_, Con& con_, const Heightmap& hm_, const TerrainInfo& 
             for (auto& [k, a] : st->props)
                 if (k == "setparachutedrag" && !a.empty()) drag = static_cast<float>(std::atof(a[0].c_str()));
                 else if (k == "mass" && !a.empty()) mass = std::max(1.0f, static_cast<float>(std::atof(a[0].c_str())));
+                else if (k == "center1phands" && !a.empty()) parse_vec3(a[0], hands);
+                else if (k == "set1pfov" && !a.empty()) fov1p = static_cast<float>(std::atof(a[0].c_str()));
             chute_k = std::isfinite(drag) ? std::max(0.0f, drag) / mass : 0.0f;
         }
         std::printf("play %s (team %d, kit %s): %zu parts\n", soldier_tmpl.c_str(), team,
@@ -760,6 +767,7 @@ void Game::step(float t, float dt, const GameInput& in) {
     if (player >= 0) {
         if (in.select >= 0 && cur < 0) select(static_cast<size_t>(in.select));
         if (in.prone) lying = !lying;
+        if (in.view && fp_parts) first_person = !first_person;
         // Space while falling opens the parachute (shortcut: the original's key and opening rules unread).
         if (in.jump && cur < 0 && !player_dead && !phys.character_on_ground(player) && chute_k > 0) phys.open_parachute(player, chute_k);
         if (float d = fall_damage(player, hitpoints(soldier_tmpl)); d > 0 && !player_dead) {
@@ -906,8 +914,9 @@ void Game::pose() {
     if (player >= 0) {
         float p[3];
         phys.character_position(player, p);
-        // The soldier faces the camera direction; hidden far below while in a vehicle.
-        Mat4 w = cur >= 0 ? translate(0, -10000, 0) : translate(p[0], p[1], p[2]) * rotation_ypr(cam.yaw * 57.29578f, 0, 0);
+        // The soldier faces the camera direction; hidden far below while in a vehicle or seen in first person.
+        bool fp = first_person && cur < 0;
+        Mat4 w = cur >= 0 || fp ? translate(0, -10000, 0) : translate(p[0], p[1], p[2]) * rotation_ypr(cam.yaw * 57.29578f, 0, 0);
         std::vector<DrawItem> parts = build_object(con, vfs, soldier_tmpl, w, skipped, nullptr, hide_1p);
         for (size_t i = 0; i < parts.size() && i < sol_parts; ++i) scene[sol_first + i].world = parts[i].world;
         if (phys.character_on_ground(player) || cur >= 0) {  // in the air: keep the last state
@@ -925,7 +934,19 @@ void Game::pose() {
                           : std::fabs(move_f) > 0.1f || std::fabs(move_r) > 0.1f ? "ub_runforward" + held : "ub_standaim" + held;
         SoldierView me{sol_first, sol_parts, lower_state, held.empty() ? "" : upper, -1};
         if (cur < 0 && slot < loadout_items.size()) me.held_first = loadout_items[slot].first, me.held_parts = loadout_items[slot].second;
-        soldiers.push_back(me);
+        // First person: the 1p arms and body hang from the camera at the eye (center1pHands), with the states'
+        // first-person animations; the held weapon follows their right hand.
+        Mat4 eye = translate(p[0], p[1] + eye_height(), p[2]) * rotation_ypr(cam.yaw * 57.29578f, -cam.pitch * 57.29578f, 0);
+        Mat4 rig = fp ? eye * translate(hands[0], hands[1], hands[2]) : translate(0, -10000, 0);
+        std::vector<DrawItem> fparts = build_object(con, vfs, soldier_tmpl, rig, skipped, nullptr, hide_3p);
+        for (size_t i = 0; i < fparts.size() && i < fp_parts; ++i) scene[fp_first + i].world = fparts[i].world;
+        if (fp) {
+            SoldierView mine = me;
+            mine.first = fp_first, mine.parts = fp_parts, mine.first_person = true, mine.fov = fov1p;
+            soldiers.push_back(mine);
+        } else {
+            soldiers.push_back(me);
+        }
         if (chute_parts) {
             bool open = cur < 0 && phys.parachute_open(player);
             // The model's origin is its harness: at the shoulders (1.3 m, fitted by eye on a screenshot).
@@ -933,7 +954,9 @@ void Game::pose() {
             std::vector<DrawItem> cp = build_object(con, vfs, "Parachute", cw, skipped);
             for (size_t i = 0; i < cp.size() && i < chute_parts; ++i) scene[chute_first + i].world = cp[i].world;
         }
-        if (cur < 0) {  // third-person camera over the shoulder
+        if (fp) {
+            cam.x = eye.m[12], cam.y = eye.m[13], cam.z = eye.m[14];
+        } else if (cur < 0) {  // third-person camera over the shoulder
             float dx = std::sin(cam.yaw) * std::cos(cam.pitch), dy = std::sin(cam.pitch), dz = std::cos(cam.yaw) * std::cos(cam.pitch);
             cam.x = p[0] - dx * 4.5f, cam.y = p[1] + eye_height() + 0.2f - dy * 4.5f, cam.z = p[2] - dz * 4.5f;
         }

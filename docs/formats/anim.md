@@ -68,3 +68,10 @@ We draw each part at:
 Without the 180° turn the barrel points back through the body and the left hand sits on the barrel axis behind the grip. With it, the left hand is on the forestock (M1 Garand: butt 0.29 m behind the grip, left hand 0.27 m ahead, muzzle 0.82 m ahead). The turn is fitted, not explained.
 
 Upper-body states are per weapon: `copyState2 <new> <from> [<3p> <speed> <1p> <speed>]` copies the state just created, replacing `<from>` in its name and animation paths (e.g. `Ub_StandAimThompson` → `Ub_StandAimBar1918`, with the `bar1918` animations when they exist). There are 1,217 calls.
+
+## First person
+
+- **Parts drawn:** the soldier template's `1p*` children (hands) and `*1PBody` (sleeves). The third-person body is hidden.
+- **Animations:** each state's second `addAnimation` is its first-person one (`1PStandAimThompson.baf`). `copyState2`'s fifth argument names the weapon used for it.
+- **Placement:** the rig hangs from the camera at the eye, offset by the soldier's `center1pHands` (−0.12/−1.56/0.1). It is posed as usual, so the weapon in its right hand points straight ahead (checked: gun axis (0, 0.05, 1)).
+- **Drawing:** the rig and weapon are drawn after the scene, over a cleared depth buffer, with a 5 cm near plane. The field of view is `set1pFov` (0.47), read as vertical radians; that reading is unverified.

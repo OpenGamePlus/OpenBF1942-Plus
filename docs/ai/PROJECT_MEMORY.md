@@ -2,6 +2,11 @@
 
 Append-only. Newest first. At most 3 bullets per stage.
 
+## 2026-11-10 — first person (roadmap B2)
+
+- Live play starts in first person (V toggles). It uses the original 1p arms and the states' second (1p) animation, hung from the camera by `center1pHands`, and drawn in a last pass with `set1pFov`.
+- Open: fire, reload and switch animations; the 0.47 field-of-view reading.
+
 ## 2026-11-10 — animation fix and held weapons (roadmap B2)
 
 - `.baf` quaternions are now read conjugated, and biped roots get a quarter turn from Max space instead of being dropped. Soldiers no longer lean back about 28°; legs, height and knees check out. Rejected: our own two-hand barrel rule, which hid the real error.

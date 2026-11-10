@@ -40,6 +40,7 @@ struct GameInput {
     bool detonate = false;  // explosive packs placed by the player
     bool crouch = false;    // held
     bool prone = false;     // pressed this frame: lie down / get up
+    bool view = false;      // pressed this frame: first / third person
 };
 
 // The lower / upper body animation states a soldier's skinned parts should play; empty: as loaded.
@@ -49,6 +50,8 @@ struct SoldierView {
     std::string lower, upper;
     float hold = -1;
     size_t held_first = 0, held_parts = 0;  // the weapon in its right hand (items with a bone); the renderer places them
+    bool first_person = false;               // play the states' first-person animations
+    float fov = 0;                           // first person: field of view of the arms (set1pFov), radians
 };
 
 // Rounds in the weapon and spare magazines. numOfMag read as all magazines, the loaded one included (unverified).
@@ -202,6 +205,10 @@ private:
     bool fire_held = false;  // trigger held last step (fireOnce weapons)
     int posture = 0;         // the player's: 0 stand, 1 crouch, 2 prone
     size_t chute_first = 0, chute_parts = 0;  // the parachute's draw items (far below while closed)
+    size_t fp_first = 0, fp_parts = 0;        // first-person arms and body (far below in third person)
+    bool first_person = false;
+    float hands[3] = {-0.12f, -1.56f, 0.1f};  // center1pHands: the 1p rig's origin from the camera
+    float fov1p = 0;                            // set1pFov (0.47): the arms' field of view
     float chute_k = 0;                         // setParachuteDrag / mass of the player's soldier
     float fall_damage(int character, float full);  // hit points lost on the last landing
     bool lying = false;      // prone toggled on
