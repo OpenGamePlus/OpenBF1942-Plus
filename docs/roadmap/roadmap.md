@@ -10,7 +10,7 @@ Goal: a modern engine that plays Battlefield 1942 from the user's retail install
 | 5 Skinned meshes, animation | done except tracks and hand IK (`AnimatedBundle`) |
 | 6 Physics, vehicles | cars, tanks, aircraft, boats, moving parts; handling uncalibrated |
 | 7 Gameplay | soldier, kits, weapons, retail damage tables, conquest against bots |
-| 8 Networking | not started |
+| 8 Networking | research started: [network.md](../formats/network.md) |
 
 ## Order and why
 

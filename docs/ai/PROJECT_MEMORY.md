@@ -2,6 +2,12 @@
 
 Append-only. Newest first. At most 3 bullets per stage.
 
+## 2026-11-10 — first network session attempt (E0)
+
+- Ran the original server and client on the maintainer's machine (allowed, maintainer remote): Berlin loads, but no packets captured — the client discovers LAN servers and connects to the reported address, bypassing a relay on `+joinServer`'s address.
+- The server reads only `Mods/<mod>/Settings/ServerSettings.con`; its port was changed for seconds and restored byte-identical (sha1 checked). No other install file touched.
+- Next: relay that also answers the LAN query and rewrites the port, or one elevated capture with the maintainer present.
+
 ## 2026-11-10 — roadmap
 
 - Maintainer goal: play with original BF1942 clients and servers (ADR 0005); all phases in scope, order delegated to the agent.
