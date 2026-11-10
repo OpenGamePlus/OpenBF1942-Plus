@@ -14,6 +14,15 @@ void parse_vec3(const std::string& s, float out[3]) {
 
 namespace {
 
+// Context inherited down a template tree (outside Builder: its default member initialisers are needed for a
+// default argument inside Builder).
+struct Anim {
+    std::string skeleton;
+    std::vector<std::string> states;
+    std::string root_pos;  // "x-y-z" of the placed instance, truncated: object lightmap names
+    bool spawned = false;  // below an ObjectSpawner
+};
+
 struct Builder {
     const Con& con;
     const Vfs& vfs;
@@ -28,12 +37,6 @@ struct Builder {
         auto t = s->second.find(lower(name));
         return t == s->second.end() ? nullptr : &t->second;
     }
-
-    struct Anim {
-        std::string skeleton;
-        std::vector<std::string> states;
-        std::string root_pos;  // "x-y-z" of the placed instance, truncated: object lightmap names
-    };
 
     void geometry(const std::string& name, const Mat4& world, const Anim& anim, const std::string& owner) {
         const ConObject* g = find("geometrytemplate", name);
@@ -54,7 +57,7 @@ struct Builder {
                 if (type == "animatedmesh" && (!vfs.has(skin) || !vfs.has(anim.skeleton))) skin.clear();
                 std::string lm = con.level_dir + "/objectlightmaps/" + file + "_" + anim.root_pos + ".tga";
                 if (type != "standardmesh" || anim.root_pos.empty() || !vfs.has(lm)) lm.clear();
-                return void(out.push_back({p, world, type == "animatedmesh" ? skin : "", anim.skeleton, anim.states, lm, owner}));
+                return void(out.push_back({p, world, type == "animatedmesh" ? skin : "", anim.skeleton, anim.states, lm, owner, anim.spawned}));
             }
         ++skipped["missing mesh file"];
     }
@@ -71,7 +74,9 @@ struct Builder {
             for (auto& [k, a] : t->props)
                 if (k == "setobjecttemplate" && a.size() >= 2 && (pick.empty() || std::atoi(a[0].c_str()) == team)) pick = a[1];
             if (pick.empty()) return void(++skipped["empty spawner"]);
-            return object(pick, world, depth + 1);
+            Anim spawned;
+            spawned.spawned = true;
+            return object(pick, world, depth + 1, 0, spawned);
         }
         for (auto& [k, a] : t->props) {
             if (k == "createskeleton" && !a.empty()) anim.skeleton = Vfs::key(a[0]);
@@ -121,7 +126,7 @@ std::vector<DrawItem> build_scene(const Con& con, const Vfs& vfs, std::map<std::
             else if (k == "geometry.scale") parse_vec3(a[0], scl);
         }
         // Verified on Wake: all 67 lightmap names use the instance position truncated to integers.
-        Builder::Anim anim;
+        Anim anim;
         anim.root_pos = std::to_string(static_cast<long>(pos[0])) + "-" + std::to_string(static_cast<long>(pos[1])) + "-" +
                         std::to_string(static_cast<long>(pos[2]));
         b.object(inst.name, translate(pos[0], pos[1], pos[2]) * rotation_ypr(rot[0], rot[1], rot[2]) * scale(scl[0], scl[1], scl[2]), 0, team, anim);

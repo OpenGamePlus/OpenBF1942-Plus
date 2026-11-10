@@ -57,9 +57,28 @@ All physical parts carry `hasMobilePhysics`, `hasCollisionPhysics`, `hasResponse
 
 All 122 / 142 / 172 `PlayerControlObject`s of bf1942 / XPack1 / XPack2 build and simulate without error, except passenger seats and `Destroyable_Bridge`, which have no geometry of their own. On flat ground every `setVehicleCategory VCLand` vehicle with wheels (7 cars, 13 tracked; Sherman and others declare their category elsewhere and were checked separately) settles upright and drives; the M3A1 half-track and the Sexton still touch the ground with their hull and accelerate at about two thirds of the others.
 
+## Aircraft (implemented, unverified)
+
+An aircraft is a `PlayerControlObject` whose `Engine` is `c_ETPlane`, plus `Wing` children: main wings with `setRegulateToLift`, ailerons (`setInputToPitch c_PIRoll`), elevators (`c_PIPitch`), a rudder and a fuselage side wing (both rolled −90°, so their normal is sideways). Example values (Mustang): main wings `setFlapLift 3`, `setRegulateToLift 4.91`, `setPositionOffset` = minus their position; ailerons `setWingLift 2.5`, `setFlapLift 2`, ±30° at 120 °/s.
+
+| Part | Reading |
+|---|---|
+| `Wing` | force along the wing normal at position + `setPositionOffset` (vehicle axes; for main wings this is the model origin). Per wing, as acceleration × mass: −0.01 · `setWingLift` · v_n · \|v\| (angle-of-attack lift and damping, capped so it cannot overshoot in one step) − 0.001 · `setFlapLift` · deflection · v_f² (control). Constants are placeholders |
+| Normal | wing local y with its forward part removed: sweep + dihedral tilt it ~0.5° back, which as built-in incidence made a hands-off Mustang loop slowly |
+| Deflection | input × sign of `setAcceleration` (pitch component), moving at `setMaxSpeed` / range. A positive pitch rotation raises the trailing edge (Direct3D convention), so it pushes down. Result: `c_PIRoll` +1 rolls right, `c_PIYaw` +1 turns right (as cars), `c_PIPitch` +1 lowers the nose (stick forward) |
+| `setRegulateToLift` | every retail regulated wing (27) says 4.91 = g/2. Read per wing, the Il-2 (one such wing) would get 0.5 g and the SBD (three) 1.5 g, so the regulated wings are taken to hold 1 g together, scaled by (v_f / 30 m/s)² below 30 m/s: aircraft fly level hands-off and climb by pointing the nose |
+| `Engine` `c_ETPlane` | thrust along the body axis at the centre of mass: Σ `setTorque` / 4 m/s². Fighters have 15 × 5 (torque × differential), twins 2 × ~7.5 × ~2.1, the B-17 4 × 2.6 × 1.9: summed torque matches the fighters' (B-17 lower), the product does not. Wheels are not driven |
+| Centre of mass | at the model origin, where the main wings' lift acts |
+| `LandingGear` | its springs are wheels as on cars; no retraction |
+
+Check against retail data: parked fighters are placed with pitch −11° to −14° (nose up); the Mustang rests at 14.4° on its springs alone.
+
+Take-off sweep on flat ground (full throttle, pull up from 32 m/s): all single-engine aircraft, the Mosquito, Bf 110, B-17, Ho 229 and AW52 take off and climb. The C-47 has no regulated wing and does not lift off; the XPack2 jet and rocket aircraft (Goblin `setTorque` 100, Natter 500) are far too fast under this reading; the Wasserfall and the jetpack are not aircraft in this sense.
+
 ## Open questions
 
 - Units of `setTorque`, `setDifferential`, `drag`, the 55000 engine speed; gear changes (`setGearUp/Down`).
 - `c_PGFRollGrip` vs `c_PGFEngineGrip`, combined with `materialFriction`.
-- Aircraft (`Wing`, `LandingGear`), boats (`FloatingBundle`): not modelled.
+- Wings: `setPitchOffset`, `setWingToRegulatorRatio`, `rememberExcessInput`, `setNoPropellerEffectAtSpeed`, `inertiaModifier`; jets and rockets; landing gear retraction.
+- Boats (`FloatingBundle`): not modelled.
 - Track and wheel animation, turret and gun rotation (`RotationalBundle` on mouse input).

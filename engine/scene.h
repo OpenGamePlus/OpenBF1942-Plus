@@ -18,6 +18,7 @@ struct DrawItem {
     std::vector<std::string> states;  // by setAnimationState index (soldiers: 0 lower body, 1 upper body)
     std::string lightmap;  // static .sm only: <level>/objectlightmaps/<file>_<x>-<y>-<z>.tga, if present
     std::string owner;     // lower-case name of the object template that holds the geometry
+    bool spawned = false;  // placed by an ObjectSpawner (a vehicle), not part of the static level
 };
 
 // skipped counts what could not be drawn, by reason ("treemesh", "missing template", ...).

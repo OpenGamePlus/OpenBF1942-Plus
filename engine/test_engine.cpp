@@ -274,6 +274,37 @@ int main() {
         float heading = std::atan2(t.m[8], t.m[10]) * 57.29578f;  // +z forward, positive = turned right
         assert(heading > 45 && heading < 75 && std::fabs(t.m[12] - 30) < 0.5f && std::fabs(t.m[14] - 90) < 0.5f);
     }
+    // Aircraft: regulated main wings hold 1 g at speed; controls move the nose the documented way.
+    {
+        Heightmap hm;
+        hm.n = 32, hm.y_scale = 1, hm.h.assign(32 * 32, 0);
+        VehicleDef plane;
+        plane.mass = 2500, plane.drag = 0.07f, plane.plane = true, plane.thrust = 3.75f;
+        for (int i = 0; i < 8; ++i) plane.hull.insert(plane.hull.end(), {i & 1 ? 5.0f : -5.0f, i & 2 ? 0.6f : -0.6f, i & 4 ? 4.0f : -5.0f});
+        auto wing = [&](float x, float y, float z, float nx, float lift, float flap, float reg, int input, float sign) {
+            WingDef w;
+            w.pos[0] = x, w.pos[1] = y, w.pos[2] = z, w.normal[0] = nx, w.normal[1] = nx != 0 ? 0.0f : 1.0f;
+            w.lift = lift, w.flap = flap, w.regulate = reg, w.input = input, w.sign = sign;
+            plane.wings.push_back(w);
+        };
+        wing(0, 0, 0, 0, 0, 3, 4.91f, 0, 1), wing(0, 0, 0, 0, 0, 3, 4.91f, 0, 1);    // main wings, lift at the centre
+        wing(-4, 0, 0.3f, 0, 2.5f, 2, 0, 2, -1), wing(4, 0, 0.3f, 0, 2.5f, 2, 0, 2, 1);  // ailerons
+        wing(-1, 0.9f, -4, 0, 0.5f, 0.5f, 0, 1, -1), wing(1, 0.9f, -4, 0, 0.5f, 0.5f, 0, 1, -1);  // elevators
+        wing(0, 1.3f, -4.7f, 1, 1.5f, 1.5f, 0, 3, 1);  // rudder (vertical: normal +x)
+        auto fly = [&](float yaw, float pitch, float roll) {
+            Physics phys(hm, 4096);
+            int v = phys.add_vehicle(plane, translate(2048, 500, 500));
+            phys.set_velocity(v, 0, 0, 60);
+            phys.drive(v, 0.7f, yaw, pitch, roll);
+            for (int i = 0; i < 30; ++i) phys.step(1.0f / 60);
+            return phys.transform(v);
+        };
+        Mat4 level = fly(0, 0, 0);
+        assert(std::fabs(level.m[13] - 500) < 1 && std::fabs(level.m[9]) < 0.02f);  // altitude and pitch held
+        assert(fly(0, -1, 0).m[9] > 0.1f);   // pitch -1: nose (z axis) up
+        assert(fly(0, 0, 1).m[1] < -0.1f);   // roll +1: right wing (x axis) down
+        assert(fly(1, 0, 0).m[8] > 0.05f);   // yaw +1: nose towards +x
+    }
 
     std::puts("engine tests ok");
     return 0;

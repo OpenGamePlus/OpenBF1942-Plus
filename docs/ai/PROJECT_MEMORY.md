@@ -2,6 +2,12 @@
 
 Append-only. Newest first. At most 3 bullets per stage.
 
+## 2026-11-10 — aircraft
+
+- Wings push along their normals (angle-of-attack lift + control flap); regulated main wings hold 1 g; thrust = summed engine torque. Parked fighters' retail pitch (−11° to −14°) matches the Mustang's spring rest (14.4°): independent check of the spring reading.
+- Rejected readings: regulate 4.91 per wing (Il-2 half lift, SBD 1.5 g); thrust from torque × differential (twins and B-17 never take off). Found: a Spitfire driven from its spawn point started inside the parked static copy and was pushed under the terrain — spawner vehicles are no longer static bodies.
+- Open: C-47 (no regulator), XPack2 jets and rockets, gear retraction, calibration.
+
 ## 2026-11-10 — tracked vehicles
 
 - Maintainer confirmed the fidelity target: approximate first, calibrate later. Tanks drive: zero-strength rollers carry nothing, the engine's yaw input turns the hull on the spot, running gear is left out of the hull.

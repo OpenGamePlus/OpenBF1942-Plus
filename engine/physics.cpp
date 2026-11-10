@@ -77,12 +77,54 @@ struct Walker {
     std::set<std::string> gear;      // running gear: a moving bundle holding springs, and everything below it
     int visits = 0;
 
+    void wing(const ConObject& t, const Mat4& world) {
+        WingDef w;
+        float off[3] = {}, mn[3] = {}, mx[3] = {}, speed[3] = {}, acc[3] = {};
+        for (auto& [k, a] : t.props) {
+            if (a.empty()) continue;
+            if (k == "setwinglift") w.lift = num(a);
+            else if (k == "setflaplift") w.flap = num(a);
+            else if (k == "setregulatetolift") w.regulate = num(a);
+            else if (k == "setpositionoffset") parse_vec3(a[0], off);
+            else if (k == "setminrotation") parse_vec3(a[0], mn);
+            else if (k == "setmaxrotation") parse_vec3(a[0], mx);
+            else if (k == "setmaxspeed") parse_vec3(a[0], speed);
+            else if (k == "setacceleration") parse_vec3(a[0], acc);
+            else if (k == "setinputtopitch") {
+                std::string in = lower(a[0]);
+                w.input = in == "c_pipitch" ? 1 : in == "c_piroll" ? 2 : in == "c_piyaw" ? 3 : 0;
+            }
+        }
+        float range = std::max(std::fabs(mn[1]), std::fabs(mx[1]));
+        if (range > 0 && speed[1] > 0) w.rate = speed[1] / range;
+        if (acc[1] < 0) w.sign = -1;
+        xform(world, 0, 0, 0, w.pos);
+        for (int i = 0; i < 3; ++i) w.pos[i] += off[i];  // offset in vehicle axes: main wings use it to act at the centre
+        // Normal without its forward part: sweep + dihedral tilt it ~0.5 deg back, which would act as built-in incidence
+        // (excess lift ahead of the centre: a hands-off Mustang loops slowly).
+        float n[3] = {world.m[4], world.m[5], 0.0f}, l = std::sqrt(n[0] * n[0] + n[1] * n[1]);
+        if (std::isfinite(l) && l > 1e-6f)
+            for (int i = 0; i < 3; ++i) w.normal[i] = n[i] / l;
+        def.wings.push_back(w);
+    }
+
     void walk(const std::string& name, const Mat4& world, int depth, WheelDef ctx, bool in_gear = false) {
         const ConObject* t = find(con, name);
         if (!t || depth > 16 || ++visits > 10000) return;
         std::string type = lower(t->type);
-        if (type == "engine") ctx.driven = true;
         bool yaw_input = false;
+        for (auto& [k, a] : t->props)
+            if (type == "engine" && k == "setenginetype" && !a.empty() && lower(a[0]) == "c_etplane") def.plane = true;
+        if (type == "engine" && !def.plane) ctx.driven = true;  // aircraft wheels roll freely
+        if (type == "engine" && def.plane) {  // multi-engine aircraft: thrust adds up
+            float tq = 0;
+            for (auto& [k, a] : t->props)
+                if (!a.empty() && k == "settorque") tq = num(a);
+            // shortcut: thrust = sum of setTorque / 4 m/s^2, differential ignored. Single-engine fighters say 15 x 5,
+            // twins 2 x 7.5 x 2.1, the B-17 4 x 2.6 x 1.9: summed torque matches the fighters' (B-17 a bit lower), the product does not.
+            def.thrust += tq / 4.0f;
+        }
+        if (type == "wing") wing(*t, world);
         float max_yaw = 0, rate = 0;
         for (auto& [k, a] : t->props) {
             if (a.empty()) continue;
@@ -187,13 +229,14 @@ struct Physics::Impl {
     struct Vehicle {
         VehicleDef def;
         BodyID id;
-        float throttle = 0, steer = 0;
-        std::vector<float> wheel_steer;
+        float throttle = 0, steer = 0, pitch = 0, roll = 0;
+        std::vector<float> wheel_steer, deflection;
     };
     std::vector<Vehicle> vehicles;
     float acc = 0;
 
     void forces(Vehicle& v);
+    void wings(Vehicle& v, const RMat44& T, Vec3 lin, Vec3 ang, RVec3 com);
 };
 
 // Jolt's allocator hooks must exist before Impl's members (TempAllocator) are built.
@@ -257,8 +300,9 @@ size_t Physics::add_scene(const std::vector<DrawItem>& items, const Vfs& vfs) {
     size_t before = p_->sys.GetNumBodies();
     std::map<std::string, CollisionMesh> cache;
     for (const DrawItem& item : items) {
-        // shortcut: trees (.tm) and animated meshes get no collision; spawned vehicles are static obstacles.
-        if (!item.skin.empty() || item.mesh.size() < 3 || item.mesh.compare(item.mesh.size() - 3, 3, ".sm") != 0) continue;
+        // shortcut: trees (.tm), animated meshes and spawner vehicles get no collision (vehicles are not static;
+        // as static bodies a vehicle driven from its spawn point starts inside one and is pushed under the terrain).
+        if (item.spawned || !item.skin.empty() || item.mesh.size() < 3 || item.mesh.compare(item.mesh.size() - 3, 3, ".sm") != 0) continue;
         auto it = cache.find(item.mesh);
         if (it == cache.end()) {
             CollisionMesh c;
@@ -288,8 +332,11 @@ int Physics::add_vehicle(const VehicleDef& def, const Mat4& world) {
     int carrying = 0;
     for (auto& w : def.wheels)
         if (w.strength > 0) wy += w.pos[1], ++carrying;
-    if (carrying > 0) {
-        OffsetCenterOfMassShapeSettings off(Vec3(0, wy / static_cast<float>(carrying) - shape->GetCenterOfMass().GetY(), 0), shape);
+    // Aircraft: centre of mass at the model origin, where setPositionOffset puts the main wings' lift.
+    Vec3 com_off = def.plane ? -shape->GetCenterOfMass()
+                             : Vec3(0, carrying > 0 ? wy / static_cast<float>(carrying) - shape->GetCenterOfMass().GetY() : 0.0f, 0);
+    if (!com_off.IsNearZero()) {
+        OffsetCenterOfMassShapeSettings off(com_off, shape);
         auto r2 = off.Create();
         if (!r2.HasError()) shape = r2.Get();
     }
@@ -301,15 +348,22 @@ int Physics::add_vehicle(const VehicleDef& def, const Mat4& world) {
     bs.mLinearDamping = 0;  // drag is ours
     bs.mAngularDamping = 0.5f;
     bs.mAllowSleeping = false;
-    Impl::Vehicle v{def, p_->sys.GetBodyInterface().CreateAndAddBody(bs, EActivation::Activate), 0, 0, {}};
+    bs.mMotionQuality = EMotionQuality::LinearCast;  // fast, thin hulls (aircraft) must not tunnel through the terrain
+    Impl::Vehicle v{def, p_->sys.GetBodyInterface().CreateAndAddBody(bs, EActivation::Activate), 0, 0, 0, 0, {}, {}};
     v.wheel_steer.assign(def.wheels.size(), 0.0f);
+    v.deflection.assign(def.wings.size(), 0.0f);
     p_->vehicles.push_back(std::move(v));
     return static_cast<int>(p_->vehicles.size() - 1);
 }
 
-void Physics::drive(int vehicle, float throttle, float steer) {
+void Physics::drive(int vehicle, float throttle, float yaw, float pitch, float roll) {
     auto& v = p_->vehicles.at(static_cast<size_t>(vehicle));
-    v.throttle = std::clamp(throttle, -1.0f, 1.0f), v.steer = std::clamp(steer, -1.0f, 1.0f);
+    v.throttle = std::clamp(throttle, -1.0f, 1.0f), v.steer = std::clamp(yaw, -1.0f, 1.0f);
+    v.pitch = std::clamp(pitch, -1.0f, 1.0f), v.roll = std::clamp(roll, -1.0f, 1.0f);
+}
+
+void Physics::set_velocity(int vehicle, float x, float y, float z) {
+    p_->sys.GetBodyInterface().SetLinearVelocity(p_->vehicles.at(static_cast<size_t>(vehicle)).id, Vec3(x, y, z));
 }
 
 // Our Refractor parts. Units of the template values are unverified (docs/formats/vehicles.md):
@@ -318,15 +372,13 @@ void Physics::drive(int vehicle, float throttle, float steer) {
 void Physics::Impl::forces(Vehicle& v) {
     BodyInterface& bi = sys.GetBodyInterface();
     const VehicleDef& d = v.def;
-    if (d.wheels.empty()) return;
     RMat44 T = bi.GetWorldTransform(v.id);
     Vec3 up = T.GetAxisY(), lin = bi.GetLinearVelocity(v.id), ang = bi.GetAngularVelocity(v.id);
     RVec3 com = bi.GetCenterOfMassPosition(v.id);
     // Springs with strength 0 (tank "dummy" rollers) carry nothing; the weight is shared by the others.
     int carrying = static_cast<int>(std::count_if(d.wheels.begin(), d.wheels.end(), [](const WheelDef& w) { return w.strength > 0; }));
     int driven = static_cast<int>(std::count_if(d.wheels.begin(), d.wheels.end(), [](const WheelDef& w) { return w.strength > 0 && w.driven; }));
-    if (carrying == 0) return;
-    float mw = d.mass / static_cast<float>(carrying);
+    float mw = d.mass / static_cast<float>(std::max(carrying, 1));
     float yaw_rate = ang.Dot(up);
     int contacts = 0;
     // shortcut: drive and drag scales are placeholders (Willys: 3.7 m/s^2, ~70 km/h); calibrate against the original.
@@ -383,8 +435,50 @@ void Physics::Impl::forces(Vehicle& v) {
         float want = v.steer * d.turn_rate * 3.14159265f / 180.0f;
         bi.SetAngularVelocity(v.id, ang + up * (0.2f * (want - yaw_rate)));
     }
+    wings(v, T, lin, ang, com);
+    if (d.plane) bi.AddForce(v.id, T.GetAxisZ() * (std::max(0.0f, v.throttle) * d.thrust * d.mass));  // thrust at the centre
     float sp = lin.Length();
     bi.AddForce(v.id, -lin * (d.drag * d.mass * sp / 150.0f));
+}
+
+// Wings (unverified, docs/formats/vehicles.md): per wing, as acceleration x mass along the wing normal:
+//   -kLift * setWingLift * v_n * |v|           angle-of-attack lift and damping
+//   -kFlap * setFlapLift * deflection * v_f^2   control surface, deflection in [-1, 1] = input x sign(setAcceleration);
+//                                               a positive pitch rotation raises the trailing edge (D3D convention), so it pushes down.
+//   This gives c_PIRoll +1 = roll right, c_PIYaw +1 = nose right (as cars), c_PIPitch +1 = nose down (stick forward).
+//   +g / n_regulated * min(1, (v_f / kRegulateSpeed)^2)   self-levelling main wings. Every retail regulated wing says 4.91
+//      (g / 2), but the Il-2 has one such wing and the SBD three; reading it per wing gives them 0.5 g and 1.5 g, so the
+//      regulated wings are taken to hold 1 g together. Unverified.
+void Physics::Impl::wings(Vehicle& v, const RMat44& T, Vec3 lin, Vec3 ang, RVec3 com) {
+    // shortcut: placeholder constants, tuned so a Mustang climbs out at ~30 m/s and rolls/pitches briskly.
+    const float kLift = 0.01f, kFlap = 0.001f, kRegulateSpeed = 30.0f;
+    BodyInterface& bi = sys.GetBodyInterface();
+    const VehicleDef& d = v.def;
+    Vec3 fwd = T.GetAxisZ();
+    float n_reg = static_cast<float>(std::count_if(d.wings.begin(), d.wings.end(), [](const WingDef& w) { return w.regulate > 0; }));
+    Mat44 inv_inertia = Mat44::sZero();
+    {
+        BodyLockRead lock(sys.GetBodyLockInterface(), v.id);
+        if (lock.Succeeded()) inv_inertia = lock.GetBody().GetInverseInertia();
+    }
+    for (size_t i = 0; i < d.wings.size(); ++i) {
+        const WingDef& w = d.wings[i];
+        float in = w.input == 1 ? v.pitch : w.input == 2 ? v.roll : w.input == 3 ? v.steer : 0.0f;
+        float step = w.rate * kStep;
+        v.deflection[i] += std::clamp(in * w.sign - v.deflection[i], -step, step);
+        RVec3 p = T * Vec3(w.pos[0], w.pos[1], w.pos[2]);
+        Vec3 n = T.Multiply3x3(Vec3(w.normal[0], w.normal[1], w.normal[2]));
+        Vec3 vp = lin + ang.Cross(Vec3(p - com));
+        float s = vp.Length(), vn = vp.Dot(n), vf = std::max(0.0f, vp.Dot(fwd));
+        // Explicit damping must not overshoot: cap the angle-of-attack force at half of what stops v_n in one step,
+        // using the effective mass at the wing (a narrow hull has little roll inertia; uncapped it oscillates).
+        Vec3 rn = Vec3(p - com).Cross(n);
+        float m_eff = 1.0f / (1.0f / d.mass + rn.Dot(inv_inertia.Multiply3x3(rn)));
+        float aoa = -kLift * w.lift * vn * s, cap = 0.5f * std::fabs(vn) / kStep * m_eff / d.mass;
+        float a = std::clamp(aoa, -cap, cap) - kFlap * w.flap * v.deflection[i] * vf * vf;
+        if (w.regulate > 0) a += kGravity / n_reg * std::min(1.0f, vf * vf / (kRegulateSpeed * kRegulateSpeed));
+        bi.AddForce(v.id, n * (a * d.mass), p);
+    }
 }
 
 void Physics::step(float dt) {

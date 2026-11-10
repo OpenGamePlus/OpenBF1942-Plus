@@ -15,7 +15,7 @@ Reimplementación clean-room del motor Refractor 1 para que Battlefield 1942 fun
 | 3. Mallas estáticas (`.sm`) | hecho — todas las mallas se leen; exportación OBJ abre en Blender |
 | 4. Terreno + objetos | hecho — el visor C++ muestra todos los mapas con edificios y árboles |
 | 5. Mallas con esqueleto + animaciones | en curso — soldados y banderas animados en el visor (`--soldier USSoldier`) |
-| 6. Física + vehículos | en curso — conducir coches y tanques en el visor (`--drive Willy`, `--drive Sherman`); manejo aún sin calibrar |
+| 6. Física + vehículos | en curso — conducir coches y tanques y pilotar aviones en el visor (`--drive Willy`, `--drive Sherman`, `--drive Spitfire`); manejo aún sin calibrar |
 | 7–8 | sin empezar (ver [hoja de ruta](#hoja-de-ruta)) |
 
 ## Herramientas
@@ -39,7 +39,7 @@ C++17, CMake, SDL2, OpenGL 3.3 (libepoxy), Jolt Physics (CMake lo descarga al co
 cmake -S . -B build && cmake --build build -j
 ctest --test-dir build
 build/obf_mapview "<BF1942_DIR>" bf1942 Wake      # botón derecho: mirar, WASD/QE: mover, shift: rápido
-build/obf_mapview "<BF1942_DIR>" bf1942 El_Alamein --drive Willy   # WASD conduce
+build/obf_mapview "<BF1942_DIR>" bf1942 El_Alamein --drive Willy   # WASD conduce; aviones: W/S gas, flechas, A/D timón
 ```
 
 ## Hoja de ruta

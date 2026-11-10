@@ -36,5 +36,6 @@
 | Vehicle handling units | unverified | spring/damping per wheel mass; drive and drag scales are placeholders; see [vehicles.md](../formats/vehicles.md#engine-model-implemented-unverified) |
 | Grip, rollover, idle hold | shortcut | friction 1, grip at 80 % of centre-of-mass height, centre of mass at wheel-centre height, no `c_PGF*` or material friction |
 | Tank turn rate | unverified | engine yaw `setMaxSpeed` × 8 °/s |
-| Physics scope | not implemented | no wings, floats, gears, track/wheel/turret animation; trees and animated meshes have no collision; other spawned vehicles are static; M3A1 and Sexton hulls touch the ground |
+| Physics scope | not implemented | no floats, gears, jets, gear retraction, track/wheel/turret animation; trees, animated meshes and spawner vehicles have no collision; M3A1 and Sexton hulls touch the ground; C-47 does not lift off |
+| Aircraft model | unverified | wing force constants, regulator as 1 g shared, thrust = Σ torque / 4; see [vehicles.md](../formats/vehicles.md#aircraft-implemented-unverified) |
 | Jolt fetched at configure | accepted | network on first configure; default AVX2 build ([ADR 0004](../architecture/adr/0004-jolt-physics.md)) |

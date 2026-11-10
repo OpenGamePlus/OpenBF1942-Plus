@@ -286,7 +286,9 @@ int run(int argc, char** argv) {
         std::fprintf(stderr,
                      "usage: obf_mapview <BF1942_DIR> <mod> <level> [--shot out.ppm] [--cam x y z yaw pitch] [--mode conquest|ctf|tdm|coop] [--soldier <template>] [--drive <vehicle>] [--collision] [--no-objects]\n"
                      "  right mouse: look, WASD/QE: move (or drive), shift: fast, C: collision meshes, esc: quit\n"
-                     "  --shot with --drive: settles 2 s, drives 4 s (last 2 s steering right), prints the track\n");
+                     "  aircraft: W/S throttle (held), arrows pitch (up = nose down) and roll, A/D rudder\n"
+                     "  --shot with --drive: settles 2 s, drives 4 s (last 2 s steering right), prints the track;\n"
+                     "  aircraft: 20 s take-off run, pulling up from 12 s to 16 s\n");
         return 2;
     }
     std::string shot;
@@ -344,6 +346,8 @@ int run(int argc, char** argv) {
     Physics phys(hm, info.world_size);
     if (objects) std::printf("physics: %zu static bodies\n", phys.add_scene(scene, vfs));
     int vehicle = -1;
+    bool plane = false;
+    float plane_throttle = 0;
     size_t veh_first = scene.size();
     std::vector<Mat4> veh_local;
     if (objects && !drive.empty()) {
@@ -352,6 +356,7 @@ int run(int argc, char** argv) {
         float cell = info.world_size / static_cast<float>(hm.n);
         int r = std::clamp(static_cast<int>(sz / cell), 0, hm.n - 1), c = std::clamp(static_cast<int>(sx / cell), 0, hm.n - 1);
         VehicleDef def = vehicle_def(con, vfs, drive);
+        plane = def.plane;
         vehicle = phys.add_vehicle(def, translate(sx, hm.height(r, c) + 1, sz) * rotation_ypr(yaw * 57.29578f, 0, 0));
         for (DrawItem& item : build_object(con, vfs, drive, Mat4::identity(), skipped)) {
             veh_local.push_back(item.world);
@@ -606,12 +611,18 @@ int run(int argc, char** argv) {
         last = now;
         const Uint8* k = SDL_GetKeyboardState(nullptr);
         if (vehicle >= 0) {
+            auto key = [&](SDL_Scancode a, SDL_Scancode b) { return static_cast<float>(k[a] - k[b]); };
             if (shot.empty()) {
-                phys.drive(vehicle, static_cast<float>(k[SDL_SCANCODE_W] - k[SDL_SCANCODE_S]), static_cast<float>(k[SDL_SCANCODE_D] - k[SDL_SCANCODE_A]));
+                float th = key(SDL_SCANCODE_W, SDL_SCANCODE_S);
+                if (plane) plane_throttle = std::clamp(plane_throttle + th * 0.5f * dt, 0.0f, 1.0f), th = plane_throttle;
+                phys.drive(vehicle, th, key(SDL_SCANCODE_D, SDL_SCANCODE_A), key(SDL_SCANCODE_UP, SDL_SCANCODE_DOWN),
+                           key(SDL_SCANCODE_RIGHT, SDL_SCANCODE_LEFT));
                 phys.step(dt);
             } else {  // repeatable demo run for --shot
-                for (int i = 0; i < 360; ++i) {
-                    phys.drive(vehicle, i < 120 ? 0.0f : 1.0f, i < 240 ? 0.0f : 1.0f);
+                int steps = plane ? 1200 : 360;
+                for (int i = 0; i < steps; ++i) {
+                    if (plane) phys.drive(vehicle, i < 120 ? 0.0f : 1.0f, 0, i >= 720 && i < 960 ? -0.4f : 0.0f);
+                    else phys.drive(vehicle, i < 120 ? 0.0f : 1.0f, i < 240 ? 0.0f : 1.0f);
                     phys.step(1.0f / 60);
                     Mat4 t = phys.transform(vehicle);
                     if (i % 30 == 29) std::printf("t %.1f s: pos %.1f %.1f %.1f, up %.2f %.2f %.2f, speed %.1f m/s\n", (i + 1) / 60.0, t.m[12], t.m[13], t.m[14], t.m[4], t.m[5], t.m[6], phys.speed(vehicle));
@@ -622,7 +633,8 @@ int run(int argc, char** argv) {
             // Chase camera behind the vehicle, looking along its heading.
             float hx = t.m[8], hz = t.m[10], hl = std::sqrt(hx * hx + hz * hz);
             if (hl > 1e-3f) hx /= hl, hz /= hl;
-            cx = t.m[12] - hx * 9, cy = t.m[13] + 3.5f, cz = t.m[14] - hz * 9;
+            float back = plane ? 16.0f : 9.0f;
+            cx = t.m[12] - hx * back, cy = t.m[13] + (plane ? 4.5f : 3.5f), cz = t.m[14] - hz * back;
             yaw = std::atan2(hx, hz), pitch = -0.25f;
         }
         float speed = (k[SDL_SCANCODE_LSHIFT] ? 400.f : 60.f) * dt * (vehicle < 0);

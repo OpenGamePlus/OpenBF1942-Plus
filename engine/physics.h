@@ -20,11 +20,22 @@ struct WheelDef {
     bool driven = false;        // under the Engine
 };
 
+// Wing: a flat surface pushing along its normal (local y). Control input deflects it (flap lift).
+struct WingDef {
+    float pos[3] = {}, normal[3] = {0, 1, 0};  // force point (position + setPositionOffset), vehicle space
+    float lift = 0, flap = 0, regulate = 0;    // setWingLift, setFlapLift, setRegulateToLift (always 4.91 in retail)
+    int input = 0;                             // setInputToPitch: 0 none, 1 c_PIPitch, 2 c_PIRoll, 3 c_PIYaw
+    float sign = 1, rate = 4;                  // direction (sign of setAcceleration), full deflections per second
+};
+
 struct VehicleDef {
     float mass = 1000, drag = 0;
     float torque = 0, differential = 1;  // Engine setTorque / setDifferential
     bool tracked = false;       // c_ETTank: the engine turns the hull (setInputToYaw) instead of steering wheels
     float turn_rate = 0;        // deg/s at full steer, tracked only
+    bool plane = false;         // c_ETPlane: the engine is thrust, wheels roll freely
+    float thrust = 0;           // aircraft: m/s^2 at full throttle, summed over engines
+    std::vector<WingDef> wings;
     std::vector<WheelDef> wheels;
     std::vector<float> hull;    // xyz points, vehicle space; the chassis is their convex hull
 };
@@ -40,7 +51,10 @@ public:
     size_t add_scene(const std::vector<DrawItem>& items, const Vfs& vfs);
     void add_static(const std::string& key, const CollisionMesh& mesh, const Mat4& world);
     int add_vehicle(const VehicleDef& def, const Mat4& world);
-    void drive(int vehicle, float throttle, float steer);  // both in [-1, 1]
+    // Inputs in [-1, 1], named after Refractor's c_PI*: yaw +1 = right (cars steer, tanks turn, rudders); roll +1 = right
+    // wing down; pitch +1 = nose down (stick forward).
+    void drive(int vehicle, float throttle, float yaw, float pitch = 0, float roll = 0);
+    void set_velocity(int vehicle, float x, float y, float z);
     void step(float dt);  // fixed 60 Hz substeps
     Mat4 transform(int vehicle) const;
     float speed(int vehicle) const;  // m/s
