@@ -93,6 +93,9 @@ struct Builder {
             else if (k == "setposition" && !children.empty()) parse_vec3(a[0], children.back().pos);
             else if (k == "setrotation" && !children.empty()) parse_vec3(a[0], children.back().rot);
         }
+        // LodObject children are alternative detail levels (complex, simple, wreck); draw the first only.
+        // shortcut: no distance-based switching yet (the lodSelector templates define it).
+        if (lower(t->type) == "lodobject" && children.size() > 1) children.resize(1);
         for (auto& c : children)
             if (!hide || !hide(lower(c.name))) object(c.name, world * translate(c.pos[0], c.pos[1], c.pos[2]) * rotation_ypr(c.rot[0], c.rot[1], c.rot[2]), depth + 1, 0, anim);
     }

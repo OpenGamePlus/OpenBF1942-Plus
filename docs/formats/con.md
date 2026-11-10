@@ -56,6 +56,7 @@ How `Object.create` instances become meshes (`engine/scene.cpp`):
 | Rotation | `yaw/pitch/roll` in degrees, Direct3D left-handed order: roll (z), pitch (x), yaw (y) | visually: L-shaped corner buildings match baked shadows |
 | Geometry | `ObjectTemplate.geometry` → `GeometryTemplate` (`StandardMesh` → `standardMesh/<file>.sm`, `TreeMesh` → `treeMesh/<file>.tm`); level folder first | yes, 0 errors on all levels |
 | Children | `addTemplate X`; the following `setPosition`/`setRotation` place that child relative to the parent | visually: tanks and the B-17 assemble correctly |
+| LOD | `LodObject` children are detail levels (complex, simple, wreck) | the viewer draws the first child only; `lodSelector` distances not used |
 | Spawners | `ObjectSpawner` template: `setObjectTemplate <team> <template>`; the instance's `setTeam` picks one | the viewer shows the instance's team, else the first listed; in game the control point owner decides |
 
 | Animated meshes | `AnimatedMesh` geometry = `standardMesh/<file>.sm` + `setSkin`; skeleton (`createSkeleton`) and states (`setAnimationState`) come from the owning template or a parent | flags wave on control points; soldiers via `--soldier` |

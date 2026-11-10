@@ -2,6 +2,12 @@
 
 Append-only. Newest first. At most 3 bullets per stage.
 
+## 2026-11-10 — vehicle structure survey
+
+- `LodObject` children are alternative detail levels; the viewer drew all of them (hull + low-detail + wreck overlapping) — now only the first.
+- Documented vehicle trees (Engine, RotationalBundle wheels, Spring suspension, Wing) as research for step 6; parameter units unknown.
+- Open: physics approach (own code vs. library) and fidelity target — decision for the maintainer.
+
 ## 2026-11-10 — C++ review fixes
 
 - Independent review found three confirmed crashes on malformed mods: `std::regex` stack overflow in `.rs`, self-recursive `run`, NaN frame index; plus template fan-out and unchecked allocation sizes.

@@ -18,7 +18,7 @@
 | Little-endian hosts only | accepted | `memcpy` of file integers in C++ |
 | Texture `alternativePath` lookup | unverified | tried as `<alt>/<file name>` before the given path |
 | Tree sprite orientation | unverified | `corner.y` sign chosen visually |
-| Viewer draws LOD 0 only, distance cull 1.5 km | shortcut | per-mesh `setLodDistance` exists in geometry templates |
+| Viewer draws LOD 0 / first `LodObject` child only, distance cull 1.5 km | shortcut | per-mesh `setLodDistance` exists in geometry templates |
 | Effects, held weapons not drawn | not implemented | later steps |
 | Spawner team in the viewer | shortcut | instance `setTeam`, else first `setObjectTemplate`; no game state |
 | Soldier root bone and standing pose | unverified | root replaced by identity, 180° turn; ≈ 20° hip flexion in the stand pose, see [anim.md](../formats/anim.md#soldier-root-unverified) |
