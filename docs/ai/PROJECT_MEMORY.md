@@ -5,7 +5,7 @@ Append-only. Newest first. At most 3 bullets per stage.
 ## 2026-11-10 — same-spot comparison with the original
 
 - Our camera was matched to the maintainer's Berlin screenshot, using the parked tanks and the tank stoppers (`rh_tsp_M1`) as landmarks. The field of view is the same; buildings and haze match within 10 %.
-- Only the terrain is darker: ×1.85 at that spot, ×2.2 at the first spot. Open until an El Alamein capture shows whether desert sand also doubles.
+- Only the terrain is darker: ×1.85 at that spot, ×2.2 at the first spot. An El Alamein capture at the same spot (the Allied flag facing the factory) shows the sand already matches, so the ×2 is rejected and the Berlin gap is something else. The sky rule became "fogged as geometry 250 m away", which gives a blue sky over El Alamein and a sepia one over Berlin, as in the original.
 
 ## 2026-11-10 — compared with the original client
 

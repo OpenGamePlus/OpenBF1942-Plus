@@ -622,9 +622,9 @@ Renderer::Impl::Impl(const Vfs& vfs_, Con& con, const Heightmap& hm, const Terra
         glUniform3f(glGetUniformLocation(prog, "diffuse"), dif[0], dif[1], dif[2]);
         glUniform3f(glGetUniformLocation(prog, "fog_color"), fogc[0], fogc[1], fogc[2]);
         glUniform2f(glGetUniformLocation(prog, "fog_range"), fog_start, fog_end);
-        // shortcut: the sky washed towards the fog colour by 1 - fogEnd / 1000, at most 0.9 (Berlin, fogEnd 100: a pale
-        // sepia sky as in the original client; desert levels at 500: half). The original's rule is unknown.
-        glUniform1f(glGetUniformLocation(prog, "sky_fog"), std::clamp(1.0f - fog_end / 1000.0f, 0.0f, 0.9f));
+        // shortcut: the sky fogged as geometry 250 m away. Matches both original-client references: Berlin (fog 0-100 m)
+        // a uniform pale sepia sky, El Alamein (fog from 250 m) a clear blue one. The original's rule is unknown.
+        glUniform1f(glGetUniformLocation(prog, "sky_fog"), std::clamp((250.0f - fog_start) / std::max(fog_end - fog_start, 1.0f), 0.0f, 1.0f));
     }
     glEnable(GL_DEPTH_TEST);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
