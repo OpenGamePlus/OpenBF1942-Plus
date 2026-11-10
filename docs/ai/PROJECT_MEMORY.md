@@ -2,6 +2,12 @@
 
 Append-only. Newest first. At most 3 bullets per stage.
 
+## 2026-11-10 — second network capture attempt (E0)
+
+- Relays on the query port (with game-port rewriting) and the game port saw no packet: the client reaches the server another way. The server's query port follows `game.gameSpyPort`; ASE is game port + 123.
+- Config changed for seconds and restored byte-identical again; no process or file left behind.
+- Next: one elevated `pktmon` capture with the maintainer present.
+
 ## 2026-11-10 — consolidate (roadmap A)
 
 - `mapview.cpp` (~1,400 lines) split into `engine/game.*` (headless game layer), `engine/render.*` (GL) and thin `mapview.cpp`; new `obf_sim` runs the demos without a window; CI on GitHub.
