@@ -2,6 +2,11 @@
 
 Append-only. Newest first. At most 3 bullets per stage.
 
+## 2026-11-10 — vehicle colour and barbed wire
+
+- Vehicles looked less yellow than in the original because the sun was mirrored. `sunLightDirectionVec` with x and z negated brings El Alamein's tanks from 54/40/29 to 78/59/40 (original 88/67/44), with the sun opposite the baked terrain shadows.
+- Cut-out textures are tested at full resolution, so barbed wire no longer vanishes beyond 10 m.
+
 ## 2026-11-10 — first-person arms matched to the original
 
 - Against the El Alamein screenshot (Thompson): `set1pFov` read as the field of view drew the arms nearly twice as large, and the legs' 3p animation lifted the gun. Now the 1p animation plays alone, with a 0.75 rad field of view and no `center1pHands` x, all fitted by eye.

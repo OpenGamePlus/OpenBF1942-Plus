@@ -619,7 +619,10 @@ Renderer::Impl::Impl(const Vfs& vfs_, Con& con, const Heightmap& hm, const Terra
     u_right = glGetUniformLocation(prog, "cam_right"), u_cam = glGetUniformLocation(prog, "cam_pos");
     {
         float l = std::sqrt(sun[0] * sun[0] + sun[1] * sun[1] + sun[2] * sun[2]);
-        glUniform3f(glGetUniformLocation(prog, "sun_dir"), sun[0] / l, sun[1] / l, sun[2] / l);
+        // sky.sunLightDirectionVec with x and z negated: lit this way, El Alamein's tanks come within ~15 % of the
+        // original client's screenshot (as read, half as bright: their sunny side was in shade), and the sun stands
+        // opposite the shadows baked into the colour tiles.
+        glUniform3f(glGetUniformLocation(prog, "sun_dir"), -sun[0] / l, sun[1] / l, -sun[2] / l);
         glUniform3f(glGetUniformLocation(prog, "ambient"), amb[0] + amb2[0], amb[1] + amb2[1], amb[2] + amb2[2]);
         glUniform3f(glGetUniformLocation(prog, "diffuse"), dif[0], dif[1], dif[2]);
         glUniform3f(glGetUniformLocation(prog, "fog_color"), fogc[0], fogc[1], fogc[2]);
