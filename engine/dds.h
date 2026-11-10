@@ -13,6 +13,6 @@ struct Image {
 
 void dxt1_block(const uint8_t* block, uint8_t out[16][4]);
 Image dds_decode(const std::vector<uint8_t>& file);  // throws on unsupported formats
-Image tga_decode(const std::vector<uint8_t>& file);  // types 2 (24/32 bit) only
+Image tga_decode(const std::vector<uint8_t>& file);  // type 2 (24/32 bit) and type 1 (8-bit, 24/32-bit palette)
 
 }  // namespace obf

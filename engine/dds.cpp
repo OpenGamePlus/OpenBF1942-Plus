@@ -72,13 +72,33 @@ Image dds_decode(const std::vector<uint8_t>& d) {
 }
 
 Image tga_decode(const std::vector<uint8_t>& d) {
-    if (d.size() < 18 || d[2] != 2 || (d[16] != 24 && d[16] != 32)) throw std::runtime_error("TGA: only uncompressed 24/32-bit");
+    if (d.size() < 18) throw std::runtime_error("TGA: truncated header");
     Image img;
     img.w = d[12] | d[13] << 8;
     img.h = d[14] | d[15] << 8;
+    bool top_first = d[17] & 0x20;
+    if (d[2] == 1) {  // colour-mapped: 8-bit indices into an embedded palette (object lightmaps)
+        size_t first = static_cast<size_t>(d[3] | d[4] << 8), count = static_cast<size_t>(d[5] | d[6] << 8), ebits = d[7];
+        if (d[1] != 1 || d[16] != 8 || (ebits != 24 && ebits != 32)) throw std::runtime_error("TGA: unsupported colour map");
+        size_t pal = 18u + d[0], eb = ebits / 8, start = pal + count * eb;
+        if (d.size() < start + static_cast<size_t>(img.w) * img.h) throw std::runtime_error("TGA: truncated");
+        img.rgba.resize(static_cast<size_t>(img.w) * img.h * 4);
+        for (int y = 0; y < img.h; ++y)
+            for (int x = 0; x < img.w; ++x) {
+                size_t i = d[start + static_cast<size_t>(top_first ? y : img.h - 1 - y) * img.w + x];
+                uint8_t* o = &img.rgba[(static_cast<size_t>(y) * img.w + x) * 4];
+                if (i < first || i - first >= count) {
+                    o[0] = o[1] = o[2] = 0, o[3] = 255;
+                    continue;
+                }
+                const uint8_t* c = &d[pal + (i - first) * eb];
+                o[0] = c[2], o[1] = c[1], o[2] = c[0], o[3] = eb == 4 ? c[3] : 255;  // stored BGR(A)
+            }
+        return img;
+    }
+    if (d[2] != 2 || (d[16] != 24 && d[16] != 32)) throw std::runtime_error("TGA: only uncompressed 24/32-bit or 8-bit mapped");
     size_t bpp = d[16] / 8, start = 18u + d[0];
     if (d.size() < start + static_cast<size_t>(img.w) * img.h * bpp) throw std::runtime_error("TGA: truncated");
-    bool top_first = d[17] & 0x20;
     img.rgba.resize(static_cast<size_t>(img.w) * img.h * 4);
     for (int y = 0; y < img.h; ++y)
         for (int x = 0; x < img.w; ++x) {

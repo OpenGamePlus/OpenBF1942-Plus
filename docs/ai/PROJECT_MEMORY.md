@@ -2,6 +2,12 @@
 
 Append-only. Newest first. At most 3 bullets per stage.
 
+## 2026-11-10 — object lightmaps
+
+- Per-instance lightmaps decoded: name = mesh file + truncated instance position (67/67 on Wake), 8-bit colour-mapped TGA, second UV of `.sm`.
+- First tried ×1 from one bright Wake bunker; measured mean lightmap brightness (0.13–0.21) showed ×2 is needed. Added a format coverage table.
+- Open: `palette.pal`, `.lsb` shadow bits, exact blend.
+
 ## 2026-11-10 — vehicle structure survey
 
 - `LodObject` children are alternative detail levels; the viewer drew all of them (hull + low-detail + wreck overlapping) — now only the first.

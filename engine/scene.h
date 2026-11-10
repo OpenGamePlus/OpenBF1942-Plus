@@ -16,6 +16,7 @@ struct DrawItem {
     // AnimatedMesh only: .skn path, skeleton (.ske) and animation state, inherited from the owning templates.
     std::string skin, skeleton;
     std::vector<std::string> states;  // by setAnimationState index (soldiers: 0 lower body, 1 upper body)
+    std::string lightmap;  // static .sm only: <level>/objectlightmaps/<file>_<x>-<y>-<z>.tga, if present
 };
 
 // skipped counts what could not be drawn, by reason ("treemesh", "missing template", ...).

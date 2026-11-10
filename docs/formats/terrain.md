@@ -45,6 +45,13 @@ Check: 57–90 % of placed objects per map sit within 0.5 m of the nearest sampl
 
 Values seen: view distance 500 m (Wake, El Alamein), 200 m (Bulge), 100 m (Berlin). Lens flares, clouds (`Sky.addCloud`) and `renderer.specularColor` are not used yet.
 
+## Object lightmaps (`<Map>/ObjectLightmaps/`)
+
+- One TGA per placed static mesh: `<geometry file>_<x>-<y>-<z>.tga`, position of the placed instance **truncated** to integers (all 67 files on Wake match; none needs rounding). Children of a bundle use the root instance's position. `_m1`/`_m2` variants belong to the detail levels.
+- TGA type 1: 8-bit indices with an embedded 24-bit palette, 128² or 256².
+- Sampled with the mesh's second UV set (`.sm` stride 40). Lightmaps average 0.13–0.21 in brightness (Wake, El Alamein, Berlin, Bocage), so the viewer multiplies the texture by 2 × lightmap (Direct3D `MODULATE2X`, the usual lightmap blend of the era) instead of the sun term. Unverified.
+- `palette.pal` next to them (RIFF `PAL `) is not needed for decoding; its role is unknown.
+
 ## Material map (`Materialmap.raw`)
 
 `materialSize²` bytes, one `MaterialManager` id per cell (4 m on the maps checked), same row/column orientation assumed as the heightmap (unverified). Every value on Wake, El Alamein and Berlin is a defined material: Wake is mostly 11 "Wet sand", El Alamein 10 "Dry sand" and 12 "Rock", Berlin 7 "Reserved (Outside map)".

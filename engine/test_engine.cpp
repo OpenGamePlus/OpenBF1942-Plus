@@ -220,6 +220,18 @@ int main() {
         assert(throws([] { parse_terrain_con("GeometryTemplate.worldSize nan\nGeometryTemplate.yScale 1\nGeometryTemplate.file h\n"); }));
     }
 
+    // TGA type 1: 2x1 image, 8-bit indices into a 2-entry BGR palette, bottom-up rows.
+    {
+        std::vector<uint8_t> tga = {0, 1, 1, 0, 0, 2, 0, 24, 0, 0, 0, 0, 2, 0, 1, 0, 8, 0,
+                                    255, 0, 0,  0, 0, 255,  1, 0};  // palette: blue, red; pixels: red, blue
+        Image img = tga_decode(tga);
+        assert(img.w == 2 && img.h == 1 && img.rgba[0] == 255 && img.rgba[2] == 0 && img.rgba[6] == 255);
+        tga[24] = 9;  // index outside the palette -> black, no read past the palette
+        assert(tga_decode(tga).rgba[0] == 0);
+        tga.pop_back();
+        assert(throws([&] { tga_decode(tga); }));
+    }
+
     std::puts("engine tests ok");
     return 0;
 }

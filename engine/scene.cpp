@@ -32,6 +32,7 @@ struct Builder {
     struct Anim {
         std::string skeleton;
         std::vector<std::string> states;
+        std::string root_pos;  // "x-y-z" of the placed instance, truncated: object lightmap names
     };
 
     void geometry(const std::string& name, const Mat4& world, const Anim& anim) {
@@ -51,7 +52,9 @@ struct Builder {
         for (const std::string& p : {con.level_dir + "/" + folder + "/" + file + ext, folder + "/" + file + ext})
             if (vfs.has(p)) {
                 if (type == "animatedmesh" && (!vfs.has(skin) || !vfs.has(anim.skeleton))) skin.clear();
-                return void(out.push_back({p, world, type == "animatedmesh" ? skin : "", anim.skeleton, anim.states}));
+                std::string lm = con.level_dir + "/objectlightmaps/" + file + "_" + anim.root_pos + ".tga";
+                if (type != "standardmesh" || anim.root_pos.empty() || !vfs.has(lm)) lm.clear();
+                return void(out.push_back({p, world, type == "animatedmesh" ? skin : "", anim.skeleton, anim.states, lm}));
             }
         ++skipped["missing mesh file"];
     }
@@ -117,7 +120,11 @@ std::vector<DrawItem> build_scene(const Con& con, const Vfs& vfs, std::map<std::
             else if (k == "rotation") parse_vec3(a[0], rot);
             else if (k == "geometry.scale") parse_vec3(a[0], scl);
         }
-        b.object(inst.name, translate(pos[0], pos[1], pos[2]) * rotation_ypr(rot[0], rot[1], rot[2]) * scale(scl[0], scl[1], scl[2]), 0, team);
+        // Verified on Wake: all 67 lightmap names use the instance position truncated to integers.
+        Builder::Anim anim;
+        anim.root_pos = std::to_string(static_cast<long>(pos[0])) + "-" + std::to_string(static_cast<long>(pos[1])) + "-" +
+                        std::to_string(static_cast<long>(pos[2]));
+        b.object(inst.name, translate(pos[0], pos[1], pos[2]) * rotation_ypr(rot[0], rot[1], rot[2]) * scale(scl[0], scl[1], scl[2]), 0, team, anim);
     }
     return std::move(b.out);
 }

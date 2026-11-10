@@ -25,7 +25,7 @@ Material header:
 | `3 × u32` | always 0 |
 | `u32 primitive` | Direct3D primitive type: 4 = triangle list, 5 = triangle strip (first-person and face meshes) |
 | `u32 fvf` | `0x411` (stride 32) or `0x2411` (stride 40) |
-| `u32 stride` | 32: pos, normal, uv · 40: pos, normal, uv, lightmap uv (all `f32`) |
+| `u32 stride` | 32: pos, normal, uv · 40: pos, normal, uv, lightmap uv (all `f32`; lightmap use verified, see [terrain.md](terrain.md#object-lightmaps-mapobjectlightmaps)) |
 | `u32 nverts`, `u32 nindices` | |
 | `u32 alpha` | 0, 1, 2, 4, rarely 9, 12; meaning unknown |
 

@@ -30,17 +30,20 @@ const char* kVert = R"(#version 330 core
 layout(location = 0) in vec3 pos;
 layout(location = 1) in vec3 nrm;
 layout(location = 2) in vec2 uv;
-layout(location = 3) in vec2 corner;  // tree sprites: offset from the shared centre
+layout(location = 3) in vec2 corner;  // tree sprites: offset from the shared centre; static meshes: lightmap uv
 uniform mat4 vp;
 uniform mat4 model;
 uniform vec3 cam_right;
+uniform int sprite;  // 1 for tree meshes
 out vec3 wpos;
 out vec3 wnrm;
 out vec2 tuv;
+out vec2 luv;
 void main() {
     wpos = (model * vec4(pos, 1.0)).xyz;
     wnrm = mat3(model) * nrm;
-    if (corner != vec2(0.0)) {  // cylindrical billboard: faces the camera, stays upright
+    luv = corner;
+    if (sprite == 1 && corner != vec2(0.0)) {  // cylindrical billboard: faces the camera, stays upright
         float s = length(model[0].xyz);
         wpos += (cam_right * corner.x - vec3(0.0, 1.0, 0.0) * corner.y) * s;
         wnrm = vec3(0.0, 1.0, 0.0);
@@ -53,6 +56,10 @@ const char* kFrag = R"(#version 330 core
 in vec3 wpos;
 in vec3 wnrm;
 in vec2 tuv;
+in vec2 luv;
+uniform sampler2D lmap;
+uniform int has_lm;
+uniform float lm_scale;
 uniform sampler2DArray tiles;
 uniform sampler2D tex;
 uniform int ntiles;
@@ -92,6 +99,7 @@ void main() {
     if (mode != 3 && !gl_FrontFacing) n = -n;  // two-sided: game winding is mirrored by the view
     // shortcut: ambient + diffuse from Init.con, doubled (assumed D3D modulate2x); no lightmaps.
     vec3 light = min(2.0 * (ambient + diffuse * max(dot(n, sun_dir), 0.0)), vec3(1.5));
+    if (has_lm == 1) light = texture(lmap, luv).rgb * lm_scale;  // baked object lighting replaces the sun term
     color = fogged(vec4(base.rgb * light, 1.0));
 })";
 
@@ -219,7 +227,8 @@ std::unique_ptr<GpuMesh> upload_sm(const SmMesh& m, const std::string& path, con
         size_t fl = mat.stride / 4;
         for (size_t v = 0; v < mat.vertex_count(); ++v) {
             verts.insert(verts.end(), mat.vertices.data() + v * fl, mat.vertices.data() + v * fl + 8);
-            verts.insert(verts.end(), {0.f, 0.f});
+            if (fl >= 10) verts.insert(verts.end(), mat.vertices.data() + v * fl + 8, mat.vertices.data() + v * fl + 10);
+            else verts.insert(verts.end(), {0.f, 0.f});
         }
         size_t first = idx.size();
         for (uint32_t i : sm_triangles(mat)) idx.push_back(base + i);
@@ -527,6 +536,11 @@ int run(int argc, char** argv) {
     glUniform1f(glGetUniformLocation(prog, "world"), info.world_size);
     glUniform1i(glGetUniformLocation(prog, "tex"), 0);
     glUniform1i(glGetUniformLocation(prog, "tiles"), 1);
+    glUniform1i(glGetUniformLocation(prog, "lmap"), 2);
+    // shortcut: lightmaps average 0.13-0.21 (Wake, El Alamein, Berlin, Bocage), so x2 (D3D MODULATE2X,
+    // the usual lightmap blend of the era) is assumed; x1 leaves buildings at ~20% brightness. Unverified.
+    glUniform1f(glGetUniformLocation(prog, "lm_scale"), 2.0f);
+    GLint u_sprite = glGetUniformLocation(prog, "sprite"), u_has_lm = glGetUniformLocation(prog, "has_lm");
     GLint u_vp = glGetUniformLocation(prog, "vp"), u_model = glGetUniformLocation(prog, "model"),
           u_mode = glGetUniformLocation(prog, "mode"), u_right = glGetUniformLocation(prog, "cam_right"),
           u_cam = glGetUniformLocation(prog, "cam_pos");
@@ -624,6 +638,14 @@ int run(int argc, char** argv) {
             if (!item_mesh[i] || !item_mesh[i]->vao) continue;
             const GpuMesh& g = *item_mesh[i];
             glUniform1i(u_mode, item.skin.empty() ? 2 : 3);
+            glUniform1i(u_sprite, item.mesh.size() > 3 && item.mesh.compare(item.mesh.size() - 3, 3, ".tm") == 0);
+            GLuint lm = item.lightmap.empty() ? 0 : textures.get(item.lightmap.substr(0, item.lightmap.size() - 4));
+            glUniform1i(u_has_lm, lm != 0 && !item.lightmap.empty());
+            if (lm) {
+                glActiveTexture(GL_TEXTURE2);
+                glBindTexture(GL_TEXTURE_2D, lm);
+                glActiveTexture(GL_TEXTURE0);
+            }
             glUniformMatrix4fv(u_model, 1, GL_FALSE, item.world.m);
             glBindVertexArray(g.vao);
             for (auto& p : g.parts) {

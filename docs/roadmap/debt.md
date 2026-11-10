@@ -24,6 +24,7 @@
 | Soldier root bone and standing pose | unverified | root replaced by identity, 180° turn; ≈ 20° hip flexion in the stand pose, see [anim.md](../formats/anim.md#soldier-root-unverified) |
 | Animation frame rate and state machine | shortcut | 25 fps guessed; first animation of a state, looping; no transitions; weapon states by prefix |
 | `animations/animationstates.con` loading | unverified | the viewer runs it after the object folders |
+| Object lightmap blend | unverified | 2 × lightmap replaces the sun term on lightmapped meshes |
 | Fog start, light scale | shortcut | fog from half the view distance; mesh light ×2; terrain drawn unlit (baked lighting) |
 | Skinned normals | shortcut | face normals from screen derivatives; posed normals need a bind pose |
 | Soldier parts | shortcut | viewer hides `Parachute` and `1p*` children; the engine switches parts by camera and state |
