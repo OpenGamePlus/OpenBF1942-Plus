@@ -17,11 +17,12 @@
 | `engine/damage.*` | MaterialManager damage table | std only |
 | `engine/conquest.*` | flags and tickets | `con` |
 | `engine/physics.*` | Jolt world, vehicle parts as forces ([ADR 0004](adr/0004-jolt-physics.md)) | `scene`, `sm`, `terrain`, `con`, `math`, Jolt |
-| `engine/game.*` | game layer: vehicles, soldiers, bots, weapons, damage, conquest, AI, demos, camera | `physics`, `scene`, `damage`, `conquest`, `con`, `terrain` |
+| `engine/nav.*` | path-finding maps, A* | std only |
+| `engine/game.*` | game layer: vehicles, soldiers, bots, weapons, damage, conquest, AI, demos, camera | `physics`, `scene`, `damage`, `conquest`, `nav`, `con`, `terrain` |
 | `engine/render.*` (library `obf_render`) | OpenGL renderer: terrain, meshes, skinning, sky, tracers | `game` (views), `scene`, `sm`, `tm`, `anim`, `dds`, epoxy |
 | `engine/mapview.cpp` | executable: arguments, window, input, loop | `game`, `render`, SDL2 |
 | `engine/sim.cpp` | executable `obf_sim`: the game without window or GL | `game` |
-| `tools/*.py` | Python reference implementations | `rfa` ← `con` ← `sm`, `tm`, `anim` |
+| `tools/*.py` | Python reference implementations | `rfa` ← `con` ← `sm`, `tm`, `anim`, `pathfinding` |
 
 ## Rules
 

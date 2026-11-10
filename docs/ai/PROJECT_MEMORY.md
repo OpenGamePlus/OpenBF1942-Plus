@@ -2,6 +2,12 @@
 
 Append-only. Newest first. At most 3 bullets per stage.
 
+## 2026-11-10 — AI navigation (roadmap B1)
+
+- Level-0 path-finding maps decoded (tile markers 0 / 1 / bit tiles, 1 = blocked; all 207 parse, aligned with level objects). Bots route with A* on a 2 m grid: over 78 levels stuck sidesteps −32 %, bot deaths +36 %.
+- Goal hysteresis added (bots swapped between equidistant flags every step). Tried the detailed (last) collision block for static meshes: worse on open maps, rejected.
+- Open: cities (Berlin, Stalingrad: spawns inside buildings, doorways), levels 1+ of the maps, 13 levels without level-0 maps.
+
 ## 2026-11-10 — second network capture attempt (E0)
 
 - Relays on the query port (with game-port rewriting) and the game port saw no packet: the client reaches the server another way. The server's query port follows `game.gameSpyPort`; ASE is game port + 123.

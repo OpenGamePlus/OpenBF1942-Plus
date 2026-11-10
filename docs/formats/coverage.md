@@ -11,7 +11,7 @@ Every file type in the retail archives (bf1942 + XPack1 + XPack2) and how far it
 | `.rs` | 2,619 | 1 MB | done | shader text, [sm.md](sm.md#shader-file-rs) |
 | `.sm` | 2,527 | 191 MB | geometry + collision triangles done | footer, collision tree, `alpha` open, [sm.md](sm.md) |
 | `.baf` | 1,593 | 8 MB | done | [anim.md](anim.md) |
-| `.raw` | 643 | 53 MB | heightmap + material map done | the rest are AI path-finding maps, partly surveyed below |
+| `.raw` | 643 | 53 MB | heightmap, material map, path-finding level 0 done | [terrain.md](terrain.md), [pathfinding.md](pathfinding.md); path-finding levels 1+ and `info` open |
 | `.tm` | 130 | 3 MB | done | [tm.md](tm.md) |
 | `.skn`, `.ske` | 120 / 86 | 1 MB | done | [anim.md](anim.md) |
 | `.wav` | 5,808 | 422 MB | standard | RIFF PCM (format 1) in every file sampled; no engine audio yet |
@@ -25,15 +25,3 @@ Every file type in the retail archives (bf1942 + XPack1 + XPack2) and how far it
 | `.dat` | 50 | — | not decoded | e.g. `loadcounter.dat` (4 bytes) |
 | no extension | 94 | 1 MB | not decoded | menus: `MemeFile 2.0` (DICE serialisation, `dice::meme::*` classes) |
 | `.bik` | movies | — | not planned | Bink video, outside the archives |
-
-## AI path-finding maps (survey, roadmap step 7)
-
-Per level in `<Map>/Pathfinding/`, one set per search map declared in `AIPathFinding.con` (`ai.addSearchMap <name> <waterHeight> <waterDepth> <maxSlope> <brush> <lowClip> <hiClip> ...`, parameters named in the file's own comment): `tank`, `car`, `infantery`, `boat`, `landingcraft`.
-
-| File | Header (u32) | Reading (unverified) |
-|---|---|---|
-| `<type>.raw` (16,392 bytes) | `32, 32` | 32 × 32 tiles of 16 bytes |
-| `<name>level<k>map.raw` | `a, a, b, k, …, 0xffffffff` | level k: 2^a tiles of 2^b cells per side; a + b = 11 on Wake (2,048 cells = map width in metres); smaller files at higher levels suggest uniform tiles are stored compactly |
-| `<type>info.raw` | same form as level 0 | per-cell information for the search |
-
-Not decoded further.

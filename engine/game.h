@@ -13,6 +13,7 @@
 #include "conquest.h"
 #include "damage.h"
 #include "math.h"
+#include "nav.h"
 #include "physics.h"
 #include "scene.h"
 #include "terrain.h"
@@ -97,6 +98,10 @@ private:
         float next_fire = 0, seen_at = -1, next_look = 0;
         int target = -2;  // -2 nobody, -1 the player, else a bot
         float check_at = 0, check_pos[2] = {}, detour_until = 0, detour_side = 1;  // getting unstuck
+        std::vector<float> path;  // waypoints (x, z) to the flag it runs for
+        size_t waypoint = 0;
+        int path_goal = -1;       // flag index the path leads to
+        float replan_at = 0;
     };
 
     const VehicleDef* def_for(const std::string& name);
@@ -137,6 +142,9 @@ private:
     Conquest game;
     std::vector<SpawnPt> spawn_points;
     std::vector<Bot> bots;
+    NavGrid nav;  // infantry map of the level, 2 m cells; empty: bots run straight
+    std::array<int, 3> deaths{0, 0, 0};
+    int detours = 0;  // sidesteps taken by stuck bots
     DamageTable damage;
     WeaponDef hand;
     float hand_next = 0, player_hp = 30, respawn_at = -1, now = 0;

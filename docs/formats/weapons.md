@@ -56,7 +56,7 @@ Rules as read from those fields (the retail rules are not documented): soldiers 
 
 ## AI (implemented, placeholder)
 
-Bots of both teams start on their team's spawn points (the player takes one place). Every 0.3 s a bot picks the nearest opponent (bot or player, on foot or in a vehicle) it can see within 120 m, checking the line of sight to the three nearest; with one it turns, waits 0.7 s and fires its kit weapon (the five classes in turn) at half the weapon's rate with ~2° of aim error. Otherwise it runs at 4 m/s straight for the nearest flag its team does not hold, sidestepping and jumping for 1.5 s when it has moved under 2 m in 2 s. No damage from one's own team. Bots come back 10 s after dying, the player after 3 s, on a spawn point their team owns. No path finding (`<Map>/Pathfinding/` is not read yet), no vehicles, no squads; all numbers guessed.
+Bots of both teams start on their team's spawn points (the player takes one place). Every 0.3 s a bot picks the nearest opponent (bot or player, on foot or in a vehicle) it can see within 120 m, checking the line of sight to the three nearest; with one it turns, waits 0.7 s and fires its kit weapon (the five classes in turn) at half the weapon's rate with ~2° of aim error. Otherwise it runs at 4 m/s for the flag it already chose (else the nearest its team does not hold), along a route on the level's infantry path-finding map ([pathfinding.md](pathfinding.md)) planned when the goal changes and again when stuck (at most every 5 s); still stuck, it sidesteps and jumps for 1.5 s. No damage from one's own team. Bots come back 10 s after dying, the player after 3 s, on a spawn point their team owns. No vehicles, no squads, no multi-storey routes; all numbers guessed.
 
 El Alamein, simulated with `--sim`: outposts change hands from about 3 minutes in, flags go back and forth, and one team runs out of tickets after about 32 minutes. All 78 levels run a 2-minute game (1,689 bots; none on 7 levels whose soldiers start on ships).
 
@@ -65,5 +65,5 @@ El Alamein, simulated with `--sim`: outposts change hands from about 3 minutes i
 - Explosion radius (`material2` applies to the target hit only), effects (`e_*` templates), sounds.
 - Magazines and reloading; projectile drag; `fireingForce`, `recoil*`.
 - Secondary weapons and switching; held weapon drawing; soldiers spawning on vehicles (carriers); real skeleton hit boxes.
-- AI: path finding maps, the level `ai/` strategies, vehicle use; spawning on ships.
+- AI: the level `ai/` strategies, vehicle use, cities (spawns inside buildings, narrow doorways); spawning on ships.
 - Conquest: the real capture and ticket rules; other modes (CTF, TDM, co-op).

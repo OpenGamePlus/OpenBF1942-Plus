@@ -13,6 +13,7 @@
 #include "damage.h"
 #include "dds.h"
 #include "math.h"
+#include "nav.h"
 #include "physics.h"
 #include "scene.h"
 #include "sm.h"
@@ -454,6 +455,34 @@ int main() {
         std::vector<float> live;
         phys.projectiles(live);
         assert(live.size() == 6);  // the shot from inside is still flying
+    }
+
+    // Navigation: level-0 map tiles (free, blocked, bits), coarse grid, A* around a wall with string pulling.
+    {
+        std::vector<uint8_t> d(32, 0);
+        uint32_t hdr[8] = {1, 1, 5, 0, 0, 2, 0, 0xFFFFFFFFu};
+        std::memcpy(d.data(), hdr, 32);
+        auto put = [&](uint32_t w) { d.insert(d.end(), reinterpret_cast<uint8_t*>(&w), reinterpret_cast<uint8_t*>(&w) + 4); };
+        put(0), put(1), put(0xFFFFFFFFu);  // tiles: free, blocked, bits
+        for (int r = 0; r < 32; ++r) put(r == 5 ? 1u : 0u);  // row 5, cell 0
+        put(0);
+        NavGrid g = nav_parse(d, 128);
+        assert(g.n == 64 && g.cell == 2 && !g.at(0, 0) && g.at(32, 0) && g.at(0, 37) && !g.at(1, 37) && g.at(-1, 0));
+        assert(throws([&] { auto e = d; e.push_back(0); nav_parse(e, 128); }));
+        assert(throws([&] { auto e = d; e[36] = 7; nav_parse(e, 128); }));
+        NavGrid c = nav_coarse(g, 2);
+        assert(c.n == 32 && c.cell == 4 && c.at(16, 0) && !c.at(0, 0));
+        // A wall across x = 20 from z = 0 to z = 50 on an open 64 x 64 grid: the way round passes its end.
+        NavGrid open;
+        open.n = 64, open.cell = 1, open.blocked.assign(64 * 64, 0);
+        for (int z = 0; z <= 50; ++z) open.blocked[static_cast<size_t>(z) * 64 + 20] = 1;
+        std::vector<float> p = nav_path(open, 10.5f, 10.5f, 30.5f, 10.5f);
+        assert(p.size() >= 4 && p.size() <= 8);  // two or three straight legs
+        bool round = false;
+        for (size_t i = 0; i + 1 < p.size(); i += 2) round |= p[i + 1] > 50;
+        assert(round && std::fabs(p[p.size() - 2] - 30.5f) < 0.01f && std::fabs(p.back() - 10.5f) < 0.01f);
+        for (int z = 0; z < 64; ++z) open.blocked[static_cast<size_t>(z) * 64 + 20] = 1;  // wall closed: no path
+        assert(nav_path(open, 10.5f, 10.5f, 30.5f, 10.5f).empty());
     }
 
     // CON: a bare run keeps the caller's arguments (control points are guarded by "if v_arg1 == host" twice).

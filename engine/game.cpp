@@ -80,6 +80,17 @@ Game::Game(const Vfs& vfs_, Con& con_, const Heightmap& hm_, const TerrainInfo& 
     // their team owns: a SpawnPoint's setGroup is a ControlPoint's spawnGroupId, owned by that flag's team (0: nobody).
     game = conquest_from(con);
     if (player >= 0) {
+        // Infantry navigation: the level's <Map>/Pathfinding/*infantr*level0map.raw (the name varies by level).
+        for (const std::string& p : vfs.paths(con.level_dir + "/pathfinding/")) {
+            if (p.find("infantr") == std::string::npos || p.size() < 13 || p.compare(p.size() - 13, 13, "level0map.raw") != 0) continue;
+            try {
+                NavGrid g = nav_parse(vfs.read(p), info.world_size);
+                nav = nav_coarse(g, std::max(1, static_cast<int>(2.0f / g.cell + 0.5f)));
+            } catch (const std::exception& e) {
+                std::printf("navigation %s: %s\n", p.c_str(), e.what());
+            }
+            break;
+        }
         for (auto& inst : con.instances) {
             const ConObject* t = inst.deleted ? nullptr : object_template(inst.name);
             if (!t || lower(t->type) != "spawnpoint") continue;
@@ -110,8 +121,8 @@ Game::Game(const Vfs& vfs_, Con& con_, const Heightmap& hm_, const TerrainInfo& 
             bots.push_back(std::move(b));
         }
         int n1 = static_cast<int>(std::count_if(bots.begin(), bots.end(), [](const Bot& b) { return b.team == 1; }));
-        std::printf("conquest: %zu flags, tickets %.0f / %.0f; bots: %d team 1, %zu team 2; %zu spawn points\n", game.flags.size(),
-                    game.tickets[1], game.tickets[2], n1, bots.size() - static_cast<size_t>(n1), spawn_points.size());
+        std::printf("conquest: %zu flags, tickets %.0f / %.0f; bots: %d team 1, %zu team 2; %zu spawn points; navigation %d x %d\n",
+                    game.flags.size(), game.tickets[1], game.tickets[2], n1, bots.size() - static_cast<size_t>(n1), spawn_points.size(), nav.n, nav.n);
     }
     // Combat: damage tables, the soldier's kit weapon.
     damage = damage_table(con.settings["materialmanager"]);
@@ -295,6 +306,7 @@ void Game::apply_hits() {
                 phys.character_position(b.ch, b.pos);
                 phys.kill_character(b.ch);
                 game.death(b.team);
+                ++deaths[static_cast<size_t>(std::clamp(b.team, 0, 2))];
                 if (h.tag == team) std::printf("%s (team %d) killed\n", b.tmpl.c_str(), b.team);
             }
             continue;
@@ -409,26 +421,52 @@ void Game::think(float t, float step) {
             continue;
         }
         b.seen_at = -1;
+        // The flag it already runs for, while it can still take it; else the nearest one its team does not hold
+        // (two flags at about the same distance would otherwise swap goals every step).
         const ConquestFlag* goal = nullptr;
         float best = 1e30f;
+        if (b.path_goal >= 0 && static_cast<size_t>(b.path_goal) < game.flags.size()) {
+            const ConquestFlag& f = game.flags[static_cast<size_t>(b.path_goal)];
+            if (f.team != b.team && !f.locked)
+                goal = &f, best = (f.pos[0] - b.pos[0]) * (f.pos[0] - b.pos[0]) + (f.pos[2] - b.pos[2]) * (f.pos[2] - b.pos[2]);
+        }
         for (const ConquestFlag& f : game.flags) {
             float g = (f.pos[0] - b.pos[0]) * (f.pos[0] - b.pos[0]) + (f.pos[2] - b.pos[2]) * (f.pos[2] - b.pos[2]);
-            if (f.team != b.team && !f.locked && g < best) best = g, goal = &f;
+            if (!goal && f.team != b.team && !f.locked && g < best) best = g, goal = &f;
         }
         b.moving = goal && best > 8 * 8;
         if (!b.moving) {
             phys.walk(b.ch, 0, 0, false);
             continue;
         }
-        float gx = goal->pos[0] - b.pos[0], gz = goal->pos[2] - b.pos[2], gl = std::sqrt(gx * gx + gz * gz);
-        gx /= gl, gz /= gl;
-        // Stuck (under 2 m in 2 s): sidestep at right angles for 1.5 s, a random side. shortcut: no path finding.
-        if (t >= b.check_at) {
+        // Route on the infantry map: planned when the goal changes, and again when stuck (at most every 5 s).
+        int gi = static_cast<int>(goal - game.flags.data());
+        bool stuck = false;
+        if (t >= b.check_at) {  // under 2 m in 2 s
             float mx = b.pos[0] - b.check_pos[0], mz = b.pos[2] - b.check_pos[1];
-            if (mx * mx + mz * mz < 4 && t > b.detour_until)
-                b.detour_until = t + 1.5f, b.detour_side = std::uniform_int_distribution<int>(0, 1)(rng) ? 1.0f : -1.0f;
+            stuck = mx * mx + mz * mz < 4;
             b.check_at = t + 2, b.check_pos[0] = b.pos[0], b.check_pos[1] = b.pos[2];
         }
+        if (nav.n > 0 && (gi != b.path_goal || (stuck && t >= b.replan_at))) {
+            b.path = nav_path(nav, b.pos[0], b.pos[2], goal->pos[0], goal->pos[2]);
+            b.waypoint = 0, b.path_goal = gi, b.replan_at = t + 5;
+            stuck = stuck && b.path.empty();
+        }
+        float tx = goal->pos[0], tz = goal->pos[2];
+        while (b.waypoint * 2 + 1 < b.path.size()) {
+            float wx = b.path[b.waypoint * 2], wz = b.path[b.waypoint * 2 + 1];
+            if ((wx - b.pos[0]) * (wx - b.pos[0]) + (wz - b.pos[2]) * (wz - b.pos[2]) > 2.5f * 2.5f) {
+                tx = wx, tz = wz;
+                break;
+            }
+            ++b.waypoint;
+        }
+        float gx = tx - b.pos[0], gz = tz - b.pos[2], gl = std::sqrt(gx * gx + gz * gz);
+        if (gl < 1e-3f) gx = 0, gz = 1, gl = 1;
+        gx /= gl, gz /= gl;
+        // Still stuck: sidestep at right angles for 1.5 s, a random side.
+        if (stuck && t > b.detour_until)
+            ++detours, b.detour_until = t + 1.5f, b.detour_side = std::uniform_int_distribution<int>(0, 1)(rng) ? 1.0f : -1.0f;
         if (t < b.detour_until) std::tie(gx, gz) = std::make_pair(gz * b.detour_side, -gx * b.detour_side);
         b.yaw = std::atan2(gx, gz) * 57.29578f;
         phys.walk(b.ch, gx * 4, gz * 4, t < b.detour_until);  // jumping while stuck helps over low walls
@@ -520,9 +558,11 @@ void Game::demo_play(float sim_seconds) {
     for (int i = 0; i < static_cast<int>(sim_seconds * 60) && !game.winner; ++i) walk(0, 0, false, false), tick();
     int alive = 0, running = 0;
     for (const Bot& b : bots) alive += !b.dead, running += !b.dead && b.moving;
-    std::printf("after %.0f s: %d of %zu bots alive, %d running for a flag; flags held %d / %d; tickets %.1f / %.1f%s; player %s\n",
+    std::printf("after %.0f s: %d of %zu bots alive, %d running for a flag; flags held %d / %d; tickets %.1f / %.1f%s; player %s; "
+                "bot deaths %d / %d; stuck sidesteps %d\n",
                 now, alive, bots.size(), running, game.owned(1), game.owned(2), game.tickets[1], game.tickets[2],
-                game.winner ? (game.winner == 1 ? ", team 1 won" : ", team 2 won") : "", player_dead ? "dead" : "alive");
+                game.winner ? (game.winner == 1 ? ", team 1 won" : ", team 2 won") : "", player_dead ? "dead" : "alive", deaths[1], deaths[2],
+                detours);
     // Parked vehicles after 5 s: those pushed away (spawned inside something) or tipped over.
     int moved = 0, tipped = 0;
     for (size_t i = 0; i < vehicles.size(); ++i) {
