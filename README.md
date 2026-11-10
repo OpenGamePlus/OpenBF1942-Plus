@@ -14,9 +14,9 @@ Clean-room reimplementation of the Refractor 1 engine so Battlefield 1942 runs o
 | 2. Scripts (`.con`) | done — interpreter; every level of the three mods loads |
 | 3. Static meshes (`.sm`) | done — every mesh parses; OBJ export opens in Blender |
 | 4. Terrain + map objects | done — every map renders with buildings, trees, detail textures, per-level fog and sky |
-| 5. Skinned meshes + animations | done — soldiers, held weapons, first-person arms, fire and reload animations |
-| 6. Physics + vehicles | done, uncalibrated — cars, tanks, aircraft, boats; crews with seats (F1–F8), seated soldiers |
-| 7. Gameplay | playable — conquest against bots on any level: kits, magazines, grenades, explosions, supply depots, crouch / prone, parachutes; bots route on the retail path-finding maps, drive and gun land vehicles and landing craft; sound and HUD |
+| 5. Skinned meshes + animations | mostly done — soldiers, held weapons, first-person arms, fire and reload animations |
+| 6. Physics + vehicles | in progress, uncalibrated — cars, tanks, aircraft, boats; crews with seats (F1–F8), seated soldiers |
+| 7. Gameplay | early prototype — a conquest round against bots runs on any level, but only small parts have been tried by a person, many rules are guesses and nothing is calibrated. Implemented: kits, magazines, grenades, explosions, supply depots, crouch / prone, parachutes; bots route on the retail path-finding maps, drive and gun land vehicles and landing craft; sound and HUD |
 | 8. Networking | research — one original client/server session recorded, query protocol documented |
 
 Compared side by side with the original client (Berlin, El Alamein): buildings, haze, sky, vehicles and sand within about 15 %; Berlin's streets are still darker than in the original.

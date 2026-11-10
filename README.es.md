@@ -14,9 +14,9 @@ Reimplementación clean-room del motor Refractor 1 para que Battlefield 1942 fun
 | 2. Scripts (`.con`) | hecho — intérprete; cargan todos los mapas de los tres mods |
 | 3. Mallas estáticas (`.sm`) | hecho — todas las mallas se leen; exportación OBJ abre en Blender |
 | 4. Terreno + objetos | hecho — todos los mapas con edificios, árboles, texturas de detalle, niebla y cielo de cada mapa |
-| 5. Mallas con esqueleto + animaciones | hecho — soldados, armas en la mano, brazos en primera persona, animaciones de disparo y recarga |
-| 6. Física + vehículos | hecho, sin calibrar — coches, tanques, aviones, barcos; tripulaciones con asientos (F1–F8), soldados sentados |
-| 7. Jugabilidad | jugable — conquista contra bots en cualquier mapa: kits, cargadores, granadas, explosiones, depósitos de munición, agacharse / tumbarse, paracaídas; los bots siguen los mapas de navegación originales, conducen y disparan vehículos terrestres y lanchas de desembarco; sonido y HUD |
+| 5. Mallas con esqueleto + animaciones | casi hecho — soldados, armas en la mano, brazos en primera persona, animaciones de disparo y recarga |
+| 6. Física + vehículos | en curso, sin calibrar — coches, tanques, aviones, barcos; tripulaciones con asientos (F1–F8), soldados sentados |
+| 7. Jugabilidad | prototipo temprano — una ronda de conquista contra bots funciona en cualquier mapa, pero una persona solo ha probado partes pequeñas, muchas reglas son suposiciones y nada está calibrado. Implementado: kits, cargadores, granadas, explosiones, depósitos de munición, agacharse / tumbarse, paracaídas; los bots siguen los mapas de navegación originales, conducen y disparan vehículos terrestres y lanchas de desembarco; sonido y HUD |
 | 8. Red | investigación — una sesión cliente/servidor original grabada, protocolo de consulta documentado |
 
 Comparado lado a lado con el cliente original (Berlín, El Alamein): edificios, bruma, cielo, vehículos y arena dentro de un 15 % aproximado; las calles de Berlín siguen más oscuras que en el original.
