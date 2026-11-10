@@ -2,6 +2,11 @@
 
 Append-only. Newest first. At most 3 bullets per stage.
 
+## 2026-11-10 — Berlin ground still open
+
+- The original's Berlin street is about 2.4 times our colour tile there, while El Alamein's sand matches tile ×1. Ruled out: a ×2 on the terrain, denser fog, a shifted colour map, patched tiles. Lead: `Terrain.ShadowAmbient` (per level).
+- Sand tint fixed: the detail texture is now normalised by brightness, not per channel.
+
 ## 2026-11-10 — vehicle colour and barbed wire
 
 - Vehicles looked less yellow than in the original because the sun was mirrored. `sunLightDirectionVec` with x and z negated brings El Alamein's tanks from 54/40/29 to 78/59/40 (original 88/67/44), with the sun opposite the baked terrain shadows.
