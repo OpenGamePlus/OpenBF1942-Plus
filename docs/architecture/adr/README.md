@@ -6,6 +6,7 @@ Accepted ADRs are never edited; a later ADR marks them `Superseded by NNNN`.
 |---|---|---|
 | [0001](0001-no-game-data.md) | Read assets from the user's install, never redistribute | Accepted |
 | [0002](0002-python-tools-cpp-engine.md) | Python stdlib for tools, C++ for the engine | Accepted |
+| [0003](0003-engine-stack.md) | Engine stack: C++17, CMake, SDL2, OpenGL 3.3 via epoxy | Accepted |
 
 ## Template (MADR-lite)
 

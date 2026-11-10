@@ -13,7 +13,8 @@ Clean-room reimplementation of the Refractor 1 engine so Battlefield 1942 runs o
 | 1. Archives (RFA) | done — list/extract, verified on the full retail install |
 | 2. Scripts (`.con`) | done — interpreter; every level of the three mods loads |
 | 3. Static meshes (`.sm`) | done — every mesh parses; OBJ export opens in Blender |
-| 4–8 | not started (see [roadmap](#roadmap)) |
+| 4. Terrain | in progress — C++ viewer renders every map; objects not placed yet |
+| 5–8 | not started (see [roadmap](#roadmap)) |
 
 ## Tools
 
@@ -26,6 +27,16 @@ python3 tools/con.py "<BF1942_DIR>" bf1942 Wake    # load a level, print summary
 python3 tools/sm.py "<BF1942_DIR>" bf1942 standardMesh/willy_hul_m1 out/jeep   # OBJ + textures
 python3 -m unittest discover tools     # tests
 python3 tools/check_docs.py            # documentation checks
+```
+
+## Engine
+
+C++17, CMake, SDL2, OpenGL 3.3 (libepoxy). On Debian/Ubuntu: `apt install cmake g++ libsdl2-dev libepoxy-dev`.
+
+```
+cmake -S . -B build && cmake --build build -j
+ctest --test-dir build
+build/obf_mapview "<BF1942_DIR>" bf1942 Wake      # right mouse: look, WASD/QE: move, shift: fast
 ```
 
 ## Roadmap

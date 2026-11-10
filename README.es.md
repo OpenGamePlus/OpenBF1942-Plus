@@ -13,7 +13,8 @@ Reimplementación clean-room del motor Refractor 1 para que Battlefield 1942 fun
 | 1. Archivos (RFA) | hecho — listar/extraer, verificado con la instalación original completa |
 | 2. Scripts (`.con`) | hecho — intérprete; cargan todos los mapas de los tres mods |
 | 3. Mallas estáticas (`.sm`) | hecho — todas las mallas se leen; exportación OBJ abre en Blender |
-| 4–8 | sin empezar (ver [hoja de ruta](#hoja-de-ruta)) |
+| 4. Terreno | en curso — el visor C++ muestra todos los mapas; aún sin objetos |
+| 5–8 | sin empezar (ver [hoja de ruta](#hoja-de-ruta)) |
 
 ## Herramientas
 
@@ -26,6 +27,16 @@ python3 tools/con.py "<BF1942_DIR>" bf1942 Wake    # cargar un mapa, ver resumen
 python3 tools/sm.py "<BF1942_DIR>" bf1942 standardMesh/willy_hul_m1 out/jeep   # OBJ + texturas
 python3 -m unittest discover tools     # tests
 python3 tools/check_docs.py            # chequeo de documentación
+```
+
+## Motor
+
+C++17, CMake, SDL2, OpenGL 3.3 (libepoxy). En Debian/Ubuntu: `apt install cmake g++ libsdl2-dev libepoxy-dev`.
+
+```
+cmake -S . -B build && cmake --build build -j
+ctest --test-dir build
+build/obf_mapview "<BF1942_DIR>" bf1942 Wake      # botón derecho: mirar, WASD/QE: mover, shift: rápido
 ```
 
 ## Hoja de ruta

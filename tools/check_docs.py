@@ -2,14 +2,14 @@
 """Documentation checker. Usage: check_docs.py [repo_root]  (exit 1 on problems)
 
 Flags: broken relative links in .md, repo paths in backticks that do not exist,
-personal data (drive paths, user home dirs, WSL mounts, IPv4, private keys) in .md/.py,
+personal data (drive paths, user home dirs, WSL mounts, IPv4, private keys) in .md/.py/.cpp/.h/.txt,
 PROJECT_MEMORY stages with more than 3 bullets.
 """
 import os
 import re
 import sys
 
-SKIP_DIRS = {".git", "__pycache__", "out"}
+SKIP_DIRS = {".git", "__pycache__", "out", "build"}
 SELF_TESTS = {"test_check_docs.py"}  # holds fake personal data on purpose
 LINK = re.compile(r"\[[^\]]*\]\(([^)\s]+)\)")
 TICK = re.compile(r"`([^`\s]+)`")
@@ -25,7 +25,7 @@ def _files(root):
     for dirpath, dirs, names in os.walk(root):
         dirs[:] = [d for d in dirs if d not in SKIP_DIRS]
         for n in names:
-            if n.endswith((".md", ".py")) and n not in SELF_TESTS:
+            if n.endswith((".md", ".py", ".cpp", ".h", ".txt")) and n not in SELF_TESTS:
                 yield os.path.join(dirpath, n)
 
 

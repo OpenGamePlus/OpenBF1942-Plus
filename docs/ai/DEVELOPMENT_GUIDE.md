@@ -7,10 +7,11 @@
 3. Verify locally against every matching file in `<BF1942_DIR>`; record the counts in the spec.
 4. Write `docs/formats/<format>.md`; mark anything not verified.
 5. Update SYSTEM_SUMMARY and add a PROJECT_MEMORY stage.
+6. C++ port (when the engine needs it): module in `engine/`, tests in `engine/test_engine.cpp`, row in boundaries.
 
 ## Quality bar
 
-- Tests and doc checks from the [SYSTEM_SUMMARY commands](SYSTEM_SUMMARY.md#commands) pass.
+- Tests, engine build without warnings, engine tests and doc checks from the [SYSTEM_SUMMARY commands](SYSTEM_SUMMARY.md#commands) pass.
 
 ## Commits
 
@@ -24,6 +25,7 @@
 | Files or folders in the tree | SYSTEM_SUMMARY tree |
 | A roadmap step's state | SYSTEM_SUMMARY, both READMEs |
 | A hard rule or stack choice | new ADR, ARCHITECTURE_NOTES, AGENTS.md |
+| An engine module or its dependencies | [boundaries.md](../architecture/boundaries.md), SYSTEM_SUMMARY tree |
 | A risk or open question | `docs/roadmap/debt.md` |
 | English README | Spanish `README.es.md` in the same commit |
 

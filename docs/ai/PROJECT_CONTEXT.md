@@ -24,7 +24,7 @@ Clean-room reimplementation of the Refractor 1 engine (Battlefield 1942, 2002). 
 | Part | Choice |
 |---|---|
 | Research tools | Python 3, stdlib only |
-| Engine | C++ / CMake (not started) |
+| Engine | C++17 / CMake / SDL2 / OpenGL 3.3 ([ADR 0003](../architecture/adr/0003-engine-stack.md)) |
 | Platform | developed on Linux (WSL); target: modern desktop OSes |
 
 ## Constraints

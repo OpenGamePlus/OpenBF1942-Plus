@@ -2,6 +2,12 @@
 
 Append-only. Newest first. At most 3 bullets per stage.
 
+## 2026-11-09 — C++ engine start: terrain viewer
+
+- `obf_mapview` (SDL2, OpenGL 3.3, epoxy) renders heightmap, colour tiles and water; all 78 levels open; RFA/LZO/VFS ported with bounds checks.
+- Height formula (`value × yScale / 256`, rows along z) fitted on all base maps; tile order picked as the only seamless variant.
+- Open: map objects in the viewer need a C++ CON interpreter; `texOffset`, material map and water rules unknown.
+
 ## 2026-11-09 — static meshes
 
 - `tools/sm.py` parses all 2,527 `.sm` (v9/v10, triangle lists and strips) and exports OBJ + MTL + textures; geometry checked visually.

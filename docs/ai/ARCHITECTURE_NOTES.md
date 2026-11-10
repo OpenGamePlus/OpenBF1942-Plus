@@ -4,7 +4,8 @@
 
 - Treat archive contents as untrusted input: validate sizes, refuse path escapes (`rfa.safe_path`).
 - Keep each format's reference implementation in `tools/` and its spec in `docs/formats/`.
-- Use synthetic data in tests.
+- Use synthetic data in tests (Python `unittest`, C++ `test_engine`).
+- Port a format to C++ only after its Python reference and spec exist; keep both in sync.
 - Tools build on each other one way: `rfa` ← `con` (VFS) ← `sm`.
 
 ## Must not
@@ -19,5 +20,6 @@
 |---|---|
 | No game data, read the user's install | [0001](../architecture/adr/0001-no-game-data.md) |
 | Python tools, C++ engine | [0002](../architecture/adr/0002-python-tools-cpp-engine.md) |
+| SDL2 + OpenGL 3.3 + epoxy, CPU texture decoding | [0003](../architecture/adr/0003-engine-stack.md) |
 
-Layer boundaries get their own boundaries document under docs/architecture once the C++ engine exists.
+Module rules and allowed dependencies: [boundaries.md](../architecture/boundaries.md).

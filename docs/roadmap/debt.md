@@ -10,5 +10,11 @@
 | Loose files vs archives priority | unverified | `con.py` assumes loose files win |
 | CON method case-insensitivity | unverified | subsystems verified, methods assumed |
 | SM collision blocks, footer, v10 byte, `alpha` field | open question | parsed as opaque, see [sm.md](../formats/sm.md) |
+| C++ reads `Terrain.con` by line scan | shortcut | replace with a C++ CON interpreter when objects are placed |
+| C++ VFS mounts archives only, not loose files | shortcut | add when a mod needs it |
+| Missing colour tiles drawn grey | unverified | original behaviour unknown; only over open sea so far |
+| `texOffsetX/Y`, material map, detail texture, terrain LOD | not implemented | see [terrain.md](../formats/terrain.md) |
+| Water drawn on every map | unverified | Berlin has `waterLevel` but no `Water.*` settings |
+| Little-endian hosts only | accepted | `memcpy` of file integers in C++ |
 | No model viewer in the engine | deliberate | step 3 exports OBJ for Blender; rendering starts with the map viewer |
 | Networking protocol | risk | undocumented; roadmap step 8 |
