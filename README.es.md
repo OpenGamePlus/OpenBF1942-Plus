@@ -13,11 +13,13 @@ Reimplementación clean-room del motor Refractor 1 para que Battlefield 1942 fun
 | 1. Archivos (RFA) | hecho — listar/extraer, verificado con la instalación original completa |
 | 2. Scripts (`.con`) | hecho — intérprete; cargan todos los mapas de los tres mods |
 | 3. Mallas estáticas (`.sm`) | hecho — todas las mallas se leen; exportación OBJ abre en Blender |
-| 4. Terreno + objetos | hecho — el visor C++ muestra todos los mapas con edificios y árboles |
-| 5. Mallas con esqueleto + animaciones | en curso — soldados y banderas animados en el visor (`--soldier USSoldier`) |
-| 6. Física + vehículos | en curso — coches, tanques, aviones y barcos en el visor (`--drive Willy`, `Sherman`, `Spitfire`, `LCVP`); manejo aún sin calibrar |
-| 7. Jugabilidad | empezado — una partida de conquista contra bots (`--play 2 --kit 1`): banderas, tickets, victoria; conducir cualquier vehículo aparcado (E), disparar (clic izquierdo); blindaje y tablas de daño originales |
-| 8 | sin empezar (ver [hoja de ruta](#hoja-de-ruta)) |
+| 4. Terreno + objetos | hecho — todos los mapas con edificios, árboles, texturas de detalle, niebla y cielo de cada mapa |
+| 5. Mallas con esqueleto + animaciones | hecho — soldados, armas en la mano, brazos en primera persona, animaciones de disparo y recarga |
+| 6. Física + vehículos | hecho, sin calibrar — coches, tanques, aviones, barcos; tripulaciones con asientos (F1–F8), soldados sentados |
+| 7. Jugabilidad | jugable — conquista contra bots en cualquier mapa: kits, cargadores, granadas, explosiones, depósitos de munición, agacharse / tumbarse, paracaídas; los bots siguen los mapas de navegación originales, conducen y disparan vehículos terrestres y lanchas de desembarco; sonido y HUD |
+| 8. Red | investigación — una sesión cliente/servidor original grabada, protocolo de consulta documentado |
+
+Comparado lado a lado con el cliente original (Berlín, El Alamein): edificios, bruma, cielo, vehículos y arena dentro de un 15 % aproximado; las calles de Berlín siguen más oscuras que en el original.
 
 ## Herramientas
 
@@ -39,19 +41,31 @@ C++17, CMake, SDL2, OpenGL 3.3 (libepoxy), Jolt Physics (CMake lo descarga al co
 ```
 cmake -S . -B build && cmake --build build -j
 ctest --test-dir build
-build/obf_mapview "<BF1942_DIR>" bf1942 Wake      # botón derecho: mirar, WASD/QE: mover, shift: rápido
-build/obf_sim "<BF1942_DIR>" bf1942 El_Alamein --play 2 --sim 600   # sin ventana: 10 minutos de conquista, en texto
-build/obf_mapview "<BF1942_DIR>" bf1942 El_Alamein --drive Willy   # WASD conduce, el ratón apunta torretas (con --play el ratón siempre mira; F10 lo libera), clic izquierdo dispara, R recarga, 1-9 armas, G detona cargas, ctrl agacharse, Z tumbarse, V primera / tercera persona, F1-F8 asientos; aviones: W/S gas, flechas, A/D timón
+build/obf_mapview "<BF1942_DIR>" bf1942 El_Alamein --play 2      # jugar conquista (equipo 2, asalto)
+build/obf_mapview "<BF1942_DIR>" bf1942 Wake                     # cámara libre
+build/obf_mapview "<BF1942_DIR>" bf1942 El_Alamein --drive Willy  # un vehículo delante de la cámara
+build/obf_sim "<BF1942_DIR>" bf1942 El_Alamein --play 2 --sim 600 # sin ventana: 10 minutos de conquista, en texto
 ```
+
+Controles al jugar:
+
+| | |
+|---|---|
+| Moverse, mirar | WASD, ratón (capturado; F10 lo libera), shift camina, espacio salta (cayendo: abre el paracaídas) |
+| Armas | clic izquierdo dispara, R recarga, 1–9 armas del kit, G detona cargas explosivas |
+| Postura, vista | ctrl izquierdo agacharse, Z tumbarse, V primera / tercera persona |
+| Vehículos | E subir / bajar, F1–F8 cambiar de asiento, WASD conducir, el ratón apunta torretas |
+| Aviones | W / S gas, flechas cabeceo y alabeo, A / D timón |
+| Cámara libre | botón derecho mira, WASD / QE mueven, shift rápido; C muestra mallas de colisión; Esc sale |
 
 ## Hoja de ruta
 
 Objetivo: jugar con clientes y servidores originales de Battlefield 1942. Lo siguiente, en orden ([hoja de ruta completa, en inglés](docs/roadmap/roadmap.md)):
 
 1. **Consolidar** (hecho) — separar el visor en una biblioteca de juego y un renderizador; integración continua.
-2. **Investigación del protocolo de red** — grabar y decodificar el tráfico entre cliente y servidor originales (en paralelo con lo siguiente).
-3. **Navegación de la IA** (primera parte hecha), **audio** (suenan armas y motores), **HUD** (primera parte hecha).
-4. **Soldados y armas completos**, **tripulaciones de vehículos**, **efectos**.
+2. **Investigación del protocolo de red** (una sesión grabada) — decodificar el tráfico entre cliente y servidor originales (en paralelo con lo siguiente).
+3. **Navegación de la IA**, **audio**, **HUD** (primeras partes hechas).
+4. **Soldados y armas completos** (casi hecho), **tripulaciones de vehículos** (tierra y mar hechos, pilotos pendientes), **efectos**.
 5. **Fidelidad** — medir el original y calibrar.
 6. **Modos de juego**, **menús**.
 7. **Red** — servidor y cliente propios, luego compatibilidad con el original.

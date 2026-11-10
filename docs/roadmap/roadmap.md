@@ -7,10 +7,10 @@ Goal: a modern engine that plays Battlefield 1942 from the user's retail install
 | Original step | State |
 |---|---|
 | 1–4 Archives, scripts, meshes, terrain + map objects | done, verified on all 78 levels |
-| 5 Skinned meshes, animation | done except tracks and hand IK (`AnimatedBundle`) |
-| 6 Physics, vehicles | cars, tanks, aircraft, boats, moving parts; handling uncalibrated |
-| 7 Gameplay | soldier, kits, weapons, retail damage tables, conquest against bots |
-| 8 Networking | research started: [network.md](../formats/network.md) |
+| 5 Skinned meshes, animation | done: soldiers, held weapons, first person, fire / reload, seated soldiers; tracks open |
+| 6 Physics, vehicles | cars, tanks, aircraft, boats, moving parts, crews and seats; handling uncalibrated |
+| 7 Gameplay | conquest against bots with full kits, explosions, supply depots, postures, parachutes, bot crews, sound and HUD; look compared with the original client |
+| 8 Networking | research: one session recorded, query protocol documented ([network.md](../formats/network.md)) |
 
 ## Order and why
 

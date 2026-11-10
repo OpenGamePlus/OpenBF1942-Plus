@@ -13,11 +13,13 @@ Clean-room reimplementation of the Refractor 1 engine so Battlefield 1942 runs o
 | 1. Archives (RFA) | done — list/extract, verified on the full retail install |
 | 2. Scripts (`.con`) | done — interpreter; every level of the three mods loads |
 | 3. Static meshes (`.sm`) | done — every mesh parses; OBJ export opens in Blender |
-| 4. Terrain + map objects | done — C++ viewer renders every map with buildings and trees |
-| 5. Skinned meshes + animations | in progress — soldiers and flags animate in the viewer (`--soldier USSoldier`) |
-| 6. Physics + vehicles | in progress — cars, tanks, aircraft and boats in the viewer (`--drive Willy`, `Sherman`, `Spitfire`, `LCVP`); handling not yet calibrated |
-| 7. Gameplay | started — a conquest game against bots (`--play 2 --kit 1`): flags, tickets, win; drive any parked vehicle (E), fire (left mouse); retail armour and damage tables |
-| 8 | not started (see [roadmap](#roadmap)) |
+| 4. Terrain + map objects | done — every map renders with buildings, trees, detail textures, per-level fog and sky |
+| 5. Skinned meshes + animations | done — soldiers, held weapons, first-person arms, fire and reload animations |
+| 6. Physics + vehicles | done, uncalibrated — cars, tanks, aircraft, boats; crews with seats (F1–F8), seated soldiers |
+| 7. Gameplay | playable — conquest against bots on any level: kits, magazines, grenades, explosions, supply depots, crouch / prone, parachutes; bots route on the retail path-finding maps, drive and gun land vehicles and landing craft; sound and HUD |
+| 8. Networking | research — one original client/server session recorded, query protocol documented |
+
+Compared side by side with the original client (Berlin, El Alamein): buildings, haze, sky, vehicles and sand within about 15 %; Berlin's streets are still darker than in the original.
 
 ## Tools
 
@@ -39,19 +41,31 @@ C++17, CMake, SDL2, OpenGL 3.3 (libepoxy), Jolt Physics (downloaded by CMake on 
 ```
 cmake -S . -B build && cmake --build build -j
 ctest --test-dir build
-build/obf_mapview "<BF1942_DIR>" bf1942 Wake      # right mouse: look, WASD/QE: move, shift: fast
-build/obf_sim "<BF1942_DIR>" bf1942 El_Alamein --play 2 --sim 600   # headless: 10 minutes of conquest, printed
-build/obf_mapview "<BF1942_DIR>" bf1942 El_Alamein --drive Willy   # WASD drives, the mouse aims turrets (with --play the mouse always looks; F10 frees it), left mouse fires, R reloads, 1-9 weapons, G detonates packs, ctrl crouches, Z prone, V first / third person, F1-F8 seats; aircraft: W/S throttle, arrows, A/D rudder
+build/obf_mapview "<BF1942_DIR>" bf1942 El_Alamein --play 2      # play conquest (team 2, assault kit)
+build/obf_mapview "<BF1942_DIR>" bf1942 Wake                     # free camera
+build/obf_mapview "<BF1942_DIR>" bf1942 El_Alamein --drive Willy  # a vehicle in front of the camera
+build/obf_sim "<BF1942_DIR>" bf1942 El_Alamein --play 2 --sim 600 # headless: 10 minutes of conquest, printed
 ```
+
+Controls when playing:
+
+| | |
+|---|---|
+| Move, look | WASD, mouse (captured; F10 frees it), shift walks, space jumps (falling: opens the parachute) |
+| Weapons | left mouse fires, R reloads, 1–9 kit weapons, G detonates explosive packs |
+| Posture, view | left ctrl crouches, Z lies down, V first / third person |
+| Vehicles | E gets in / out, F1–F8 change seat, WASD drives, mouse aims turrets |
+| Aircraft | W / S throttle, arrows pitch and roll, A / D rudder |
+| Free camera | right mouse looks, WASD / QE move, shift fast; C shows collision meshes; Esc quits |
 
 ## Roadmap
 
 Goal: play with original Battlefield 1942 clients and servers. Next, in order ([full roadmap](docs/roadmap/roadmap.md)):
 
 1. **Consolidate** (done) — split the viewer into a game library and a renderer; CI.
-2. **Network protocol research** — record and decode original client/server traffic (alongside the steps below).
-3. **AI navigation** (first part done), **audio** (weapons and engines play), **HUD** (first part done).
-4. **Complete soldiers and weapons**, **vehicle crews**, **effects**.
+2. **Network protocol research** (one session recorded) — decode original client/server traffic (alongside the steps below).
+3. **AI navigation**, **audio**, **HUD** (first parts done).
+4. **Complete soldiers and weapons** (mostly done), **vehicle crews** (land and sea done, pilots open), **effects**.
 5. **Fidelity** — measure the original and calibrate.
 6. **Game modes**, **menus**.
 7. **Networking** — our server and client, then interoperability with the original.
