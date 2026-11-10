@@ -44,6 +44,12 @@ Values: quaternion component = `v / 32767` (unit length, verified); position = `
 
 Bones not driven by any active animation keep the skeleton's local matrix. Soldiers combine a lower-body animation (`Bip01`, pelvis, legs, `Spine Root`) with an upper-body one (spine, arms, head).
 
+## Animation states
+
+`animations/animationstates.con` (and the files it runs) define `AnimationStateMachine.createState <name>` followed by `addAnimation <baf> <speed> <flags>`, transitions and idles. Templates select states with `setAnimationState [index] <state>`: flags use `FlagBlow`; soldiers use index 0 (lower body, `Lb_Stand`) and 1 (upper body, `Ub_StandAim`, completed with the weapon name, e.g. `Ub_StandAimThompson`).
+
+The viewer plays the first animation of each state, looping at 25 frames per second × speed — the frame rate is a guess. Transitions, idles and weapon selection are not implemented.
+
 ## Soldier root (unverified)
 
-The root `Bip01` carries 3ds Max space (translation `(0, 0, -1)`, ≈ -90° about z). With its transform replaced by identity the skeleton is Y-up and faces -z; the viewer then turns it 180° about y. The standing pose shows ≈ 20° hip flexion that could not be confirmed against the original game.
+The root `Bip01` carries 3ds Max space (translation `(0, 0, -1)`, ≈ -90° about z). Replacing it by a pure upward translation of its length (the pelvis height, 0.93–1.0 m) leaves the skeleton Y-up, standing on the object origin and facing -z; the viewer then turns it 180° about y. The standing pose shows ≈ 20° hip flexion that could not be confirmed against the original game.

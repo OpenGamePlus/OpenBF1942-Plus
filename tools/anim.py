@@ -124,8 +124,8 @@ def quat_local(q, p):
 def pose(skeleton, animations=(), frame=0, biped_root=False):
     """World matrix per bone name. Bones an animation covers use its frame; others keep the skeleton.
 
-    biped_root: replace the root ("Bip01") with identity. Its animated transform is 3ds Max space;
-    without it a soldier is Y-up facing -z. Chosen visually, unverified against the original engine.
+    biped_root: replace the root ("Bip01") by a lift of its translation length (the pelvis height). Its
+    animated transform is 3ds Max space; without it a soldier is Y-up facing -z. Chosen visually, unverified.
     """
     local = {name: ske_local(m) for name, _, m in skeleton}
     for names, nframes, bones in animations:
@@ -134,7 +134,9 @@ def pose(skeleton, animations=(), frame=0, biped_root=False):
             if name in local:
                 local[name] = quat_local([c[f] for c in ch[:4]], [c[f] for c in ch[4:]])
     if biped_root:
-        local[skeleton[0][0]] = [[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]]
+        r = local[skeleton[0][0]]
+        h = (r[0][3] ** 2 + r[1][3] ** 2 + r[2][3] ** 2) ** 0.5
+        local[skeleton[0][0]] = [[1, 0, 0, 0], [0, 1, 0, h], [0, 0, 1, 0], [0, 0, 0, 1]]
     world = {}
     for name, parent, _ in skeleton:
         world[name] = local[name] if parent < 0 else _mul(world[skeleton[parent][0]], local[name])

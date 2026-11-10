@@ -23,7 +23,7 @@ PERSONAL = [
 
 def _files(root):
     for dirpath, dirs, names in os.walk(root):
-        dirs[:] = [d for d in dirs if d not in SKIP_DIRS]
+        dirs[:] = [d for d in dirs if d not in SKIP_DIRS and not d.startswith("build")]  # build*/: local CMake trees
         for n in names:
             if n.endswith((".md", ".py", ".cpp", ".h", ".txt")) and n not in SELF_TESTS:
                 yield os.path.join(dirpath, n)

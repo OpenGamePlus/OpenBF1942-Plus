@@ -2,6 +2,24 @@
 
 Append-only. Newest first. At most 3 bullets per stage.
 
+## 2026-11-10 — C++ review fixes
+
+- Independent review found three confirmed crashes on malformed mods: `std::regex` stack overflow in `.rs`, self-recursive `run`, NaN frame index; plus template fan-out and unchecked allocation sizes.
+- All fixed with regression tests; rules added to boundaries (no regex on file data, budgets on data-driven recursion).
+- Open: Unicode whitespace and lone-`if` handling differ slightly from Python on unusual files.
+
+## 2026-11-10 — level look and collision meshes
+
+- Viewer draws the sky box, fog to the map's view distance and sun lighting from `Init.con`; terrain stays unlit (baked).
+- Collision blocks decoded to triangles + `MaterialManager` ids (all 1,815 blocks); wireframes overlay the visible geometry exactly.
+- Open: the collision tree, the role of a second block, fog start and light scale.
+
+## 2026-11-10 — animated meshes in the C++ viewer
+
+- `engine/anim.*` ports the readers, pose and skinning; the viewer skins control-point flags and a `--soldier` demo with lower + upper body states.
+- Biped root kept only as pelvis height; skinned meshes lit with face normals since no bind pose exists.
+- Open: frame rate (25 fps guessed), state machine transitions, held weapons, the 20° stance lean.
+
 ## 2026-11-10 — skeletons, skins, animations (Python)
 
 - Decoded `.ske`, `.skn` (with bone name table) and `.baf` (per-channel RLE of i16); all 1,799 files parse to their end; skin links to `.sm` vertices by position.

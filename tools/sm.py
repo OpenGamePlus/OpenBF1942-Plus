@@ -61,6 +61,32 @@ def parse(d):
     return {"version": version, "bbox": bbox, "collision": collision, "lods": lods, "end": o}
 
 
+COLLISION_MAGIC = 0xEB97C2FA
+
+
+def parse_collision(b):
+    """Collision block (also inside .tm) -> {vertices: [(x, y, z, material)], faces: [(a, b, c, material)], tree: bytes}.
+
+    The tree after the faces (spatial index) is kept opaque; physics can rebuild one from the triangles.
+    """
+    magic, version, nv = struct.unpack_from("<3I", b, 0)
+    if magic != COLLISION_MAGIC or version != 5:
+        raise ValueError("not a version 5 collision block")
+    o = 12
+    vertices = []
+    for _ in range(nv):  # 16 bytes: xyz, u16 material, 2 bytes padding
+        x, y, z, mat = struct.unpack_from("<3fH", b, o)
+        vertices.append((x, y, z, mat))
+        o += 16
+    (nf,) = struct.unpack_from("<I", b, o)
+    o += 4
+    faces = [struct.unpack_from("<4H", b, o + 8 * i) for i in range(nf)]
+    o += 8 * nf
+    if o > len(b) or any(max(f[:3]) >= nv for f in faces):
+        raise ValueError("bad collision block")
+    return {"vertices": vertices, "faces": faces, "tree": b[o:]}
+
+
 def triangles(m):
     idx = m["indices"]
     if m["prim"] == TRIANGLE_LIST:

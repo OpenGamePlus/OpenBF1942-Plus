@@ -7,6 +7,7 @@
 #include <string>
 #include <vector>
 
+#include "anim.h"
 #include "con.h"
 #include "dds.h"
 #include "math.h"
@@ -97,7 +98,10 @@ int main() {
         u32(10), u32(0);
         for (int i = 0; i < 6; ++i) f32(0);
         d.push_back(0);                         // v10 byte
-        u32(1), u32(3), d.insert(d.end(), {1, 2, 3});  // one collision block of 3 bytes
+        // One collision block: 3 vertices (16 bytes each), 1 face, then a 4-byte "tree" the parser ignores.
+        u32(1), u32(12 + 48 + 4 + 8 + 4), u32(0xEB97C2FA), u32(5), u32(3);
+        for (int v = 0; v < 3; ++v) f32(static_cast<float>(v)), f32(0), f32(0), u32(50);
+        u32(1), d.insert(d.end(), {0, 0, 1, 0, 2, 0, 50, 0}), u32(0);
         u32(1), u32(1), u32(4), d.insert(d.end(), {'M', 'a', 't', '0'});
         u32(0), u32(0), u32(0), u32(4), u32(0x411), u32(32), u32(3), u32(3), u32(0);
         for (int v = 0; v < 3; ++v)
@@ -105,6 +109,10 @@ int main() {
         d.insert(d.end(), {0, 0, 1, 0, 2, 0});
         SmMesh m = sm_parse(d);
         assert(m.lods.size() == 1 && m.lods[0][0].name == "Mat0" && m.lods[0][0].vertex_count() == 3);
+        assert(m.collision.size() == 1 && m.collision[0].faces.size() == 3 && m.collision[0].material[0] == 50);
+        assert(m.collision[0].vertices[6] == 2.0f);
+        uint8_t bad[] = {0xfa, 0xc2, 0x97, 0xeb, 5, 0, 0, 0, 1, 0, 0, 0};
+        assert(throws([&] { collision_parse(bad, sizeof bad); }));  // vertex data missing
         assert(m.lods[0][0].vertices[16] == 2.0f && sm_triangles(m.lods[0][0]).size() == 3);
         d[d.size() - 2] = 7;  // index out of range
         assert(throws([&] { sm_parse(d); }));
@@ -149,6 +157,67 @@ int main() {
         assert(tm.vertices.size() == 40 && tm.vertices[30] == 3.0f && tm.vertices[39] == 1.5f);
         d[d.size() - 10] = 4;  // stored index count no longer matches the groups
         assert(throws([&] { tm_parse(d); }));
+    }
+
+    // Animation: same synthetic files as tools/test_anim.py.
+    {
+        std::vector<uint8_t> d;
+        auto put = [&](const void* p, size_t n) { d.insert(d.end(), static_cast<const uint8_t*>(p), static_cast<const uint8_t*>(p) + n); };
+        auto u16 = [&](uint16_t v) { put(&v, 2); };
+        auto u32 = [&](uint32_t v) { put(&v, 4); };
+        auto f32 = [&](float v) { put(&v, 4); };
+        auto nm = [&](const std::string& s) { u16(static_cast<uint16_t>(s.size() + 1)); put(s.c_str(), s.size() + 1); };
+        // Skeleton: Root at origin, Tip 1 m along x.
+        u32(1), u32(2), nm("Root"), u16(0xffff);
+        for (float f : {1.f, 0.f, 0.f, 0.f, 0.f, 1.f, 0.f, 0.f, 0.f, 0.f, 1.f, 0.f}) f32(f);
+        nm("Tip"), u16(0);
+        for (float f : {1.f, 0.f, 0.f, 1.f, 0.f, 1.f, 0.f, 0.f, 0.f, 0.f, 1.f, 0.f}) f32(f);
+        Skeleton ske = ske_parse(d);
+        assert(ske.size() == 2 && ske[1].parent == 0 && ske[1].local.m[12] == 1.0f);
+        // Skin: one vertex at (1, 0.5, 0) on Tip with offset (0, 0.5, 0).
+        d.clear();
+        u32(1), u32(1), f32(1), f32(0.5f), f32(0), d.push_back(1), u16(0), f32(1), f32(0), f32(0.5f), f32(0), u16(1), nm("Tip");
+        Skin skin = skn_parse(d);
+        assert(skin.bones.size() == 1 && skin.bones[0] == "Tip");
+        // Animation: Tip, 2 frames, 90 deg about z then identity, x = 2 m (prec 10).
+        d.clear();
+        u32(3), u16(1), nm("Tip"), u32(2), d.push_back(10), u16(17);
+        auto lit = [&](int16_t a, int16_t b) { u16(3), d.push_back(2), d.push_back(0), put(&a, 2), put(&b, 2); };
+        auto rep = [&](int16_t a) { u16(2), d.push_back(0x82), d.push_back(0), put(&a, 2); };
+        lit(0, 0), rep(0), lit(23170, 0), lit(23170, 32767), rep(2 << 10), rep(0), rep(0);
+        Animation a = baf_parse(d);
+        assert(a.frames == 2 && std::fabs(a.channel(0, 4)[0] - 2.0f) < 1e-6f);
+        std::vector<float> verts = {1, 0.5f, 0};
+        auto map = skin_map(skin, verts, 3);
+        std::vector<float> out;
+        skin_apply(skin, map, bone_index(skin, ske), pose(ske, {}, 0), verts, 3, out);
+        assert(std::fabs(out[0] - 1) < 1e-5f && std::fabs(out[1] - 0.5f) < 1e-5f);  // rest: unchanged
+        skin_apply(skin, map, bone_index(skin, ske), pose(ske, {&a}, 0), verts, 3, out);
+        assert(std::fabs(out[0] - 1.5f) < 1e-3f && std::fabs(out[1]) < 1e-3f);    // frame 0: rotated, moved
+        d.resize(d.size() - 2);
+        assert(throws([&] { baf_parse(d); }));
+    }
+
+    // Regressions from the code review: malformed input must not crash.
+    {
+        std::string unclosed = "subshader \"a\" \"b\" {" + std::string(300000, 'x');
+        assert(rs_parse(unclosed).empty());  // std::regex used to overflow the stack here
+        auto rs = rs_parse("subshader \"M\" \"S\" { texture \"t/x\" ; }");
+        assert(rs["m"]["texture"] == "t/x");  // trailing space before ';' (matches tools/sm.py)
+        Vfs v;
+        v.add("loop.con", std::vector<uint8_t>{'r', 'u', 'n', ' ', 'l', 'o', 'o', 'p', '\n'});
+        Con c(v);
+        c.run("loop.con");  // self-recursion stops instead of overflowing the stack
+        assert(!c.unknown.empty());
+        Skeleton one{{"Root", -1, Mat4::identity()}};
+        Animation a1;
+        a1.bones = {"Root"};
+        a1.frames = 1;
+        a1.channels.assign(7, std::vector<float>{0});
+        a1.channels[3][0] = 1;
+        auto w = pose(one, {&a1}, std::nanf(""));  // NaN frame (speed "nan" in a script) is clamped
+        assert(w.size() == 1 && w[0].m[15] == 1);
+        assert(throws([] { parse_terrain_con("GeometryTemplate.worldSize nan\nGeometryTemplate.yScale 1\nGeometryTemplate.file h\n"); }));
     }
 
     std::puts("engine tests ok");

@@ -33,6 +33,20 @@ Check: 57–90 % of placed objects per map sit within 0.5 m of the nearest sampl
 - `ntiles × ntiles` grid over the whole map; `AA` along x, `BB` along z; texture u along x, v along z. Verified visually: only this mapping is seamless.
 - Grids can be sparse (Battle of Britain, Tobruk): tiles over open sea are missing; the grid size is the highest index + 1.
 
+## Sky, sun, fog, light (`Init.con`, `Init/SkyAndSun.con`)
+
+| Setting | Use in the viewer | Verified |
+|---|---|---|
+| `GeometryTemplate.create StandardMesh SkyBox` + `file` | sky box `.sm` (±2000 m, 6 faces), centred on the camera, no depth write | visually |
+| `Sky.setRotAngle` | sky box yaw in degrees | no |
+| `sky.sunLightDirectionVec` | direction towards the sun for mesh lighting | no |
+| `renderer.globalAmbientColor` + `renderer.ambientColor`, `renderer.diffuseColor` | mesh light = 2 × (ambient + diffuse · N·L), capped | no (×2 assumed) |
+| `renderer.fogColorVec`, `Game.setViewDistance` | linear fog from half the view distance to the view distance | end only |
+
+Values seen: view distance 500 m (Wake, El Alamein), 200 m (Bulge), 100 m (Berlin). Lens flares, clouds (`Sky.addCloud`) and `renderer.specularColor` are not used yet.
+
 ## Material map (`Materialmap.raw`)
 
-`materialSize²` bytes. Not decoded.
+`materialSize²` bytes, one `MaterialManager` id per cell (4 m on the maps checked), same row/column orientation assumed as the heightmap (unverified). Every value on Wake, El Alamein and Berlin is a defined material: Wake is mostly 11 "Wet sand", El Alamein 10 "Dry sand" and 12 "Rock", Berlin 7 "Reserved (Outside map)".
+
+Materials are defined in `bf1942/game/materialManagerdefine.con` (`MaterialManager.material <id>` then `materialFriction`, `materialElasticity`, `materialResistance`, `materialDamage`, `materialAttGroup`, `materialDefGroup`; 155 ids, 0–257); `materialManagerSettings.con` holds the attack × defence `damageMod` matrix. Collision faces use the same ids.

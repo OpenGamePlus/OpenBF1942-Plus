@@ -34,10 +34,19 @@ void Vfs::mount_mod(const std::string& game_dir, const std::string& mod) {
     if (!f) throw std::runtime_error("cannot open " + init.string());
     std::vector<std::string> paths;
     std::string line;
+    bool in_rem = false;
+    // shortcut: line scan honouring rem/beginRem only; `if` blocks in init.con are not evaluated.
     while (std::getline(f, line)) {
         std::istringstream in(line);
         std::string cmd, arg;
-        if (in >> cmd >> arg && key(cmd) == "game.addmodpath") paths.push_back(arg);
+        if (!(in >> cmd)) continue;
+        cmd = key(cmd);
+        if (in_rem) {
+            in_rem = cmd != "endrem";
+            continue;
+        }
+        if (cmd == "beginrem") in_rem = true;
+        else if (cmd == "game.addmodpath" && in >> arg) paths.push_back(arg);
     }
     if (paths.empty()) paths.push_back("Mods/" + mod + "/");
     for (auto it = paths.rbegin(); it != paths.rend(); ++it) {

@@ -58,7 +58,9 @@ How `Object.create` instances become meshes (`engine/scene.cpp`):
 | Children | `addTemplate X`; the following `setPosition`/`setRotation` place that child relative to the parent | visually: tanks and the B-17 assemble correctly |
 | Spawners | `ObjectSpawner` template: `setObjectTemplate <team> <template>`; the instance's `setTeam` picks one | the viewer shows the instance's team, else the first listed; in game the control point owner decides |
 
-Not drawn yet: `AnimatedMesh` geometry (flags, soldiers), effects.
+| Animated meshes | `AnimatedMesh` geometry = `standardMesh/<file>.sm` + `setSkin`; skeleton (`createSkeleton`) and states (`setAnimationState`) come from the owning template or a parent | flags wave on control points; soldiers via `--soldier` |
+
+Not drawn yet: effects, weapons held by soldiers.
 
 Parity: `engine/con.cpp` and `tools/con.py` produce the same instance count on all 78 levels.
 

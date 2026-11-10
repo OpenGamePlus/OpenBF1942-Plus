@@ -52,17 +52,31 @@ void Con::run(const std::string& target, const std::vector<std::string>& args, c
         ++missing[lower(target)];  // retail scripts reference optional/missing files
         return;
     }
+    if (depth_ >= 64) {
+        ++unknown["run nesting too deep: " + path];
+        return;
+    }
     Scope scope;
     for (size_t i = 0; i < args.size(); ++i) scope["v_arg" + std::to_string(i + 1)] = args[i];
     auto bytes = vfs_.read(path);
-    execute(std::string(bytes.begin(), bytes.end()), scope, dirname(path));
+    ++depth_;
+    try {
+        execute(std::string(bytes.begin(), bytes.end()), scope, dirname(path));
+    } catch (...) {
+        --depth_;
+        throw;
+    }
+    --depth_;
 }
 
 void Con::execute(const std::string& text, Scope& scope, const std::string& cur_dir) {
     bool in_rem = false;
     std::vector<int> conds;  // per open if: 1 taking, 0 skipping, -1 parent inactive
     auto all_true = [&] { return std::all_of(conds.begin(), conds.end(), [](int c) { return c == 1; }); };
-    std::istringstream lines(text);
+    std::string norm = text;  // old-Mac "\r" endings count as line breaks, as in Python's splitlines()
+    for (auto& c : norm)
+        if (c == '\r') c = '\n';
+    std::istringstream lines(norm);
     std::string raw;
     while (std::getline(lines, raw)) {
         std::istringstream ws(raw);

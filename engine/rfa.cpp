@@ -102,6 +102,7 @@ std::vector<std::pair<std::string, RfaEntry>> rfa_index(const std::string& path)
     if (!f) throw std::runtime_error("cannot open " + path);
     std::vector<uint8_t> head(8);
     f.read(reinterpret_cast<char*>(head.data()), 8);
+    if (f.gcount() != 8) throw std::runtime_error("RFA: file too short: " + path);
     uint32_t dir_off = u32(head, 0);
     bool compressed = u32(head, 4) != 0;
     f.seekg(0, std::ios::end);
@@ -126,7 +127,12 @@ std::vector<std::pair<std::string, RfaEntry>> rfa_index(const std::string& path)
 }
 
 std::vector<uint8_t> rfa_read(const RfaEntry& e) {
-    std::ifstream f(e.archive, std::ios::binary);
+    std::ifstream f(e.archive, std::ios::binary | std::ios::ate);
+    // Sizes come from the archive: check them against the file before allocating.
+    uint64_t file_size = static_cast<uint64_t>(f.tellg());
+    if (!f || static_cast<uint64_t>(e.offset) + (e.compressed ? e.stored : e.size) > file_size)
+        throw std::runtime_error("RFA: entry outside archive");
+    if (e.compressed && e.size > 256u * 1024 * 1024) throw std::runtime_error("RFA: implausible file size");
     std::vector<uint8_t> raw(e.compressed ? e.stored : e.size);
     f.seekg(e.offset);
     f.read(reinterpret_cast<char*>(raw.data()), static_cast<std::streamsize>(raw.size()));
@@ -140,6 +146,7 @@ std::vector<uint8_t> rfa_read(const RfaEntry& e) {
     for (uint32_t i = 0; i < nseg; ++i) {
         uint32_t cs = u32(raw, 4 + 12 * i), us = u32(raw, 8 + 12 * i), rel = u32(raw, 12 + 12 * i);
         if (base + rel + cs > raw.size()) throw std::runtime_error("RFA: segment out of range");
+        if (us > e.size - out.size()) throw std::runtime_error("RFA: segment larger than file");
         auto seg = lzo1x_decompress(raw.data() + base + rel, cs, us);
         out.insert(out.end(), seg.begin(), seg.end());
     }

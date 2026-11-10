@@ -1,7 +1,7 @@
 import struct
 import unittest
 
-from sm import TRIANGLE_LIST, TRIANGLE_STRIP, parse, parse_rs, to_obj, triangles
+from sm import TRIANGLE_LIST, TRIANGLE_STRIP, parse, parse_collision, parse_rs, to_obj, triangles
 
 
 def material_header(name, prim, nv, ni):
@@ -43,6 +43,17 @@ class SmTest(unittest.TestCase):
     def test_obj_mirrors_z(self):
         obj = to_obj(parse(build(9, [])))
         self.assertIn("f 1/1/1 3/3/3 2/2/2", obj)
+
+    def test_collision_block(self):
+        b = struct.pack("<3I", 0xEB97C2FA, 5, 3) + b"".join(struct.pack("<3fHH", i, 0, 0, 50, 0) for i in range(3))
+        b += struct.pack("<I4H", 1, 0, 1, 2, 50) + b"tree"
+        c = parse_collision(b)
+        self.assertEqual(c["faces"], [(0, 1, 2, 50)])
+        self.assertEqual(c["vertices"][2], (2.0, 0.0, 0.0, 50))
+        self.assertEqual(c["tree"], b"tree")
+        bad = b.replace(struct.pack("<4H", 0, 1, 2, 50), struct.pack("<4H", 0, 1, 7, 50))
+        with self.assertRaises(ValueError):
+            parse_collision(bad)  # face index beyond the vertex list
 
     def test_parse_rs(self):
         rs = 'subshader "Mat0" "StandardMesh/Default"\n{\n\tlighting true;\n\ttexture "texture/x_s";\n}\n'

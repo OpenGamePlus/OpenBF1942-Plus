@@ -13,7 +13,7 @@ Little-endian. Strings are `u32 length` + bytes, no terminator.
 | `f32 bbox[6]` | min xyz, max xyz |
 | `u8` | **v10 only**; 0 or 1, meaning unknown |
 | `u32 ncol` | collision meshes: 0, 1 or 2 |
-| `ncol × { u32 size, size bytes }` | collision data, not decoded |
+| `ncol × { u32 size, size bytes }` | collision blocks, see below |
 | `u32 nlod` | LOD count; trailing LODs can be empty (`nmat = 0`) |
 | per LOD | `u32 nmat`, then `nmat` material headers, then the data of each material in header order |
 
@@ -32,6 +32,20 @@ Material header:
 Material data: `nverts × stride` bytes, then `nindices × u16`.
 
 After the last LOD: a footer, 62 bytes in most files, longer in 288 files where it seems to hold another mesh section. Not decoded.
+
+## Collision block
+
+Verified on all 1,718 `.sm` blocks and the 97 `.tm` blocks of the three mods (`tools/sm.py` `parse_collision`).
+
+| Field | Notes |
+|---|---|
+| `u32 magic` | `0xEB97C2FA` (bytes `fa c2 97 eb`) |
+| `u32 version` | 5 |
+| `u32 nverts`, `nverts × 16 bytes` | `f32 x, y, z`, `u16 material`, 2 bytes padding (stale data) |
+| `u32 nfaces`, `nfaces × 8 bytes` | `u16 a, b, c`, `u16 material` |
+| tree | spatial index over the faces, ends with an embedded `<mesh>.sgf` name; not decoded |
+
+Materials are `MaterialManager` ids (92 distinct values in use). 473 base-game meshes have two blocks; their respective roles are not known.
 
 ## Coordinates
 
