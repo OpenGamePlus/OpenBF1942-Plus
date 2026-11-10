@@ -15,7 +15,7 @@ Reimplementación clean-room del motor Refractor 1 para que Battlefield 1942 fun
 | 3. Mallas estáticas (`.sm`) | hecho — todas las mallas se leen; exportación OBJ abre en Blender |
 | 4. Terreno + objetos | hecho — el visor C++ muestra todos los mapas con edificios y árboles |
 | 5. Mallas con esqueleto + animaciones | en curso — soldados y banderas animados en el visor (`--soldier USSoldier`) |
-| 6. Física + vehículos | en curso — conducir coches y tanques y pilotar aviones en el visor (`--drive Willy`, `--drive Sherman`, `--drive Spitfire`); manejo aún sin calibrar |
+| 6. Física + vehículos | en curso — coches, tanques, aviones y barcos en el visor (`--drive Willy`, `Sherman`, `Spitfire`, `LCVP`); manejo aún sin calibrar |
 | 7–8 | sin empezar (ver [hoja de ruta](#hoja-de-ruta)) |
 
 ## Herramientas

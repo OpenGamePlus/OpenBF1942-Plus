@@ -28,13 +28,21 @@ struct WingDef {
     float sign = 1, rate = 4;                  // direction (sign of setAcceleration), full deflections per second
 };
 
+// FloatingBundle: a buoyant column from pos down setHullHeight; lifts setFloatMaxLift x mass x submerged fraction.
+struct FloatDef {
+    float pos[3] = {};
+    float height = 1, lift = 0;
+};
+
 struct VehicleDef {
     float mass = 1000, drag = 0;
     float torque = 0, differential = 1;  // Engine setTorque / setDifferential
     bool tracked = false;       // c_ETTank: the engine turns the hull (setInputToYaw) instead of steering wheels
     float turn_rate = 0;        // deg/s at full steer, tracked only
     bool plane = false;         // c_ETPlane: the engine is thrust, wheels roll freely
-    float thrust = 0;           // aircraft: m/s^2 at full throttle, summed over engines
+    bool ship = false;          // has a c_ETShip engine: propeller thrust only in water
+    float thrust = 0;           // aircraft and ships: m/s^2 at full throttle, summed over engines
+    std::vector<FloatDef> floats;
     std::vector<WingDef> wings;
     std::vector<WheelDef> wheels;
     std::vector<float> hull;    // xyz points, vehicle space; the chassis is their convex hull
@@ -45,7 +53,8 @@ VehicleDef vehicle_def(const Con& con, const Vfs& vfs, const std::string& name);
 
 class Physics {
 public:
-    Physics(const Heightmap& hm, float world_size);
+    // water_level: sea surface height (Terrain.con waterLevel); floats need it.
+    Physics(const Heightmap& hm, float world_size, float water_level = -1e9f);
     ~Physics();
     // Static collision for placed .sm meshes (first collision block); returns bodies added.
     size_t add_scene(const std::vector<DrawItem>& items, const Vfs& vfs);

@@ -305,6 +305,36 @@ int main() {
         assert(fly(0, 0, 1).m[1] < -0.1f);   // roll +1: right wing (x axis) down
         assert(fly(1, 0, 0).m[8] > 0.05f);   // yaw +1: nose towards +x
     }
+    // Boat (LCVP floats): 4 x lift 6 hold g with 9.81 / 24 of each 2.8 m column under water, so the origin rests
+    // 0.3 + 0.409 x 2.8 = 1.444 m below the surface (retail spawns LCVPs 1.44 m below waterLevel).
+    {
+        Heightmap hm;
+        hm.n = 32, hm.y_scale = 1, hm.h.assign(32 * 32, 0);
+        Physics phys(hm, 4096, 30);
+        VehicleDef boat;
+        boat.mass = 30000, boat.drag = 0.488f, boat.ship = true, boat.thrust = 1.25f;
+        for (int i = 0; i < 8; ++i) boat.hull.insert(boat.hull.end(), {i & 1 ? 1.8f : -1.8f, i & 2 ? 3.0f : -0.2f, i & 4 ? 5.0f : -5.0f});
+        for (int i = 0; i < 4; ++i) {
+            FloatDef f;
+            f.pos[0] = i & 1 ? 1.7f : -1.7f, f.pos[1] = 3.1f, f.pos[2] = i & 2 ? 4.5f : -4.5f, f.height = 2.8f, f.lift = 6;
+            boat.floats.push_back(f);
+        }
+        for (float z : {4.5f, -4.5f}) {  // water rudders, as the LCVP's
+            WingDef w;
+            w.pos[2] = z, w.normal[0] = 1, w.normal[1] = 0, w.flap = 2, w.input = 3, w.sign = z > 0 ? -1.0f : 1.0f;
+            boat.wings.push_back(w);
+        }
+        int b = phys.add_vehicle(boat, translate(2048, 31, 2048));
+        for (int i = 0; i < 600; ++i) phys.step(1.0f / 60);
+        Mat4 t = phys.transform(b);
+        assert(std::fabs(t.m[13] - 30 + 1.444f) < 0.05f && t.m[5] > 0.99f && phys.speed(b) < 0.1f);
+        phys.drive(b, 1, 0);
+        for (int i = 0; i < 300; ++i) phys.step(1.0f / 60);
+        assert(phys.transform(b).m[14] > 2048 + 15);
+        phys.drive(b, 1, 1);
+        for (int i = 0; i < 120; ++i) phys.step(1.0f / 60);
+        assert(phys.transform(b).m[8] > 0.05f);  // yaw +1: bow towards +x
+    }
 
     std::puts("engine tests ok");
     return 0;

@@ -75,10 +75,37 @@ Check against retail data: parked fighters are placed with pitch −11° to −1
 
 Take-off sweep on flat ground (full throttle, pull up from 32 m/s): all single-engine aircraft, the Mosquito, Bf 110, B-17, Ho 229 and AW52 take off and climb. The C-47 has no regulated wing and does not lift off; the XPack2 jet and rocket aircraft (Goblin `setTorque` 100, Natter 500) are far too fast under this reading; the Wasserfall and the jetpack are not aircraft in this sense.
 
+## Boats (implemented, unverified)
+
+A boat has `FloatingBundle` children (4 on the LCVP, 6 on the Elco, 8 on destroyers and carriers), water rudders (vertical `Wing`s on `c_PIYaw`, one at each end with opposite `setAcceleration`), and a `c_ETShip` engine. Amphibians (LVT-4, Schwimmwagen, Elco beaching wheels) also carry wheels and a car or tank engine.
+
+| Part | Reading |
+|---|---|
+| `FloatingBundle` | a buoyant column from its position down `setHullHeight`; lifts `setFloatMaxLift` × mass × the fraction of the column under `waterLevel`, straight up, and damps vertical motion. `setFloatMinLift`, `setSinkingSpeedMod`, `setDragModifier` unused |
+| Water drag | sideways slip of the hull damped at the centre of mass (a keel, 2 /s × wet fraction); damping at each float would also brake rotation and pin long hulls (a Fletcher turned 0.08 °/s). Forward drag is the template's `drag` |
+| `Engine` `c_ETShip` | propeller: Σ `setTorque` / 4 m/s² while any float is wet; half power astern. Torque × differential would make the Elco PT boat as slow as an LCVP; torque alone ranks them Elco 38, Type 38 27, LCVP 20 m/s, destroyers and carriers ~5 m/s |
+| Rudders | the aircraft wing model unchanged (flap lift × speed²) |
+
+Check against retail data: with the float reading every boat rests where the levels place it (origin − `waterLevel`):
+
+| Boat | Simulated rest | Retail spawn heights |
+|---|---|---|
+| LCVP | −1.44 | −1.44 |
+| Hatsuzuki | −5.62 | −5.64, −5.60, −5.45 |
+| Prince of Wales | −7.42 | −7.35, −7.26 |
+| Fletcher | 0.26 | 0.33 … 0.47 |
+| Shokaku | 0.33 | 0.33 |
+| Sub 7C | −0.94 | −0.83, −1.08 |
+| Elco / Type 38 | −1.82 | −1.45 … −2.78 |
+
+Yamato (−2.54) and Gato (−2.62) share spawners with other ships, so their retail heights are ambiguous.
+
+Sweep in 30 m of water: every `VCSea` vehicle with floats and both amphibians float upright without drift, reach their top speed and turn on the rudder: boats 12–20 °/s, submarines 2–3 °/s, destroyers 0.7–1.4 °/s, carriers and battleships 0.2–0.3 °/s.
+
 ## Open questions
 
 - Units of `setTorque`, `setDifferential`, `drag`, the 55000 engine speed; gear changes (`setGearUp/Down`).
 - `c_PGFRollGrip` vs `c_PGFEngineGrip`, combined with `materialFriction`.
 - Wings: `setPitchOffset`, `setWingToRegulatorRatio`, `rememberExcessInput`, `setNoPropellerEffectAtSpeed`, `inertiaModifier`; jets and rockets; landing gear retraction.
-- Boats (`FloatingBundle`): not modelled.
+- Boats: big ships turn far slower than in memory of the original (inertia from the full hull?); submarine diving (`FloatingBundle` with `setInputToPitch`); the unused float settings.
 - Track and wheel animation, turret and gun rotation (`RotationalBundle` on mouse input).

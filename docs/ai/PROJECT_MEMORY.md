@@ -2,6 +2,12 @@
 
 Append-only. Newest first. At most 3 bullets per stage.
 
+## 2026-11-10 — boats
+
+- `FloatingBundle` = buoyant column (lift × submerged fraction); with it LCVP, Hatsuzuki, Prince of Wales, Fletcher, Shokaku, Sub 7C and Elco rest within ~0.3 m of where the retail levels place them — the strongest check so far.
+- Water drag at each float pinned long hulls (Fletcher 0.08 °/s): sideways damping now acts at the centre only. Ship thrust read like aircraft (Σ torque) — torque × differential made the PT boat as slow as an LCVP. The viewer stops drawing `createInvisible` parts.
+- Open: big ships turn slowly; submarine diving; unused float settings; all 78 maps load with physics (27,630 static bodies).
+
 ## 2026-11-10 — aircraft
 
 - Wings push along their normals (angle-of-attack lift + control flap); regulated main wings hold 1 g; thrust = summed engine torque. Parked fighters' retail pitch (−11° to −14°) matches the Mustang's spring rest (14.4°): independent check of the spring reading.

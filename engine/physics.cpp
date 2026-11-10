@@ -113,10 +113,16 @@ struct Walker {
         if (!t || depth > 16 || ++visits > 10000) return;
         std::string type = lower(t->type);
         bool yaw_input = false;
+        // Engine kinds: c_ETCar / c_ETTank drive wheels; c_ETPlane / c_ETShip push the hull (propellers). Amphibians
+        // (Elco, LVT, Schwimmwagen) carry both kinds.
+        std::string etype;
         for (auto& [k, a] : t->props)
-            if (type == "engine" && k == "setenginetype" && !a.empty() && lower(a[0]) == "c_etplane") def.plane = true;
-        if (type == "engine" && !def.plane) ctx.driven = true;  // aircraft wheels roll freely
-        if (type == "engine" && def.plane) {  // multi-engine aircraft: thrust adds up
+            if (type == "engine" && k == "setenginetype" && !a.empty()) etype = lower(a[0]);
+        bool propeller = etype == "c_etplane" || etype == "c_etship";
+        if (etype == "c_etplane") def.plane = true;
+        if (etype == "c_etship") def.ship = true;
+        if (type == "engine" && !propeller) ctx.driven = true;  // aircraft wheels roll freely
+        if (propeller) {  // multi-engine aircraft and ships: thrust adds up
             float tq = 0;
             for (auto& [k, a] : t->props)
                 if (!a.empty() && k == "settorque") tq = num(a);
@@ -125,13 +131,21 @@ struct Walker {
             def.thrust += tq / 4.0f;
         }
         if (type == "wing") wing(*t, world);
+        if (type == "floatingbundle") {
+            FloatDef f;
+            xform(world, 0, 0, 0, f.pos);
+            for (auto& [k, a] : t->props)
+                if (!a.empty() && k == "sethullheight") f.height = num(a);
+                else if (!a.empty() && k == "setfloatmaxlift") f.lift = num(a);
+            if (f.height > 0) def.floats.push_back(f);
+        }
         float max_yaw = 0, rate = 0;
         for (auto& [k, a] : t->props) {
             if (a.empty()) continue;
             if (depth == 0 && k == "mass") def.mass = num(a);
             if (depth == 0 && k == "drag") def.drag = num(a);
-            if (type == "engine" && k == "settorque") def.torque = num(a);
-            if (type == "engine" && k == "setdifferential") def.differential = num(a);
+            if (type == "engine" && !propeller && k == "settorque") def.torque = num(a);
+            if (type == "engine" && !propeller && k == "setdifferential") def.differential = num(a);
             if ((type == "rotationalbundle" || type == "engine") && k == "setinputtoyaw" && lower(a[0]) == "c_piyaw") yaw_input = true;
             if (type == "engine" && k == "setenginetype" && lower(a[0]) == "c_ettank") def.tracked = true;
             if (k == "setmaxrotation" || k == "setmaxspeed") {
@@ -233,14 +247,16 @@ struct Physics::Impl {
         std::vector<float> wheel_steer, deflection;
     };
     std::vector<Vehicle> vehicles;
-    float acc = 0;
+    float acc = 0, water = -1e9f;
 
     void forces(Vehicle& v);
     void wings(Vehicle& v, const RMat44& T, Vec3 lin, Vec3 ang, RVec3 com);
+    bool floats(Vehicle& v, const RMat44& T, Vec3 lin, Vec3 ang, RVec3 com);
 };
 
 // Jolt's allocator hooks must exist before Impl's members (TempAllocator) are built.
-Physics::Physics(const Heightmap& hm, float world_size) : p_((jolt_init(), std::make_unique<Impl>())) {
+Physics::Physics(const Heightmap& hm, float world_size, float water_level) : p_((jolt_init(), std::make_unique<Impl>())) {
+    p_->water = water_level;
     p_->sys.Init(65536, 0, 65536, 16384, p_->bp, p_->ovb, p_->pair);
     p_->sys.SetGravity(Vec3(0, -kGravity, 0));
     if (hm.n < 4) return;
@@ -435,8 +451,11 @@ void Physics::Impl::forces(Vehicle& v) {
         float want = v.steer * d.turn_rate * 3.14159265f / 180.0f;
         bi.SetAngularVelocity(v.id, ang + up * (0.2f * (want - yaw_rate)));
     }
+    bool wet = floats(v, T, lin, ang, com);
     wings(v, T, lin, ang, com);
-    if (d.plane) bi.AddForce(v.id, T.GetAxisZ() * (std::max(0.0f, v.throttle) * d.thrust * d.mass));  // thrust at the centre
+    // Propellers push along the body at the centre; a ship's only while it floats. Ships reverse at half power.
+    float th = d.ship && !d.plane ? (v.throttle < 0 ? 0.5f * v.throttle : v.throttle) : std::max(0.0f, v.throttle);
+    if (d.plane || (d.ship && wet)) bi.AddForce(v.id, T.GetAxisZ() * (th * d.thrust * d.mass));
     float sp = lin.Length();
     bi.AddForce(v.id, -lin * (d.drag * d.mass * sp / 150.0f));
 }
@@ -479,6 +498,29 @@ void Physics::Impl::wings(Vehicle& v, const RMat44& T, Vec3 lin, Vec3 ang, RVec3
         if (w.regulate > 0) a += kGravity / n_reg * std::min(1.0f, vf * vf / (kRegulateSpeed * kRegulateSpeed));
         bi.AddForce(v.id, n * (a * d.mass), p);
     }
+}
+
+// Floats (unverified, docs/formats/vehicles.md): each lifts setFloatMaxLift x mass x the submerged fraction of its
+// column, straight up, and damps vertical motion. Sideways slip of the hull is damped at the centre (a keel), so long
+// hulls can still turn on their rudders; forward drag is the template's drag (forces()). Returns whether any float is wet.
+bool Physics::Impl::floats(Vehicle& v, const RMat44& T, Vec3 lin, Vec3 ang, RVec3 com) {
+    // shortcut: drag rates (1/s) are placeholders; the Refractor drag values only set the top speed (forces()).
+    const float kSide = 2.0f, kVertical = 4.0f;
+    BodyInterface& bi = sys.GetBodyInterface();
+    const VehicleDef& d = v.def;
+    if (d.floats.empty()) return false;
+    Vec3 side = T.GetAxisX();
+    float share = d.mass / static_cast<float>(d.floats.size()), wet_share = 0;
+    for (const FloatDef& f : d.floats) {
+        RVec3 p = T * Vec3(f.pos[0], f.pos[1], f.pos[2]);
+        float sub = std::clamp((water - (static_cast<float>(p.GetY()) - f.height)) / f.height, 0.0f, 1.0f);
+        if (sub <= 0) continue;
+        wet_share += sub / static_cast<float>(d.floats.size());
+        Vec3 vp = lin + ang.Cross(Vec3(p - com));
+        bi.AddForce(v.id, Vec3(0, f.lift * sub * d.mass - kVertical * vp.GetY() * sub * share, 0), p);
+    }
+    if (wet_share > 0) bi.AddForce(v.id, side * (-kSide * lin.Dot(side) * wet_share * d.mass));
+    return wet_share > 0;
 }
 
 void Physics::step(float dt) {

@@ -343,11 +343,11 @@ int run(int argc, char** argv) {
     }
 
     // Physics: terrain + static meshes; an optional driven vehicle drawn by appending its parts to the scene.
-    Physics phys(hm, info.world_size);
+    Physics phys(hm, info.world_size, info.water_level);
     if (objects) std::printf("physics: %zu static bodies\n", phys.add_scene(scene, vfs));
     int vehicle = -1;
     bool plane = false;
-    float plane_throttle = 0;
+    float plane_throttle = 0, veh_len = 0;
     size_t veh_first = scene.size();
     std::vector<Mat4> veh_local;
     if (objects && !drive.empty()) {
@@ -357,7 +357,8 @@ int run(int argc, char** argv) {
         int r = std::clamp(static_cast<int>(sz / cell), 0, hm.n - 1), c = std::clamp(static_cast<int>(sx / cell), 0, hm.n - 1);
         VehicleDef def = vehicle_def(con, vfs, drive);
         plane = def.plane;
-        vehicle = phys.add_vehicle(def, translate(sx, hm.height(r, c) + 1, sz) * rotation_ypr(yaw * 57.29578f, 0, 0));
+        for (size_t i = 2; i < def.hull.size(); i += 3) veh_len = std::max(veh_len, std::fabs(def.hull[i]));
+        vehicle = phys.add_vehicle(def, translate(sx, std::max(hm.height(r, c), info.water_level) + 1, sz) * rotation_ypr(yaw * 57.29578f, 0, 0));
         for (DrawItem& item : build_object(con, vfs, drive, Mat4::identity(), skipped)) {
             veh_local.push_back(item.world);
             scene.push_back(std::move(item));
@@ -633,8 +634,9 @@ int run(int argc, char** argv) {
             // Chase camera behind the vehicle, looking along its heading.
             float hx = t.m[8], hz = t.m[10], hl = std::sqrt(hx * hx + hz * hz);
             if (hl > 1e-3f) hx /= hl, hz /= hl;
-            float back = plane ? 16.0f : 9.0f;
-            cx = t.m[12] - hx * back, cy = t.m[13] + (plane ? 4.5f : 3.5f), cz = t.m[14] - hz * back;
+            // Big ships: camera distance from the hull length (Fletcher ~110 m).
+            float back = plane ? 16.0f : std::max(9.0f, veh_len * 1.2f);
+            cx = t.m[12] - hx * back, cy = t.m[13] + (plane ? 4.5f : std::max(3.5f, back * 0.35f)), cz = t.m[14] - hz * back;
             yaw = std::atan2(hx, hz), pitch = -0.25f;
         }
         float speed = (k[SDL_SCANCODE_LSHIFT] ? 400.f : 60.f) * dt * (vehicle < 0);

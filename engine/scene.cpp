@@ -92,10 +92,14 @@ struct Builder {
             std::string name;
             float pos[3] = {}, rot[3] = {};
         };
+        bool invisible = false;
+        for (auto& [k, a] : t->props)
+            if (k == "createinvisible" && !a.empty() && std::atoi(a[0].c_str()) != 0) invisible = true;
         std::vector<Child> children;
         for (auto& [k, a] : t->props) {
             if (a.empty()) continue;
-            if (k == "geometry") geometry(a[0], world, anim, lower(name));
+            // createInvisible 1: physical only (e.g. the Elco's beaching wheels).
+            if (k == "geometry" && !invisible) geometry(a[0], world, anim, lower(name));
             else if (k == "addtemplate") children.push_back({a[0]});
             // setPosition/setRotation after addTemplate place that child relative to the parent.
             else if (k == "setposition" && !children.empty()) parse_vec3(a[0], children.back().pos);
