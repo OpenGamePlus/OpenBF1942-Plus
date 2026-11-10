@@ -55,7 +55,7 @@ All physical parts carry `hasMobilePhysics`, `hasCollisionPhysics`, `hasResponse
 | `Engine` `c_ETTank` with `setInputToYaw c_PIYaw` | tracked: turns the hull on the spot at yaw `setMaxSpeed` × 8 °/s (placeholder; 4 for tanks, 1 for Priest and Sexton); side grip ignores the commanded turn |
 | Grip | friction coefficient 1 for every wheel, sideways slip cancelled within the friction circle, applied at 80 % of the centre-of-mass height so cornering rarely rolls a vehicle; idle wheels brake and hold |
 
-All 122 / 142 / 172 `PlayerControlObject`s of bf1942 / XPack1 / XPack2 build and simulate without error, except passenger seats and `Destroyable_Bridge`, which have no geometry of their own. On flat ground every land vehicle with wheels (7 cars, 14 tracked) settles upright and drives; the M3A1 half-track and the Sexton still touch the ground with their hull and accelerate at about two thirds of the others.
+All 122 / 142 / 172 `PlayerControlObject`s of bf1942 / XPack1 / XPack2 build and simulate without error, except passenger seats and `Destroyable_Bridge`, which have no geometry of their own. On flat ground every `setVehicleCategory VCLand` vehicle with wheels (7 cars, 13 tracked; Sherman and others declare their category elsewhere and were checked separately) settles upright and drives; the M3A1 half-track and the Sexton still touch the ground with their hull and accelerate at about two thirds of the others.
 
 ## Open questions
 
