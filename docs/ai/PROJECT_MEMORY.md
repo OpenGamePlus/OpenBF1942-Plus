@@ -2,6 +2,11 @@
 
 Append-only. Newest first. At most 3 bullets per stage.
 
+## 2026-11-10 — same-spot comparison with the original
+
+- Our camera was matched to the maintainer's Berlin screenshot, using the parked tanks and the tank stoppers (`rh_tsp_M1`) as landmarks. The field of view is the same; buildings and haze match within 10 %.
+- Only the terrain is darker: ×1.85 at that spot, ×2.2 at the first spot. Open until an El Alamein capture shows whether desert sand also doubles.
+
 ## 2026-11-10 — compared with the original client
 
 - Berlin, with the maintainer spawning in the original and screenshots taken; we rendered from the same base's spawn points. Gaps by size: no terrain detail texture, colour and lighting too cold and dark, haze too far, faceted lighting on soldiers.
