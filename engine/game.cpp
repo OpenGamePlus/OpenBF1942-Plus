@@ -911,7 +911,8 @@ void Game::pose() {
         soldiers.push_back({sol_first, sol_parts, lower_state, posture == 2 ? "ub_lie" : posture == 1 ? "ub_crouch" : "", -1});
         if (chute_parts) {
             bool open = cur < 0 && phys.parachute_open(player);
-            Mat4 cw = open ? translate(p[0], p[1], p[2]) * rotation_ypr(cam.yaw * 57.29578f, 0, 0) : translate(0, -10000, 0);
+            // The model's origin is its harness: at the shoulders (1.3 m, fitted by eye on a screenshot).
+            Mat4 cw = open ? translate(p[0], p[1] + 1.3f, p[2]) * rotation_ypr(cam.yaw * 57.29578f, 0, 0) : translate(0, -10000, 0);
             std::vector<DrawItem> cp = build_object(con, vfs, "Parachute", cw, skipped);
             for (size_t i = 0; i < cp.size() && i < chute_parts; ++i) scene[chute_first + i].world = cp[i].world;
         }

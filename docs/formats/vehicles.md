@@ -128,7 +128,7 @@ Postures (left ctrl held crouches, Z toggles prone):
 
 Parachute and falls:
 - `setParachuteDrag 24` is used as a quadratic drag over `mass 100`, so the soldier sinks at about 6.4 m/s. `setParachuteSpeed 30` is not read.
-- Space while falling opens it, and it closes on landing. The `Parachute` model is drawn above the soldier while it is open.
+- Space while falling opens it, and it closes on landing. The `Parachute` model is drawn above the soldier while it is open, with its origin (the harness) 1.3 m up at the shoulders, fitted by eye on a screenshot.
 - Landing faster than 10 m/s costs hit points, all of them at 20 m/s; both values are guessed.
 - Bots take no fall damage.
 
