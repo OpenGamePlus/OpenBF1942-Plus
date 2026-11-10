@@ -38,7 +38,7 @@
 | Tank turn rate | unverified | engine yaw `setMaxSpeed` × 8 °/s |
 | Physics scope | not implemented | no gears, jets, gear retraction, submarine diving, track animation; trees, animated meshes and stationary spawner objects have no collision; M3A1 and Sexton hulls touch the ground; C-47 does not lift off; big ships turn very slowly |
 | Weapons | shortcut | direct hits only (no explosion radius), no magazines, no drag, no effects or sound; armour does not turn with turrets; primary weapon only; body part by hit height |
-| Enemy soldiers | shortcut | stand still at their spawn points, no AI; none on vehicle spawn points |
+| Enemy soldiers and AI | shortcut | sight, reaction, aim error, speed guessed; straight runs to flags (no path finding), no vehicles, no capturing; none on vehicle spawn points |
 | Parked vehicles | shortcut | lifted onto the terrain; LCVPs on davits drop into the sea; two Salerno Willys fall 50–70 m (unexplained); column hulls approximate concave parts |
 | Soldier movement | shortcut | speeds, jump, swim depth guessed; entry by distance, not `EntryPoint`; no crouch, prone, ladders, jump or swim animations, held weapon |
 | Moving parts | shortcut | propeller rpm guessed; drawn wheel droop capped at 0.2 m; tracks, hands, gear retraction, engine rotation not drawn |

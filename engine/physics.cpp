@@ -850,6 +850,22 @@ void Physics::fire(const float pos[3], const float vel[3], int material, int mat
 
 std::vector<Physics::Hit> Physics::take_hits() { return std::exchange(p_->hits, {}); }
 
+bool Physics::line_of_sight(const float a[3], const float b[3], int ignore_character, int target_character, int target_vehicle) const {
+    auto inner = [&](int c) {
+        return c >= 0 && static_cast<size_t>(c) < p_->soldiers.size() ? p_->soldiers[static_cast<size_t>(c)].ch->GetInnerBodyID() : BodyID();
+    };
+    struct Three final : BodyFilter {
+        BodyID a, b, c;
+        bool ShouldCollide(const BodyID& id) const override { return id != a && id != b && id != c; }
+        bool ShouldCollideLocked(const Body& body) const override { return ShouldCollide(body.GetID()); }
+    } filter;
+    filter.a = inner(ignore_character), filter.b = inner(target_character);
+    filter.c = target_vehicle >= 0 && static_cast<size_t>(target_vehicle) < p_->vehicles.size() ? p_->vehicles[static_cast<size_t>(target_vehicle)].id : BodyID();
+    RRayCast ray{RVec3(a[0], a[1], a[2]), Vec3(b[0] - a[0], b[1] - a[1], b[2] - a[2])};
+    RayCastResult hit;
+    return !p_->sys.GetNarrowPhaseQuery().CastRay(ray, hit, {}, {}, filter);
+}
+
 void Physics::projectiles(std::vector<float>& out) const {
     out.clear();
     for (auto& s : p_->shots) out.insert(out.end(), {s.p.GetX(), s.p.GetY(), s.p.GetZ(), s.v.GetX(), s.v.GetY(), s.v.GetZ()});

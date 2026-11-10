@@ -16,7 +16,7 @@ Reimplementación clean-room del motor Refractor 1 para que Battlefield 1942 fun
 | 4. Terreno + objetos | hecho — el visor C++ muestra todos los mapas con edificios y árboles |
 | 5. Mallas con esqueleto + animaciones | en curso — soldados y banderas animados en el visor (`--soldier USSoldier`) |
 | 6. Física + vehículos | en curso — coches, tanques, aviones y barcos en el visor (`--drive Willy`, `Sherman`, `Spitfire`, `LCVP`); manejo aún sin calibrar |
-| 7. Jugabilidad | empezado — jugar un equipo con su kit (`--play 2 --kit 1`), subir a cualquier vehículo aparcado (E), disparar (clic izquierdo) a vehículos y soldados enemigos; blindaje y tablas de daño originales |
+| 7. Jugabilidad | empezado — jugar un equipo con su kit (`--play 2 --kit 1`) contra soldados enemigos que disparan y corren hacia las banderas; conducir cualquier vehículo aparcado (E), disparar (clic izquierdo); blindaje y tablas de daño originales |
 | 8 | sin empezar (ver [hoja de ruta](#hoja-de-ruta)) |
 
 ## Herramientas

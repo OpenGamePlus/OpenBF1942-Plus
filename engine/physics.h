@@ -118,6 +118,8 @@ public:
     void fire(const float pos[3], const float vel[3], int material, int material2, float ttl, int ignore_vehicle = -1,
               int ignore_character = -1);
     std::vector<Hit> take_hits();                       // since the last call
+    // Nothing between a and b except the given soldiers and vehicle (the looker and its target).
+    bool line_of_sight(const float a[3], const float b[3], int ignore_character, int target_character, int target_vehicle) const;
     void projectiles(std::vector<float>& out) const;    // position and velocity (6 floats) per live projectile
 
     // Soldiers: a 1.8 m capsule (Jolt CharacterVirtual) standing at feet position (x, y, z). It walks on the terrain,

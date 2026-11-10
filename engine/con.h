@@ -43,7 +43,8 @@ private:
     bool test(const std::vector<std::string>& tok, const Scope& scope);
     const Vfs& vfs_;
     std::unordered_map<std::string, ConObject*> active_;
-    int depth_ = 0;  // run/include nesting; cycles in mod scripts would otherwise overflow the stack
+    int depth_ = 0;
+    std::vector<std::string> args_;  // arguments of the script running now  // run/include nesting; cycles in mod scripts would otherwise overflow the stack
 };
 
 std::string lower(std::string s);

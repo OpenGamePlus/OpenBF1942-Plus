@@ -56,17 +56,21 @@ void Con::run(const std::string& target, const std::vector<std::string>& args, c
         ++unknown["run nesting too deep: " + path];
         return;
     }
+    // A run without arguments keeps the caller's (unverified): Conquest/ControlPoints.con is run bare from the game
+    // mode script and checks "if v_arg1 == host" again; control points exist in the retail game.
+    std::vector<std::string> outer = args_, use = args.empty() ? args_ : args;
     Scope scope;
-    for (size_t i = 0; i < args.size(); ++i) scope["v_arg" + std::to_string(i + 1)] = args[i];
+    for (size_t i = 0; i < use.size(); ++i) scope["v_arg" + std::to_string(i + 1)] = use[i];
     auto bytes = vfs_.read(path);
     ++depth_;
+    args_ = use;
     try {
         execute(std::string(bytes.begin(), bytes.end()), scope, dirname(path));
     } catch (...) {
-        --depth_;
+        --depth_, args_ = outer;
         throw;
     }
-    --depth_;
+    --depth_, args_ = outer;
 }
 
 void Con::execute(const std::string& text, Scope& scope, const std::string& cur_dir) {

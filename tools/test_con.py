@@ -22,6 +22,12 @@ class ConTest(unittest.TestCase):
                    {}, "lvl")
         self.assertEqual([i["template"] for i in vm.instances], ["A", "B"])
 
+    def test_bare_run_keeps_caller_args(self):
+        vm = vm_with({"cp.con": "if v_arg1 == host\nObject.create CP\nendIf\n", "mode.con": "run cp\nrun cp client\n"})
+        vm.run("mode.con", ["host"])
+        self.assertEqual([i["template"] for i in vm.instances], ["CP"])
+        self.assertEqual(vm.args, [])
+
     def test_nested_if_inside_false_branch(self):
         vm = vm_with({})
         vm.execute("if a == b\nif c == c\nObject.create X\nelse\nObject.create Y\nendIf\nendIf\n", {})

@@ -2,6 +2,12 @@
 
 Append-only. Newest first. At most 3 bullets per stage.
 
+## 2026-11-10 — first AI, control points
+
+- Enemies see (line of sight), turn, fire with aim error, and otherwise run to the nearest flag their team does not hold; the player takes damage, dies and respawns at home.
+- Control point instances were missing in both interpreters: `ControlPoints.con` is run bare and re-checks `v_arg1 == host`. A bare `run` now keeps the caller's arguments; C++/Python parity re-checked (78 levels, 0 mismatches).
+- Open: path finding, capturing and tickets, AI in vehicles.
+
 ## 2026-11-10 — teams, kits, enemy soldiers
 
 - `--play 1|2` takes the team's soldier (`game.setTeamSkin`) and kit primary (`game.setKit`, `--kit`); enemies stand on the other team's spawn points (SpawnPoint group → ControlPoint team) and can be shot dead.

@@ -402,6 +402,12 @@ int main() {
         for (auto& h : hits)
             if (h.character == target) ++on_target, assert(std::fabs(h.height - 1.2f) < 0.3f && h.vehicle < 0);
         assert(on_target == 1);
+        float far_eye[3] = {80, 1.5f, 40}, chest[3] = {80, 1.2f, 80};
+        assert(phys.line_of_sight(far_eye, chest, -1, target, -1));
+        int wall = phys.add_character(80, 0.1f, 60);  // another soldier between them blocks the view
+        for (int i = 0; i < 10; ++i) phys.step(1.0f / 60);
+        assert(!phys.line_of_sight(far_eye, chest, -1, target, -1) && phys.line_of_sight(far_eye, chest, wall, target, -1));
+        phys.kill_character(wall);
         phys.kill_character(target);
         phys.fire(from, at, 220, -1, 2);
         for (int i = 0; i < 20; ++i) phys.step(1.0f / 60);
@@ -447,6 +453,17 @@ int main() {
         std::vector<float> live;
         phys.projectiles(live);
         assert(live.size() == 6);  // the shot from inside is still flying
+    }
+
+    // CON: a bare run keeps the caller's arguments (control points are guarded by "if v_arg1 == host" twice).
+    {
+        Vfs vfs;
+        std::string cp = "if v_arg1 == host\nObject.create CP\nendIf\n", mode = "run cp\nrun cp client\n";
+        vfs.add("cp.con", std::vector<uint8_t>(cp.begin(), cp.end()));
+        vfs.add("mode.con", std::vector<uint8_t>(mode.begin(), mode.end()));
+        Con con(vfs);
+        con.run("mode.con", {"host"});
+        assert(con.instances.size() == 1 && con.instances[0].name == "CP");
     }
 
     // Damage: materialDamage x damageMod(attGroup, defGroup), material groups default to the material number.

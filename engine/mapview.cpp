@@ -3,6 +3,8 @@
 #include <epoxy/gl.h>
 
 #include <algorithm>
+#include <array>
+#include <random>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -481,12 +483,13 @@ int run(int argc, char** argv) {
         for (auto& [t, sk] : team_skins)
             if (lower(sk) == lower(play)) team = t;
     if (!play.empty() && soldier_tmpl.empty()) throw std::runtime_error("--play " + play + ": the level sets no soldier for that team");
-    if (const ConObject* k = kits.count({team, kit}) ? object_template(kits[{team, kit}]) : nullptr)
-        for (auto& [m, a] : k->props)  // the kit's first weapon with a projectile is its primary
-            if (m == "addtemplate" && !a.empty() && !weapon_def(con, a[0]).name.empty()) {
-                weapon_name = a[0];
-                break;
-            }
+    auto primary = [&](int tm, int kt) -> std::string {  // the kit's first weapon with a projectile
+        if (const ConObject* k = kits.count({tm, kt}) ? object_template(kits[{tm, kt}]) : nullptr)
+            for (auto& [m, a] : k->props)
+                if (m == "addtemplate" && !a.empty() && !weapon_def(con, a[0]).name.empty()) return a[0];
+        return "";
+    };
+    if (!primary(team, kit).empty()) weapon_name = primary(team, kit);
     if (objects && !play.empty()) {
         float sx = cx < 0 ? info.world_size * 0.15f : cx, sz = cx < 0 ? info.world_size * 0.15f : cz;
         float cell = info.world_size / static_cast<float>(hm.n);
@@ -508,7 +511,19 @@ int run(int argc, char** argv) {
         float hp = 30, yaw = 0, pos[3] = {};
         bool dead = false;
         std::vector<size_t> anims;
+        int team = 0;
+        WeaponDef weapon;
+        float next_fire = 0, seen_at = -1;  // AI: when the target came into view
+        bool moving = false;
+        std::string lower_state = "lb_stand";
     };
+    // Flags (ControlPoint instances) and the player's team spawn points, for the AI's goals and respawning.
+    struct Flag {
+        float pos[3] = {};
+        int team = 0;
+    };
+    std::vector<Flag> flags;
+    std::vector<std::array<float, 4>> home;  // x y z yaw
     std::vector<Enemy> enemies;
     if (player >= 0) {
         std::map<int, int> group_team;
@@ -527,19 +542,32 @@ int run(int argc, char** argv) {
             for (auto& [k, a] : t->props)
                 if (k == "setgroup" && !a.empty()) g = std::atoi(a[0].c_str());
             auto gt = group_team.find(g);
-            if (gt == group_team.end() || gt->second == 0 || gt->second == team || !team_skins.count(gt->second)) continue;
             float pos[3] = {}, rot[3] = {};
             for (auto& [k, a] : inst.props)
                 if (k == "absoluteposition" && !a.empty()) parse_vec3(a[0], pos);
                 else if (k == "rotation" && !a.empty()) parse_vec3(a[0], rot);
+            if (gt != group_team.end() && gt->second == team) home.push_back({pos[0], pos[1], pos[2], rot[0]});
+            if (gt == group_team.end() || gt->second == 0 || gt->second == team || !team_skins.count(gt->second)) continue;
             Enemy e;
-            e.tmpl = team_skins[gt->second], e.yaw = rot[0], e.hp = hitpoints(e.tmpl), e.first = scene.size();
+            e.tmpl = team_skins[gt->second], e.yaw = rot[0], e.hp = hitpoints(e.tmpl), e.first = scene.size(), e.team = gt->second;
+            e.weapon = weapon_def(con, primary(e.team, static_cast<int>(enemies.size() % 5)));  // the five classes in turn
             std::copy(pos, pos + 3, e.pos);
             e.ch = phys.add_character(pos[0], pos[1] + 0.1f, pos[2]);
             for (DrawItem& item : build_object(con, vfs, e.tmpl, Mat4::identity(), skipped, nullptr, hide_1p)) ++e.parts, scene.push_back(std::move(item));
             enemies.push_back(std::move(e));
         }
-        std::printf("enemies: %zu soldiers at the other team's spawn points\n", enemies.size());
+        for (auto& inst : con.instances) {
+            const ConObject* t = inst.deleted ? nullptr : object_template(inst.name);
+            if (!t || lower(t->type) != "controlpoint") continue;
+            Flag f;
+            for (auto& [k, a] : t->props)
+                if (k == "team" && !a.empty()) f.team = std::atoi(a[0].c_str());
+            for (auto& [k, a] : inst.props)
+                if (k == "absoluteposition" && !a.empty()) parse_vec3(a[0], f.pos);
+            flags.push_back(f);
+        }
+        std::printf("enemies: %zu soldiers at the other team's spawn points; %zu flags, %zu home spawn points\n", enemies.size(),
+                    flags.size(), home.size());
     }
 
     if (SDL_Init(SDL_INIT_VIDEO) != 0) throw std::runtime_error(SDL_GetError());
@@ -730,6 +758,9 @@ int run(int argc, char** argv) {
         std::printf("weapon %s: %.0f m/s every %.2f s, material %d; damage table: %zu materials, %zu modifiers\n", hand.name.c_str(),
                     hand.velocity, hand.interval, hand.material, damage.materials.size(), damage.mods.size());
     float hand_next = 0;
+    float player_hp = hitpoints(soldier_tmpl), respawn_at = -1;
+    bool player_dead = false;
+    std::mt19937 rng(1942);  // AI aim error; fixed seed: --shot runs repeat
     GLuint tracer_vao = 0, tracer_vbo = 0;
     glGenVertexArrays(1, &tracer_vao);
     glBindVertexArray(tracer_vao);
@@ -802,6 +833,7 @@ int run(int argc, char** argv) {
         SDL_Event ev;
         float mouse_x = 0, mouse_y = 0;  // this frame's look motion (turrets when driving)
         bool toggle_vehicle = false;     // E: get in / out
+        float demo_t = 0;                // --shot: simulated time
         while (SDL_PollEvent(&ev)) {
             if (ev.type == SDL_QUIT || (ev.type == SDL_KEYDOWN && ev.key.keysym.sym == SDLK_ESCAPE)) running = false;
             if (ev.type == SDL_KEYDOWN && ev.key.keysym.sym == SDLK_c) show_collision = !show_collision;
@@ -880,6 +912,18 @@ int run(int argc, char** argv) {
         // Hits: damage = hit material vs the armour face met (else the vehicle's material), plus the explosion material.
         auto apply_hits = [&] {
             for (const Physics::Hit& h : phys.take_hits()) {
+                if (h.character >= 0 && h.character == player) {
+                    if (player_dead) continue;
+                    int part = h.height > 1.45f ? 40 : h.height > 0.85f ? 41 : 42;
+                    player_hp -= damage.damage(h.material, part) + (h.material2 >= 0 ? damage.damage(h.material2, part) : 0.0f);
+                    std::printf("you are hit: %.1f hp left\n", std::max(0.0f, player_hp));
+                    if (player_hp <= 0) {
+                        player_dead = true, respawn_at = (shot.empty() ? static_cast<float>(SDL_GetTicks()) / 1000.0f : demo_t) + 3;
+                        phys.set_character_active(player, false);
+                        std::printf("you died\n");
+                    }
+                    continue;
+                }
                 if (h.character >= 0) {
                     for (Enemy& e : enemies) {
                         if (e.ch != h.character || e.dead) continue;
@@ -916,16 +960,79 @@ int run(int argc, char** argv) {
                     if (v.hp > 0) continue;
                     v.wrecked = true;
                     std::printf("%s destroyed\n", v.name.c_str());
-                    if (static_cast<int>(i) == cur && player >= 0) get_in_out();
+                    if (static_cast<int>(i) == cur && player >= 0) {  // the crew dies with it
+                        get_in_out();
+                        player_dead = true, respawn_at = (shot.empty() ? static_cast<float>(SDL_GetTicks()) / 1000.0f : demo_t) + 3;
+                        phys.set_character_active(player, false);
+                        std::printf("you died\n");
+                    }
                     phys.drive(v.id, 0, 0);
                 }
+            }
+        };
+        // AI (shortcut: no path finding, no squad, no vehicles): an enemy who sees the player (120 m, clear line) turns,
+        // waits 0.7 s, then fires its kit weapon at half its rate with ~2 deg of aim error; otherwise it runs straight to
+        // the nearest flag its team does not hold and waits there. t: game time.
+        auto think = [&](float t) {
+            if (player >= 0 && player_dead && t >= respawn_at && !home.empty()) {  // back at a home spawn point
+                const auto& h = home[std::uniform_int_distribution<size_t>(0, home.size() - 1)(rng)];
+                phys.place_character(player, h[0], h[1] + 0.2f, h[2]);
+                phys.set_character_active(player, true);
+                player_dead = false, player_hp = hitpoints(soldier_tmpl), yaw = h[3] * 3.14159265f / 180.0f;
+                std::printf("respawned\n");
+            }
+            float tgt[3] = {};
+            int tgt_vehicle = -1;
+            bool has_target = player >= 0 && !player_dead;
+            if (has_target && cur >= 0) {
+                Mat4 m = phys.transform(vehicles[static_cast<size_t>(cur)].id);
+                tgt[0] = m.m[12], tgt[1] = m.m[13] + 1, tgt[2] = m.m[14], tgt_vehicle = vehicles[static_cast<size_t>(cur)].id;
+            } else if (has_target) {
+                phys.character_position(player, tgt);
+                tgt[1] += 1.2f;
+            }
+            std::normal_distribution<float> err(0.0f, 0.035f);
+            for (Enemy& e : enemies) {
+                if (e.dead) continue;
+                float eye[3] = {e.pos[0], e.pos[1] + 1.6f, e.pos[2]}, d[3] = {tgt[0] - eye[0], tgt[1] - eye[1], tgt[2] - eye[2]};
+                float dist = std::sqrt(d[0] * d[0] + d[1] * d[1] + d[2] * d[2]);
+                bool sees = has_target && dist < 120 && dist > 0.5f &&
+                            phys.line_of_sight(eye, tgt, e.ch, cur >= 0 ? -1 : player, tgt_vehicle);
+                if (sees) {
+                    if (e.seen_at < 0) e.seen_at = t;
+                    e.yaw = std::atan2(d[0], d[2]) * 57.29578f, e.moving = false;
+                    phys.walk(e.ch, 0, 0, false);
+                    if (t - e.seen_at > 0.7f && t >= e.next_fire && !e.weapon.name.empty()) {
+                        e.next_fire = t + 2 * e.weapon.interval;
+                        float dir[3] = {d[0] / dist + err(rng), d[1] / dist + err(rng), d[2] / dist + err(rng)};
+                        float l = std::sqrt(dir[0] * dir[0] + dir[1] * dir[1] + dir[2] * dir[2]), pos[3], vel[3];
+                        for (int i = 0; i < 3; ++i) pos[i] = eye[i] + dir[i] / l * 0.6f, vel[i] = dir[i] / l * e.weapon.velocity;
+                        phys.fire(pos, vel, e.weapon.material, e.weapon.material2, e.weapon.ttl, -1, e.ch);
+                    }
+                    continue;
+                }
+                e.seen_at = -1;
+                const Flag* goal = nullptr;
+                float best = 1e30f;
+                for (const Flag& f : flags) {
+                    float g = (f.pos[0] - e.pos[0]) * (f.pos[0] - e.pos[0]) + (f.pos[2] - e.pos[2]) * (f.pos[2] - e.pos[2]);
+                    if (f.team != e.team && g < best) best = g, goal = &f;
+                }
+                e.moving = goal && best > 8 * 8;
+                if (!e.moving) {
+                    phys.walk(e.ch, 0, 0, false);
+                    continue;
+                }
+                float gx = goal->pos[0] - e.pos[0], gz = goal->pos[2] - e.pos[2], gl = std::sqrt(gx * gx + gz * gz);
+                e.yaw = std::atan2(gx, gz) * 57.29578f;
+                phys.walk(e.ch, gx / gl * 4, gz / gl * 4, false);  // shortcut: 4 m/s, guessed
             }
         };
         bool firing = SDL_GetMouseState(nullptr, nullptr) & SDL_BUTTON(SDL_BUTTON_LEFT);
         float now_s = static_cast<float>(SDL_GetTicks()) / 1000.0f;
         if (shot.empty()) {
             if (toggle_vehicle) get_in_out();
-            if (firing) fire(now_s);
+            if (firing && !player_dead) fire(now_s);
             if (cur >= 0 && !vehicles[static_cast<size_t>(cur)].wrecked) {
                 Veh& v = vehicles[static_cast<size_t>(cur)];
                 float th = key(SDL_SCANCODE_W, SDL_SCANCODE_S);
@@ -937,15 +1044,22 @@ int run(int argc, char** argv) {
             } else {
                 walk(key(SDL_SCANCODE_W, SDL_SCANCODE_S), key(SDL_SCANCODE_D, SDL_SCANCODE_A), k[SDL_SCANCODE_SPACE], k[SDL_SCANCODE_LSHIFT]);
             }
+            think(now_s);
             phys.step(dt);
             apply_hits();
         } else if (player >= 0) {  // demo: settle, run 2 s, get into the nearest vehicle, drive 2 s, get out
+            auto tick = [&] {
+                think(demo_t);
+                phys.step(1.0f / 60);
+                apply_hits();
+                demo_t += 1.0f / 60;
+            };
             auto track = [&](const char* what) {
                 float p[3];
                 phys.character_position(player, p);
                 std::printf("%s: soldier %.1f %.1f %.1f%s\n", what, p[0], p[1], p[2], cur >= 0 ? " (in a vehicle)" : "");
             };
-            for (int i = 0; i < 60; ++i) walk(0, 0, false, false), phys.step(1.0f / 60);
+            for (int i = 0; i < 60; ++i) walk(0, 0, false, false), tick();
             track("start");
             for (int i = 0; i < 120; ++i) {  // aim at the nearest living enemy within 150 m and fire
                 float p[3], best = 150 * 150;
@@ -959,23 +1073,26 @@ int run(int argc, char** argv) {
                 float dx = tgt->pos[0] - p[0], dy = tgt->pos[1] + 1.2f - (p[1] + 1.5f), dz = tgt->pos[2] - p[2];
                 yaw = std::atan2(dx, dz), pitch = std::atan2(dy, std::sqrt(dx * dx + dz * dz));
                 walk(0, 0, false, false);
-                fire(static_cast<float>(i) / 60.0f);
-                phys.step(1.0f / 60);
-                apply_hits();
+                fire(demo_t);
+                tick();
             }
-            for (int i = 0; i < 120; ++i) walk(1, 0, false, false), phys.step(1.0f / 60);
+            for (int i = 0; i < 120; ++i) walk(1, 0, false, false), tick();
             walk(0, 0, false, false);
             track("ran 2 s");
             get_in_out();
             for (int i = 0; i < 120 && cur >= 0; ++i) {
                 phys.drive(vehicles[static_cast<size_t>(cur)].id, 1, 0);
-                fire(3 + static_cast<float>(i) / 60.0f);
-                phys.step(1.0f / 60);
-                apply_hits();
+                fire(demo_t);
+                tick();
             }
             get_in_out();
-            for (int i = 0; i < 60; ++i) phys.step(1.0f / 60);
+            for (int i = 0; i < 60; ++i) tick();
             track("end");
+            for (int i = 0; i < 600; ++i) walk(0, 0, false, false), tick();  // 10 s for the AI
+            int alive = 0, running = 0;
+            for (const Enemy& e : enemies) alive += !e.dead, running += !e.dead && e.moving;
+            std::printf("after 10 s of AI: %d of %zu enemies alive, %d on their way to a flag; player %s, %.1f hp\n", alive,
+                        enemies.size(), running, player_dead ? "dead" : "alive", std::max(0.0f, player_hp));
             // Parked vehicles after 5 s: those pushed away (spawned inside something) or tipped over.
             int moved = 0, tipped = 0;
             for (size_t i = 0; i < vehicles.size(); ++i) {

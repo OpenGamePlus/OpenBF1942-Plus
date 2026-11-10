@@ -48,8 +48,15 @@ Soldier spawn points: a `SpawnPoint`'s `setGroup` matches a `ControlPoint` templ
 
 Soldiers are hit through a body that follows their capsule. Body part by hit height (shortcut for `setSkeletonCollisionBone`): head above 1.45 m → material 40, chest above 0.85 m → 41, legs → 42. A BAR bullet does 14.4 to a chest: three hits kill (30 hit points). Dead soldiers play `Lb/Ub_DieChestStand` once and stay down.
 
+## AI (implemented, placeholder)
+
+Each enemy soldier, every physics step: if it sees the player (or the player's vehicle) within 120 m with a clear line, it turns, waits 0.7 s, then fires its kit weapon (the five classes in turn) at half the weapon's rate with ~2° of aim error. Otherwise it runs at 4 m/s straight to the nearest flag (`ControlPoint` instance) its team does not hold and waits within 8 m of it. No path finding (`<Map>/Pathfinding/` is not read yet), no vehicles, no squads; all numbers guessed.
+
+The player has the soldier template's hit points; killed (or inside a destroyed vehicle), it respawns after 3 s at one of its team's spawn points.
+
 ## Open questions
 
 - Explosion radius (`material2` applies to the target hit only), effects (`e_*` templates), sounds.
 - Magazines and reloading; projectile drag; `fireingForce`, `recoil*`.
 - Secondary weapons and switching; held weapon drawing; soldiers spawning on vehicles (carriers); real skeleton hit boxes.
+- AI: path finding maps, the level `ai/` strategies, vehicle use, capturing flags, tickets.

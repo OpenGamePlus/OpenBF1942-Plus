@@ -27,7 +27,7 @@ Most used subsystems (line counts): `Object` 152k, `ObjectTemplate` 144k, `Mater
 | `run <script> [args]` | run another script; `.con` extension optional |
 | `include <file> [args]` | same with explicit extension (`.inc`) |
 | `var v_x` | declare variable |
-| `v_arg1..N` | arguments of the current `run`/`include` |
+| `v_arg1..N` | arguments of the current `run`/`include`; a `run` without arguments keeps the caller's (unverified: `Conquest/ControlPoints.con` is run bare and checks `if v_arg1 == host` again, and control points exist in the retail game) |
 | `if v == X` / `else` / `endIf` | conditional |
 | `echo` | prints; used as `echo v_arg1 -> v_name` |
 | `cmd ... -> v_x` | stores the command result in `v_x`; the target is a name, never substituted |

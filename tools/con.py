@@ -61,6 +61,7 @@ class Con:
         self.unknown = collections.Counter()
         self.missing = collections.Counter()
         self.mod_paths = []
+        self.args = []  # arguments of the script running now
         self.level_dir = ""
 
     def resolve(self, target, cur_dir):
@@ -78,8 +79,14 @@ class Con:
         if path is None:
             self.missing[target.lower()] += 1  # retail scripts reference optional/missing files
             return
-        scope = {f"v_arg{i + 1}": a for i, a in enumerate(args)}
-        self.execute(self.vfs.read(path).decode("latin-1"), scope, posixpath.dirname(path))
+        # A run without arguments keeps the caller's (unverified): Conquest/ControlPoints.con is run bare from the game
+        # mode script and checks "if v_arg1 == host" again; control points exist in the retail game.
+        use = list(args) if args else self.args
+        outer, self.args = self.args, use
+        try:
+            self.execute(self.vfs.read(path).decode("latin-1"), {f"v_arg{i + 1}": a for i, a in enumerate(use)}, posixpath.dirname(path))
+        finally:
+            self.args = outer
 
     def execute(self, text, scope, cur_dir=""):
         in_rem = False
