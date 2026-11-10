@@ -9,4 +9,6 @@
 | CON level load sequence and object file order | unverified | assumed, see [con.md](../formats/con.md#what-the-engine-loads-by-itself) |
 | Loose files vs archives priority | unverified | `con.py` assumes loose files win |
 | CON method case-insensitivity | unverified | subsystems verified, methods assumed |
+| SM collision blocks, footer, v10 byte, `alpha` field | open question | parsed as opaque, see [sm.md](../formats/sm.md) |
+| No model viewer in the engine | deliberate | step 3 exports OBJ for Blender; rendering starts with the map viewer |
 | Networking protocol | risk | undocumented; roadmap step 8 |

@@ -5,6 +5,7 @@
 - Treat archive contents as untrusted input: validate sizes, refuse path escapes (`rfa.safe_path`).
 - Keep each format's reference implementation in `tools/` and its spec in `docs/formats/`.
 - Use synthetic data in tests.
+- Tools build on each other one way: `rfa` ← `con` (VFS) ← `sm`.
 
 ## Must not
 

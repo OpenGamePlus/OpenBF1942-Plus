@@ -2,6 +2,12 @@
 
 Append-only. Newest first. At most 3 bullets per stage.
 
+## 2026-11-09 — static meshes
+
+- `tools/sm.py` parses all 2,527 `.sm` (v9/v10, triangle lists and strips) and exports OBJ + MTL + textures; geometry checked visually.
+- Rejected: writing a renderer for the model viewer — Blender already opens OBJ/DDS; rendering waits for the map viewer.
+- Open: collision blocks, mesh footer, the `alpha` field.
+
 ## 2026-11-09 — CON interpreter
 
 - `tools/con.py`: VFS over the mod stack + interpreter with an active-object model; all 78 levels load and every placed object resolves to a template.

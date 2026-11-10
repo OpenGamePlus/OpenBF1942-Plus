@@ -12,7 +12,8 @@ Clean-room reimplementation of the Refractor 1 engine so Battlefield 1942 runs o
 |---|---|
 | 1. Archives (RFA) | done — list/extract, verified on the full retail install |
 | 2. Scripts (`.con`) | done — interpreter; every level of the three mods loads |
-| 3–8 | not started (see [roadmap](#roadmap)) |
+| 3. Static meshes (`.sm`) | done — every mesh parses; OBJ export opens in Blender |
+| 4–8 | not started (see [roadmap](#roadmap)) |
 
 ## Tools
 
@@ -22,6 +23,7 @@ Python 3, standard library only.
 python3 tools/rfa.py list    "<BF1942_DIR>/Mods/bf1942/Archives/ai.rfa"
 python3 tools/rfa.py extract "<BF1942_DIR>/Mods/bf1942/Archives/ai.rfa" out/
 python3 tools/con.py "<BF1942_DIR>" bf1942 Wake    # load a level, print summary
+python3 tools/sm.py "<BF1942_DIR>" bf1942 standardMesh/willy_hul_m1 out/jeep   # OBJ + textures
 python3 -m unittest discover tools     # tests
 python3 tools/check_docs.py            # documentation checks
 ```
@@ -30,7 +32,7 @@ python3 tools/check_docs.py            # documentation checks
 
 1. **Archives (RFA)** — read every game file.
 2. **Scripts (`.con`)** — interpreter + object template system.
-3. **Static meshes (`.sm`) + textures (`.dds`/`.tga`)** — model viewer.
+3. **Static meshes (`.sm`) + textures (`.dds`/`.tga`)** — export to Blender.
 4. **Terrain** — map viewer: walk around a map.
 5. **Skinned meshes + animations (`.skn`/`.ske`/`.baf`)** — soldiers.
 6. **Physics + vehicles** — drive a jeep.

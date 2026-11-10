@@ -12,7 +12,8 @@ Reimplementación clean-room del motor Refractor 1 para que Battlefield 1942 fun
 |---|---|
 | 1. Archivos (RFA) | hecho — listar/extraer, verificado con la instalación original completa |
 | 2. Scripts (`.con`) | hecho — intérprete; cargan todos los mapas de los tres mods |
-| 3–8 | sin empezar (ver [hoja de ruta](#hoja-de-ruta)) |
+| 3. Mallas estáticas (`.sm`) | hecho — todas las mallas se leen; exportación OBJ abre en Blender |
+| 4–8 | sin empezar (ver [hoja de ruta](#hoja-de-ruta)) |
 
 ## Herramientas
 
@@ -22,6 +23,7 @@ Python 3, solo librería estándar.
 python3 tools/rfa.py list    "<BF1942_DIR>/Mods/bf1942/Archives/ai.rfa"
 python3 tools/rfa.py extract "<BF1942_DIR>/Mods/bf1942/Archives/ai.rfa" out/
 python3 tools/con.py "<BF1942_DIR>" bf1942 Wake    # cargar un mapa, ver resumen
+python3 tools/sm.py "<BF1942_DIR>" bf1942 standardMesh/willy_hul_m1 out/jeep   # OBJ + texturas
 python3 -m unittest discover tools     # tests
 python3 tools/check_docs.py            # chequeo de documentación
 ```
@@ -30,7 +32,7 @@ python3 tools/check_docs.py            # chequeo de documentación
 
 1. **Archivos (RFA)** — leer todos los ficheros del juego.
 2. **Scripts (`.con`)** — intérprete + sistema de plantillas de objetos.
-3. **Mallas estáticas (`.sm`) + texturas (`.dds`/`.tga`)** — visor de modelos.
+3. **Mallas estáticas (`.sm`) + texturas (`.dds`/`.tga`)** — exportación a Blender.
 4. **Terreno** — visor de mapas: recorrer un mapa.
 5. **Mallas con esqueleto + animaciones (`.skn`/`.ske`/`.baf`)** — soldados.
 6. **Física + vehículos** — conducir un jeep.
