@@ -2,6 +2,11 @@
 
 Append-only. Newest first. At most 3 bullets per stage.
 
+## 2026-11-10 — first live test by the maintainer
+
+- They saw the map and heard the shots; the reload animation was almost complete. Two bugs fixed: a shot left a sound looping, because the patches were merged; mouse look needed the right button.
+- Patches are now used by role (0 shot, 1 reload, 2 distant, 5 automatic loop with `stop FinishSample`). Playing captures the mouse (F10 frees it).
+
 ## 2026-11-10 — first network recording (E0)
 
 - Elevated `pktmon` sees only LAN broadcasts: the client sends a GameSpy `\status\` to port 22000, and same-machine traffic is loopback. A UDP relay in WSL (a separate host) recorded a full 5-minute session: 14,707 packets. The query protocol on port 23000 is documented.

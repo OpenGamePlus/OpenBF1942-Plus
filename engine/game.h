@@ -93,8 +93,10 @@ public:
     std::string driving(float pos[3], float& control) const;
 
     struct SoundEvent {
-        std::string tmpl;  // FireArms template that fired
+        std::string tmpl;  // FireArms template
         float pos[3];
+        int source = -1;   // the shooter: -1 the player, a bot's index, 100000 + 16 * vehicle body + seat
+        bool reload = false;
     };
     std::vector<SoundEvent> sounds;  // since the frontend last cleared it
 
@@ -159,6 +161,7 @@ private:
         Ammo grenades;
         float next_grenade = 0;
         float next_fire = 0, seen_at = -1, next_look = 0, last_shot = -10;
+        bool was_reloading = false;
         int target = -2;  // -2 nobody, -1 the player, else a bot
         float check_at = 0, check_pos[2] = {}, detour_until = 0, detour_side = 1;  // getting unstuck
         int veh = -1, vseat = -1;  // the vehicle and seat it sits in
@@ -238,6 +241,7 @@ private:
     void refill_loadout();
     bool fire_held = false;  // trigger held last step (fireOnce weapons)
     float last_shot = -10;   // the player's, game time
+    bool was_reloading = false;
     // Upper-body and weapon states for a soldier holding `w`: firing (shot within the last moment), reloading.
     void arm_states(SoldierView& v, const std::string& w, const WeaponDef& def, const Ammo& ammo, float shot, int pose) const;
     int posture = 0;         // the player's: 0 stand, 1 crouch, 2 prone

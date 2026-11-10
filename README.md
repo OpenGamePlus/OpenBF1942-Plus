@@ -41,7 +41,7 @@ cmake -S . -B build && cmake --build build -j
 ctest --test-dir build
 build/obf_mapview "<BF1942_DIR>" bf1942 Wake      # right mouse: look, WASD/QE: move, shift: fast
 build/obf_sim "<BF1942_DIR>" bf1942 El_Alamein --play 2 --sim 600   # headless: 10 minutes of conquest, printed
-build/obf_mapview "<BF1942_DIR>" bf1942 El_Alamein --drive Willy   # WASD drives, right mouse aims turrets, left mouse fires, R reloads, 1-9 weapons, G detonates packs, ctrl crouches, Z prone, V first / third person, F1-F8 seats; aircraft: W/S throttle, arrows, A/D rudder
+build/obf_mapview "<BF1942_DIR>" bf1942 El_Alamein --drive Willy   # WASD drives, the mouse aims turrets (with --play the mouse always looks; F10 frees it), left mouse fires, R reloads, 1-9 weapons, G detonates packs, ctrl crouches, Z prone, V first / third person, F1-F8 seats; aircraft: W/S throttle, arrows, A/D rudder
 ```
 
 ## Roadmap

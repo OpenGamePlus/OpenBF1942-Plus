@@ -15,11 +15,12 @@ Line-based text with CRLF line ends. `#` starts a comment line, `*** … ***` li
 |---|---|
 | `#templateLevel HIGH\|MEDIUM\|LOW` | lines that follow apply to that sound-quality level. Usually each level only `#include`s `High/x.ssc`, `Mid/x.ssc` or `Low/x.ssc`; some ship only `High/`, so we use HIGH |
 | `#include <path>` | relative to the including file |
-| `newPatch` | starts the patch (one per file in practice) |
+| `newPatch` | starts a patch. Hand weapons have several, by position: 0 single shot, 1 reload, 2 distant shot, 5 automatic fire (looping; `silence.wav` on single-shot weapons) |
 | `load <wav>` | starts a layer; the lines up to the next `load` set it |
 | `loop`, `stereo`, `dopplerOff` | loop the layer; play it unpositioned (first-person sounds); no Doppler |
 | `volume v`, `minDistance d`, `priority p` | gain (above 1 occurs, e.g. 10 on first-person shots; we cap it at 1); full level up to d metres, then 1/distance; voice priority (unused) |
-| `randomStartPitch a / b`, `relativePosition x/y/z`, `trigger`, `stop`, `randomPlay`, `addGroup` | not used yet |
+| `stop FinishSample` | a released loop finishes the pass under way |
+| `randomStartPitch a / b`, `relativePosition x/y/z`, `trigger`, `randomPlay`, `addGroup` | not used yet (`randomPlay`: all variants play at once) |
 | `beginEffect … endEffect` | one curve: `controlDestination Volume\|Pitch`, `controlSource Distance\|Time\|TimeRelease\|Default` (Default: the object's control, e.g. engine load), `envelope Ramp\|Linear`, then `param` values |
 
 Curves:
@@ -37,6 +38,6 @@ The 31 to 82 scripts that come out empty are missing files or fully commented ou
 
 ## Use in the engine
 
-- **What plays:** every shot (player, vehicles, bots) plays its `FireArms` script at the muzzle. The vehicle under control loops its `Engine` script, with control = speed / 30 m/s (aircraft / 80).
+- **What plays:** every shot (player, vehicles, bots) plays patch 0 and the distant patch 2 of its `FireArms` script at the muzzle. A weapon whose patch 5 loops (BAR, Thompson) keeps that loop running while its shooter fires, stopping 0.25 s after the last shot. A reload plays patch 1. The first build merged all patches into one, so each shot left a loop running; the maintainer heard it. The vehicle under control loops its `Engine` script, with control = speed / 30 m/s (aircraft / 80).
 - **How it plays:** the listener is the camera. `obf_mapview` plays through SDL; `obf_sim` and `--shot` runs are silent.
 - **Missing:** soldiers, projectiles in flight, impacts, explosions, ambient bundles, radio.

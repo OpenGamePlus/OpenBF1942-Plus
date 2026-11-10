@@ -1,5 +1,7 @@
 #include "sound.h"
 
+#include <algorithm>
+
 #include <cctype>
 #include <functional>
 
@@ -53,6 +55,66 @@ const SoundPatch* Sounds::patch(const std::string& path) {
     return slot.get();
 }
 
+const SoundPatch* Sounds::weapon_patch(const std::string& tmpl, size_t index) {
+    auto it = weapon_.find(tmpl);
+    if (it == weapon_.end()) {
+        std::string path = script(tmpl);
+        std::vector<SoundPatch> ps;
+        if (!path.empty()) {
+            auto read = [&](const std::string& p) {
+                if (!vfs_.has(p)) return std::string();
+                auto d = vfs_.read(p);
+                return std::string(d.begin(), d.end());
+            };
+            ps = ssc_patches(path, read);
+        }
+        it = weapon_.emplace(tmpl, std::move(ps)).first;
+    }
+    return index < it->second.size() && !it->second[index].layers.empty() ? &it->second[index] : nullptr;
+}
+
+int Sounds::play_patch(const SoundPatch& p, const float pos[3], float control, bool once) {
+    SoundPatch q = p;
+    std::vector<std::shared_ptr<const Wav>> w;
+    for (auto& l : q.layers) {
+        if (once) l.loop = false;
+        if (!wavs_.count(l.wav)) {
+            std::shared_ptr<const Wav> wav;
+            try {
+                if (vfs_.has(l.wav)) wav = std::make_shared<Wav>(wav_parse(vfs_.read(l.wav)));
+            } catch (const std::exception&) {  // a bad file stays silent
+            }
+            wavs_[l.wav] = wav;
+        }
+        w.push_back(wavs_[l.wav]);
+    }
+    return mixer.play(q, w, pos, control);
+}
+
+void Sounds::shot(const std::string& tmpl, const float pos[3], int source, float now) {
+    const SoundPatch* burst = weapon_patch(tmpl, 5);
+    bool automatic = burst && std::any_of(burst->layers.begin(), burst->layers.end(), [](const SoundLayer& l) { return l.loop; });
+    if (automatic) {  // one loop per shooter while it fires (single-shot weapons keep silence.wav there)
+        auto b = bursts_.find(source);
+        if (b == bursts_.end()) b = bursts_.emplace(source, Burst{play_patch(*burst, pos, 0, false), now}).first;
+        else mixer.update(b->second.handle, pos, 0);
+        b->second.last = now;
+    } else if (const SoundPatch* single = weapon_patch(tmpl, 0)) {
+        play_patch(*single, pos, 0, true);
+    }
+    if (const SoundPatch* far = weapon_patch(tmpl, 2)) play_patch(*far, pos, 0, true);
+}
+
+void Sounds::reload(const std::string& tmpl, const float pos[3]) {
+    if (const SoundPatch* r = weapon_patch(tmpl, 1)) play_patch(*r, pos, 0, true);
+}
+
+void Sounds::tick(float now) {
+    for (auto it = bursts_.begin(); it != bursts_.end();)
+        if (now - it->second.last > 0.25f) mixer.release(it->second.handle), it = bursts_.erase(it);
+        else ++it;
+}
+
 int Sounds::play(const std::string& path, const float pos[3], float control) {
     const SoundPatch* p = path.empty() ? nullptr : patch(path);
     if (!p) return -1;
@@ -61,11 +123,6 @@ int Sounds::play(const std::string& path, const float pos[3], float control) {
     return mixer.play(*p, w, pos, control);
 }
 
-void Sounds::shot(const std::string& tmpl, const float pos[3]) {
-    auto it = scripts_.find(tmpl);
-    if (it == scripts_.end()) it = scripts_.emplace(tmpl, script(tmpl)).first;
-    play(it->second, pos, 0);
-}
 
 void Sounds::engine(const std::string& tmpl, const float pos[3], float control) {
     if (tmpl != engine_tmpl_) {

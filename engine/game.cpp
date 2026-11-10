@@ -539,7 +539,7 @@ void Game::fire(float t) {
         float pos[3], vel[3];
         for (int i = 0; i < 3; ++i) d[i] /= l, pos[i] = m.m[12 + i] + d[i] * (st.has_muzzle ? 1.0f : v.len), vel[i] = d[i] * w.velocity;
         phys.fire(pos, vel, w.material, w.material2, w.ttl, v.id, -1, team, w.radius, w.bounce);
-        sounds.push_back({w.name, {pos[0], pos[1], pos[2]}});
+        sounds.push_back({w.name, {pos[0], pos[1], pos[2]}, 100000 + 16 * v.id + seat});
     } else if (player >= 0 && !hand.name.empty() && t >= hand_next && hand_ammo.take(t)) {
         hand_next = t + hand.interval;
         float p[3], d[3] = {std::sin(cam.yaw) * std::cos(cam.pitch), std::sin(cam.pitch), std::cos(cam.yaw) * std::cos(cam.pitch)}, pos[3], vel[3];
@@ -548,7 +548,7 @@ void Game::fire(float t) {
         int id = phys.fire(pos, vel, hand.material, hand.material2, hand.ttl, -1, player, team, hand.radius, hand.bounce);
         last_shot = t;
         if (id >= 0 && hand.bounce && hand.ttl > 60) placed.push_back({id, hand.near});  // not a grenade: waits for a trigger
-        sounds.push_back({hand.name, {pos[0], pos[1], pos[2]}});
+        sounds.push_back({hand.name, {pos[0], pos[1], pos[2]}, -1});
     }
 }
 
@@ -789,7 +789,7 @@ void Game::crew(Bot& b, float t, float step, const float* target, int target_veh
                 for (int i = 0; i < 3; ++i) pos[i] = o[i] + dir[i] / l * 1.0f, vel[i] = dir[i] / l * st.weapon.velocity;
                 const WeaponDef& w = st.weapon;
                 phys.fire(pos, vel, w.material, w.material2, w.ttl, v.id, -1, b.team, w.radius, w.bounce);
-                sounds.push_back({w.name, {pos[0], pos[1], pos[2]}});
+                sounds.push_back({w.name, {pos[0], pos[1], pos[2]}, 100000 + 16 * v.id + b.vseat});
                 b.last_shot = t;
             }
         }
@@ -947,6 +947,8 @@ void Game::think(float t, float step) {
             // shortcut: in a fight scouts lie down and the others crouch (the original AI's choice is unread)
             if (int want = b.kit == 0 ? 2 : 1; b.posture != want && phys.set_posture(b.ch, want)) b.posture = want;
             b.ammo.tick(t, b.weapon);
+            if (bool r = b.ammo.reloading(t); r && !b.was_reloading) sounds.push_back({b.weapon.name, {b.pos[0], b.pos[1] + 1.5f, b.pos[2]}, static_cast<int>(bi), true});
+            b.was_reloading = b.ammo.reloading(t);
             // A grenade at soldiers 12-35 m away, at most every 8 s (guessed): the low arc that lands on them.
             float hd = std::sqrt(d[0] * d[0] + d[2] * d[2]), v = b.grenade.velocity, gr = 9.81f;
             float disc = v * v * v * v - gr * (gr * hd * hd + 2 * d[1] * v * v);
@@ -957,7 +959,7 @@ void Game::think(float t, float step) {
                 float dir[3] = {d[0] / hd * ca + err(rng), sa + err(rng), d[2] / hd * ca + err(rng)}, pos[3], vel[3];
                 for (int i = 0; i < 3; ++i) pos[i] = eye[i] + dir[i] * 0.5f, vel[i] = dir[i] * v;
                 phys.fire(pos, vel, b.grenade.material, b.grenade.material2, b.grenade.ttl, -1, b.ch, b.team, b.grenade.radius, true);
-                sounds.push_back({b.grenade.name, {pos[0], pos[1], pos[2]}});
+                sounds.push_back({b.grenade.name, {pos[0], pos[1], pos[2]}, static_cast<int>(bi)});
                 ++grenades_thrown;
                 continue;
             }
@@ -968,7 +970,7 @@ void Game::think(float t, float step) {
                 for (int i = 0; i < 3; ++i) pos[i] = eye[i] + dir[i] / l * 0.6f, vel[i] = dir[i] / l * b.weapon.velocity;
                 phys.fire(pos, vel, b.weapon.material, b.weapon.material2, b.weapon.ttl, -1, b.ch, b.team, b.weapon.radius, b.weapon.bounce);
                 b.last_shot = t;
-                sounds.push_back({b.weapon.name, {pos[0], pos[1], pos[2]}});
+                sounds.push_back({b.weapon.name, {pos[0], pos[1], pos[2]}, static_cast<int>(bi)});
             }
             continue;
         }
@@ -1071,6 +1073,12 @@ void Game::step(float t, float dt, const GameInput& in) {
         placed_charges(in.detonate);
         hand_ammo.tick(t, hand);
         if (in.reload) hand_ammo.reload(t, hand);
+        if (bool r = hand_ammo.reloading(t); r && !was_reloading && !player_dead) {
+            float p[3];
+            phys.character_position(player, p);
+            sounds.push_back({hand.name, {p[0], p[1] + 1.5f, p[2]}, -1, true});
+        }
+        was_reloading = hand_ammo.reloading(t);
     }
     bool pull = in.fire && !(cur < 0 && hand.fire_once && fire_held);  // fireOnce: one round per click on foot
     fire_held = in.fire;

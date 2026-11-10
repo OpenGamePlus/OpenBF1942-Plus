@@ -29,6 +29,7 @@ struct SoundEffect {
 struct SoundLayer {
     std::string wav;  // VFS path, @ROOT / @RTD resolved (sound/44khz/...)
     bool loop = false, stereo = false;  // stereo: not positioned (first-person sounds)
+    bool finish = false;                // stop FinishSample: a released loop plays its pass to the end
     float volume = 1, min_distance = 1;
     std::vector<SoundEffect> effects;
 };
@@ -41,6 +42,9 @@ struct SoundPatch {
 // #include paths are relative to the including file.
 SoundPatch ssc_parse(const std::string& path, const std::function<std::string(const std::string&)>& read,
                      const std::string& level = "HIGH");  // some scripts ship only HIGH (Elco torpedoes)
+// The same, one patch per newPatch. Hand weapons: 0 single shot, 1 reload, 2 distant shot, 5 automatic fire (loop).
+std::vector<SoundPatch> ssc_patches(const std::string& path, const std::function<std::string(const std::string&)>& read,
+                                    const std::string& level = "HIGH");
 
 struct Listener {
     float pos[3] = {}, right[3] = {1, 0, 0};

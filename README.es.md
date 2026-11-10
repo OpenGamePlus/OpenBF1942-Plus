@@ -41,7 +41,7 @@ cmake -S . -B build && cmake --build build -j
 ctest --test-dir build
 build/obf_mapview "<BF1942_DIR>" bf1942 Wake      # botón derecho: mirar, WASD/QE: mover, shift: rápido
 build/obf_sim "<BF1942_DIR>" bf1942 El_Alamein --play 2 --sim 600   # sin ventana: 10 minutos de conquista, en texto
-build/obf_mapview "<BF1942_DIR>" bf1942 El_Alamein --drive Willy   # WASD conduce, botón derecho apunta torretas, clic izquierdo dispara, R recarga, 1-9 armas, G detona cargas, ctrl agacharse, Z tumbarse, V primera / tercera persona, F1-F8 asientos; aviones: W/S gas, flechas, A/D timón
+build/obf_mapview "<BF1942_DIR>" bf1942 El_Alamein --drive Willy   # WASD conduce, el ratón apunta torretas (con --play el ratón siempre mira; F10 lo libera), clic izquierdo dispara, R recarga, 1-9 armas, G detona cargas, ctrl agacharse, Z tumbarse, V primera / tercera persona, F1-F8 asientos; aviones: W/S gas, flechas, A/D timón
 ```
 
 ## Hoja de ruta

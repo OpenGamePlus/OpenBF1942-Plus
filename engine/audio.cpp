@@ -79,7 +79,7 @@ std::string join(const std::string& dir, const std::string& rel) {
     return out;
 }
 
-void parse_into(SoundPatch& patch, const std::string& path, const std::function<std::string(const std::string&)>& read,
+void parse_into(std::vector<SoundPatch>& patches, const std::string& path, const std::function<std::string(const std::string&)>& read,
                 const std::string& level, int depth) {
     if (depth > 8) return;
     std::string text = read(path);
@@ -105,7 +105,8 @@ void parse_into(SoundPatch& patch, const std::string& path, const std::function<
         if (k == "#include") {
             std::string rel;
             ls >> rel;
-            if (!rel.empty()) parse_into(patch, join(dir_of(path), lowered(rel)), read, level, depth + 1);
+            if (!rel.empty()) parse_into(patches, join(dir_of(path), lowered(rel)), read, level, depth + 1);
+            fx = nullptr;  // the include may have moved the patches
             continue;
         }
         if (k[0] == '#' || k[0] == '*') continue;  // comments
@@ -113,6 +114,13 @@ void parse_into(SoundPatch& patch, const std::string& path, const std::function<
         ls >> arg;
         float v = static_cast<float>(std::atof(arg.c_str()));
         if (!std::isfinite(v)) v = 0;
+        if (k == "newpatch") {
+            patches.emplace_back();
+            fx = nullptr;
+            continue;
+        }
+        if (patches.empty()) patches.emplace_back();  // layers before any newPatch
+        SoundPatch& patch = patches.back();
         SoundLayer* layer = patch.layers.empty() ? nullptr : &patch.layers.back();
         if (k == "load") {
             // @ROOT/Sound/@RTD/x.wav -> sound/44khz/x.wav (@RTD: the sample-rate folder; 44 kHz chosen)
@@ -120,12 +128,14 @@ void parse_into(SoundPatch& patch, const std::string& path, const std::function<
             if (p.rfind("@root/", 0) == 0) p = p.substr(6);
             else p = join(dir_of(path), p);
             for (size_t r; (r = p.find("@rtd")) != std::string::npos;) p.replace(r, 4, "44khz");
-            patch.layers.push_back({p, false, false, 1, 1, {}});
+            patch.layers.push_back({p, false, false, false, 1, 1, {}});
             fx = nullptr;
         } else if (!layer) {
             continue;
         } else if (k == "loop") {
             layer->loop = true;
+        } else if (k == "stop") {
+            layer->finish = lowered(arg) == "finishsample";
         } else if (k == "stereo") {
             layer->stereo = true;
         } else if (k == "volume") {
@@ -153,10 +163,17 @@ void parse_into(SoundPatch& patch, const std::string& path, const std::function<
 
 }  // namespace
 
+std::vector<SoundPatch> ssc_patches(const std::string& path, const std::function<std::string(const std::string&)>& read,
+                                    const std::string& level) {
+    std::vector<SoundPatch> patches;
+    parse_into(patches, join("", lowered(path)), read, level, 0);  // ".." from loadSoundScript paths resolved
+    return patches;
+}
+
 SoundPatch ssc_parse(const std::string& path, const std::function<std::string(const std::string&)>& read, const std::string& level) {
-    SoundPatch p;
-    parse_into(p, join("", lowered(path)), read, level, 0);  // ".." from loadSoundScript paths resolved
-    return p;
+    SoundPatch all;
+    for (SoundPatch& p : ssc_patches(path, read, level)) all.layers.insert(all.layers.end(), p.layers.begin(), p.layers.end());
+    return all;
 }
 
 int Mixer::play(const SoundPatch& patch, const std::vector<std::shared_ptr<const Wav>>& wavs, const float pos[3], float control) {
@@ -175,8 +192,11 @@ void Mixer::update(int handle, const float pos[3], float control) {
 }
 
 void Mixer::release(int handle) {
-    for (auto& v : voices_)
-        if (v.handle == handle && v.release_time < 0) v.release_time = v.time;
+    for (auto& v : voices_) {
+        if (v.handle != handle || v.release_time >= 0) continue;
+        if (v.layer.finish) v.layer.loop = false;  // stop FinishSample: this pass to its end
+        else v.release_time = v.time;
+    }
 }
 
 void Mixer::mix(float* out, int frames, const Listener& l) {

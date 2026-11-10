@@ -639,6 +639,11 @@ int main() {
         const SoundEffect& fx = sp.layers[0].effects[0];
         assert(fx.source == SoundEffect::Distance && fx.eval(50) == 1 && fx.eval(150) == 0.5f && fx.eval(300) == 0);
         assert(ssc_parse("objects/gun/sounds/gun.ssc", read, "LOW").layers.size() == 1);
+        files["objects/mg/mg.ssc"] = "newPatch\nload @ROOT/Sound/@RTD/Single.wav\nnewPatch\nload @ROOT/Sound/@RTD/Reload.wav\n"
+                                     "newPatch\nnewPatch\nnewPatch\nnewPatch\nload @ROOT/Sound/@RTD/Burst.wav\nloop\nstop FinishSample\n";
+        auto ps = ssc_patches("objects/mg/mg.ssc", read);
+        assert(ps.size() == 6 && ps[1].layers[0].wav == "sound/44khz/reload.wav" && ps[3].layers.empty());
+        assert(ps[5].layers[0].loop && ps[5].layers[0].finish && ssc_parse("objects/mg/mg.ssc", read).layers.size() == 3);
 
         auto tone = std::make_shared<Wav>();  // 0.1 s at 44.1 kHz, constant
         tone->rate = 44100, tone->samples.assign(4410, 16384);
@@ -660,6 +665,14 @@ int main() {
         assert(mixer.voices() == 1);
         mixer.release(h);  // no TimeRelease effect: stops at once
         mixer.mix(out.data(), 2048, Listener{});
+        assert(mixer.voices() == 0);
+        loop.layers[0].finish = true;  // stop FinishSample: the pass under way plays to its end (0.1 s), then stops
+        h = mixer.play(loop, {tone}, right_of_listener);
+        for (int i = 0; i < 3; ++i) mixer.mix(out.data(), 2048, Listener{});
+        mixer.release(h);
+        mixer.mix(out.data(), 1000, Listener{});
+        assert(mixer.voices() == 1);
+        mixer.mix(out.data(), 4410, Listener{});
         assert(mixer.voices() == 0);
     }
     {  // HUD: .font, layout, gray TGA

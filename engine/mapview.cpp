@@ -40,7 +40,7 @@ int run(int argc, char** argv) {
                      "  --shot with --drive: settles 2 s, drives 4 s (last 2 s steering right), prints the track;\n"
                      "  aircraft: 20 s take-off run, pulling up from 12 s to 16 s; the vehicle fires from 2 s (--fire-ahead: gun\n"
                      "  straight ahead, no steering)\n"
-                     "  --play: walk a soldier (WASD, shift walks, space jumps, right mouse looks, left mouse fires, R reloads, 1-9 weapons, G detonates explosive packs, left ctrl crouches, Z lies down, V first / third person), E gets into / out of the nearest vehicle, F1-F8 change seat\n"
+                     "  --play: walk a soldier (WASD, shift walks, space jumps, the mouse looks (F10 frees it), left mouse fires, R reloads, 1-9 weapons, G detonates explosive packs, left ctrl crouches, Z lies down, V first / third person), E gets into / out of the nearest vehicle, F1-F8 change seat\n"
                      "  (parked vehicles are drivable with --play or --drive); with --shot: runs 2 s, gets into the nearest vehicle,\n"
                      "  drives 2 s, gets out, then reports how far the parked vehicles moved while settling, then plays --sim seconds\n"
                      "  (default 10) of conquest and prints flag changes and tickets\n");
@@ -163,7 +163,9 @@ int run(int argc, char** argv) {
         std::fprintf(stderr, "HUD font: %s (no HUD)\n", e.what());
     }
 
-    bool running = true, look = false;
+    // Playing: the mouse always turns the view (captured); F10 or leaving the window frees it, a click takes it back.
+    // Free camera: right mouse held looks, as before.
+    bool running = true, look = false, grab = shot.empty() && !play.empty();
     Uint64 last = SDL_GetPerformanceCounter();
     std::vector<float> projectiles;
     while (running) {
@@ -181,13 +183,16 @@ int run(int argc, char** argv) {
             if (ev.type == SDL_KEYDOWN && ev.key.keysym.sym == SDLK_v && !ev.key.repeat) toggle_view = true;
             if (ev.type == SDL_MOUSEBUTTONDOWN && ev.button.button == SDL_BUTTON_RIGHT) look = true;
             if (ev.type == SDL_MOUSEBUTTONUP && ev.button.button == SDL_BUTTON_RIGHT) look = false;
-            if (ev.type == SDL_MOUSEMOTION && look) {
+            if (ev.type == SDL_KEYDOWN && ev.key.keysym.sym == SDLK_F10 && !ev.key.repeat && !play.empty()) grab = !grab;
+            if (ev.type == SDL_WINDOWEVENT && ev.window.event == SDL_WINDOWEVENT_FOCUS_LOST) grab = false;
+            if (ev.type == SDL_MOUSEBUTTONDOWN && !play.empty() && shot.empty()) grab = true;
+            if (ev.type == SDL_MOUSEMOTION && (look || grab)) {
                 mouse_x += static_cast<float>(ev.motion.xrel), mouse_y += static_cast<float>(ev.motion.yrel);
                 cam.yaw += static_cast<float>(ev.motion.xrel) * 0.004f;
                 cam.pitch = std::clamp(cam.pitch - static_cast<float>(ev.motion.yrel) * 0.004f, -1.5f, 1.5f);
             }
         }
-        SDL_SetRelativeMouseMode(look ? SDL_TRUE : SDL_FALSE);
+        SDL_SetRelativeMouseMode(look || grab ? SDL_TRUE : SDL_FALSE);
         Uint64 now = SDL_GetPerformanceCounter();
         float dt = static_cast<float>(now - last) / static_cast<float>(SDL_GetPerformanceFrequency());
         last = now;
@@ -214,7 +219,12 @@ int run(int argc, char** argv) {
         if (audio) {
             std::lock_guard<std::mutex> g(sound_lock);
             listener = Listener{{cam.x, cam.y, cam.z}, {std::cos(cam.yaw), 0, -std::sin(cam.yaw)}};
-            for (auto& e : game.sounds) sounds.shot(e.tmpl, e.pos);
+            float now_s = static_cast<float>(SDL_GetTicks()) / 1000.0f;
+            for (auto& e : game.sounds) {
+                if (e.reload) sounds.reload(e.tmpl, e.pos);
+                else sounds.shot(e.tmpl, e.pos, e.source, now_s);
+            }
+            sounds.tick(now_s);
             float vp[3] = {}, control = 0;
             std::string v = game.driving(vp, control);
             sounds.engine(v, vp, control);
