@@ -109,6 +109,16 @@ Game::Game(const Vfs& vfs_, Con& con_, const Heightmap& hm_, const TerrainInfo& 
             }
             break;
         }
+        for (const std::string& p : vfs.paths(con.level_dir + "/pathfinding/")) {  // Tank0level0map.raw
+            if (p.find("tank") == std::string::npos || p.size() < 13 || p.compare(p.size() - 13, 13, "level0map.raw") != 0) continue;
+            try {
+                NavGrid g = nav_parse(vfs.read(p), info.world_size);
+                tank_nav = nav_coarse(g, std::max(1, static_cast<int>(4.0f / g.cell + 0.5f)));
+            } catch (const std::exception& e) {
+                std::printf("navigation %s: %s\n", p.c_str(), e.what());
+            }
+            break;
+        }
         // Supply depots under placed objects (Ammobox -> AmmoboxSupplyDepot); shortcut: at the root's position.
         std::function<const ConObject*(const std::string&, int)> depot_of = [&](const std::string& n, int depth) -> const ConObject* {
             const ConObject* t = object_template(n);
@@ -241,7 +251,7 @@ void Game::add_vehicle(const std::string& name, Mat4 world) {
         if (w.strength > 0) check(w.pos[0], w.pos[1] - w.radius, w.pos[2]);
     if (lift > 0) world = translate(0, lift + 0.05f, 0) * world;
     Veh v;
-    v.id = phys.add_vehicle(*def, world), v.name = name, v.plane = def->plane, v.first = scene.size(), v.start = world;
+    v.id = phys.add_vehicle(*def, world), v.name = name, v.plane = def->plane, v.ship = def->ship, v.first = scene.size(), v.start = world;
     for (size_t i = 2; i < def->hull.size(); i += 3) v.len = std::max(v.len, std::fabs(def->hull[i]));
     for (DrawItem& item : build_object(con, vfs, name, Mat4::identity(), skipped)) ++v.parts, scene.push_back(std::move(item));
     v.wreck_first = scene.size();
@@ -251,7 +261,7 @@ void Game::add_vehicle(const std::string& name, Mat4 world) {
     for (const SeatDef& sd : def->seats) {
         Seat st;
         st.weapon = sd.weapon;
-        std::copy(sd.exit, sd.exit + 3, st.exit);
+        std::copy(sd.exit, sd.exit + 3, st.exit), std::copy(sd.pos, sd.pos + 3, st.pos);
         v.seats.push_back(st);
     }
     if (v.seats.empty()) v.seats.push_back(Seat{}), v.seats[0].weapon = def->weapon, std::copy(def->exit, def->exit + 3, v.seats[0].exit);
@@ -326,6 +336,9 @@ void Game::get_in_out() {
         if (seat == 0) phys.drive(v.id, 0, 0);
         phys.look(v.id, 0, 0, seat);
         v.seats[static_cast<size_t>(seat)].who = -2;
+        bool empty = true;
+        for (const Seat& s : v.seats) empty = empty && s.who == -2;
+        if (empty) v.team = 0;
         phys.place_character(player, e[0], e[1] + 0.5f, e[2]);
         phys.set_character_active(player, true);
         std::printf("out of %s at %.1f %.1f %.1f\n", v.name.c_str(), e[0], e[1], e[2]);
@@ -345,8 +358,8 @@ void Game::get_in_out() {
     seat = -1;
     for (size_t i = 0; i < v.seats.size() && seat < 0; ++i)
         if (v.seats[i].who == -2) seat = static_cast<int>(i);
-    if (seat < 0) return void(cur = -1);
-    v.seats[static_cast<size_t>(seat)].who = -1;
+    if (seat < 0 || (v.team && v.team != team)) return void(cur = -1);  // full, or crewed by the other team
+    v.seats[static_cast<size_t>(seat)].who = -1, v.team = team;
     phys.set_character_active(player, false);
     std::printf("in %s, seat %d of %zu\n", v.name.c_str(), seat + 1, v.seats.size());
 }
@@ -548,13 +561,19 @@ void Game::apply_hits() {
         if (tag == team) std::printf("%s (team %d) killed\n", b.tmpl.c_str(), b.team);
         note(b.tmpl + (tag == team ? " killed by your team" : " killed"));
     };
-    auto hurt_vehicle = [&](size_t i, float d, int armour) {
+    auto hurt_vehicle = [&](size_t i, float d, int armour, int tag) {
         Veh& v = vehicles[i];
         v.hp -= d;
         std::printf("hit %s (armour %d): %.1f damage, %.1f hp left\n", v.name.c_str(), armour, d, std::max(0.0f, v.hp));
         if (v.hp > 0) return;
-        v.wrecked = true;
+        v.wrecked = true, ++wrecks;
         std::printf("%s destroyed\n", v.name.c_str());
+        for (Seat& st : v.seats)
+            if (st.who >= 0) {
+                Bot& cb = bots[static_cast<size_t>(st.who)];
+                leave(cb);
+                hurt_bot(cb, 1e6f, tag);
+            }
         note(v.name + " destroyed");
         if (static_cast<int>(i) == cur && player >= 0) get_in_out(), player_dies();  // the crew dies with it
         phys.drive(v.id, 0, 0);
@@ -581,7 +600,7 @@ void Game::apply_hits() {
             for (size_t i = 0; i < vehicles.size(); ++i)
                 if (vehicles[i].id == h.vehicle && !vehicles[i].wrecked) {
                     int target = h.armor >= 0 ? h.armor : vehicles[i].material;
-                    hurt_vehicle(i, direct(target), target);
+                    hurt_vehicle(i, direct(target), target, h.tag);
                 }
         }
         if (!splash) continue;
@@ -595,14 +614,14 @@ void Game::apply_hits() {
             if (float f = falloff(q, 1); f > 0) hurt_player(damage.damage(h.material2, 41) * f);
         }
         for (Bot& b : bots)
-            if (!b.dead && h.tag != b.team)
+            if (!b.dead && b.veh < 0 && h.tag != b.team)  // crews are inside their vehicle
                 if (float f = falloff(b.pos, 1); f > 0) hurt_bot(b, damage.damage(h.material2, 41) * f, h.tag);
         for (size_t i = 0; i < vehicles.size(); ++i) {
             if (vehicles[i].wrecked) continue;
             Mat4 m = phys.transform(vehicles[i].id);
             float q[3] = {m.m[12], m.m[13], m.m[14]};
             // shortcut: distance to the vehicle's centre of mass, not its hull
-            if (float f = falloff(q, 0); f > 0) hurt_vehicle(i, damage.damage(h.material2, vehicles[i].material) * f, vehicles[i].material);
+            if (float f = falloff(q, 0); f > 0) hurt_vehicle(i, damage.damage(h.material2, vehicles[i].material) * f, vehicles[i].material, h.tag);
         }
     }
 }
@@ -612,6 +631,146 @@ void Game::apply_hits() {
 // half the weapon's rate with ~2 deg of aim error. Otherwise it runs at 4 m/s straight for the nearest flag its
 // team does not hold (main bases cannot change hands) and waits there. The dead come back after 10 s (the
 // player after 3) on a spawn point their team owns. Then the flags and tickets move on. t: game time.
+// Bots as crew. shortcut: all numbers guessed; land vehicles only (no flying, no boats); seats by order, not EntryPoint.
+void Game::seat_point(const Veh& v, size_t s, float out[3]) const {
+    Mat4 m = phys.transform(v.id);
+    const float* p = v.seats[s].pos;
+    for (int i = 0; i < 3; ++i) out[i] = m.m[i] * p[0] + m.m[4 + i] * p[1] + m.m[8 + i] * p[2] + m.m[12 + i];
+    out[1] += 1.0f;  // the head over the seat
+}
+
+void Game::refresh_muzzles(Veh& v) {  // as pose() does, for runs that do not draw
+    std::vector<DrawItem> parts = build_object(con, vfs, v.name, phys.transform(v.id), skipped,
+                                               [&](const std::string& n, int o) { return phys.joint(v.id, n, o); });
+    for (const DrawItem& d : parts)
+        for (Seat& st : v.seats)
+            if (!st.weapon.name.empty() && d.owner == st.weapon.name) st.muzzle = d.world, st.has_muzzle = true;
+}
+
+// A bot with nothing to shoot boards a vehicle within 10 m: an empty land vehicle's driver seat, or a free armed
+// seat of one its team already crews. Checked every 3 s.
+void Game::board(Bot& b, float t) {
+    if (t < b.board_at) return;
+    b.board_at = t + 3;
+    for (size_t vi = 0; vi < vehicles.size(); ++vi) {
+        Veh& v = vehicles[vi];
+        if (v.wrecked || v.plane || v.ship || (v.team && v.team != b.team)) continue;
+        Mat4 m = phys.transform(v.id);
+        float dx = m.m[12] - b.pos[0], dz = m.m[14] - b.pos[2];
+        if (dx * dx + dz * dz > (10 + v.len) * (10 + v.len)) continue;
+        int s = -1;
+        if (v.seats[0].who == -2 && !v.team) s = 0;
+        for (size_t k = 1; k < v.seats.size() && s < 0 && v.team; ++k)
+            if (v.seats[k].who == -2 && !v.seats[k].weapon.name.empty()) s = static_cast<int>(k);
+        if (s < 0) continue;
+        v.seats[static_cast<size_t>(s)].who = static_cast<int>(&b - bots.data()), v.team = b.team;
+        b.veh = static_cast<int>(vi), b.vseat = s, b.path.clear(), b.path_goal = -1, ++boardings;
+        phys.set_character_active(b.ch, false), phys.walk(b.ch, 0, 0, false);
+        if (phys.set_posture(b.ch, 0)) b.posture = 0;
+        return;
+    }
+}
+
+void Game::leave(Bot& b) {
+    if (b.veh < 0) return;
+    Veh& v = vehicles[static_cast<size_t>(b.veh)];
+    Seat& st = v.seats[static_cast<size_t>(b.vseat)];
+    st.who = -2;
+    if (b.vseat == 0) phys.drive(v.id, 0, 0);
+    phys.look(v.id, 0, 0, b.vseat);
+    Mat4 m = phys.transform(v.id);
+    float e[3];
+    for (int i = 0; i < 3; ++i) e[i] = m.m[i] * st.exit[0] + m.m[4 + i] * st.exit[1] + m.m[8 + i] * st.exit[2] + m.m[12 + i];
+    phys.place_character(b.ch, e[0], e[1] + 0.5f, e[2]);
+    phys.set_character_active(b.ch, true);
+    bool empty = true;
+    for (const Seat& s : v.seats) empty = empty && s.who == -2;
+    if (empty) v.team = 0;
+    b.veh = b.vseat = -1;
+}
+
+// A crew member: the driver heads for the flag (tank map route), every armed seat turns its gun onto the target and fires.
+void Game::crew(Bot& b, float t, float step, const float* target, int target_veh) {
+    Veh& v = vehicles[static_cast<size_t>(b.veh)];
+    Seat& st = v.seats[static_cast<size_t>(b.vseat)];
+    Mat4 m = phys.transform(v.id);
+    std::copy(m.m + 12, m.m + 15, b.pos);
+    b.moving = false;
+    if (target && !st.weapon.name.empty()) {
+        if (t >= v.muzzles_at) refresh_muzzles(v), v.muzzles_at = t + 0.1f;
+        Mat4 mz = st.has_muzzle ? st.muzzle : m;
+        float f[3] = {mz.m[8], mz.m[9], mz.m[10]}, o[3] = {mz.m[12], mz.m[13], mz.m[14]};
+        float d[3] = {target[0] - o[0], target[1] - o[1], target[2] - o[2]};
+        float dist = std::sqrt(d[0] * d[0] + d[1] * d[1] + d[2] * d[2]), fl = std::sqrt(f[0] * f[0] + f[1] * f[1] + f[2] * f[2]);
+        if (dist > 1 && fl > 1e-4f) {
+            float tof = dist / std::max(st.weapon.velocity, 1.0f);
+            d[1] += 0.5f * 9.81f * tof * tof;  // lead the drop
+            float yaw_err = std::remainder(std::atan2(d[0], d[2]) - std::atan2(f[0], f[2]), 6.2831853f) * 57.29578f;
+            float pitch_err = (std::atan2(d[1], std::sqrt(d[0] * d[0] + d[2] * d[2])) - std::asin(std::clamp(f[1] / fl, -1.0f, 1.0f))) * 57.29578f;
+            // Mouse right turns right, mouse down lowers the gun (the player's mapping).
+            phys.look(v.id, std::clamp(yaw_err / 10, -1.0f, 1.0f), std::clamp(-pitch_err / 5, -1.0f, 1.0f), b.vseat);
+            if (std::fabs(yaw_err) < 3 && std::fabs(pitch_err) < 3 && dist < 250 && t >= st.next_fire) {
+                st.next_fire = t + st.weapon.interval * (st.weapon.interval > 1 ? 1.0f : 2.0f);
+                float l = dist;
+                std::normal_distribution<float> err(0.0f, 0.01f);
+                float dir[3] = {f[0] / fl + err(rng), f[1] / fl + err(rng), f[2] / fl + err(rng)}, pos[3], vel[3];
+                l = std::sqrt(dir[0] * dir[0] + dir[1] * dir[1] + dir[2] * dir[2]);
+                for (int i = 0; i < 3; ++i) pos[i] = o[i] + dir[i] / l * 1.0f, vel[i] = dir[i] / l * st.weapon.velocity;
+                const WeaponDef& w = st.weapon;
+                phys.fire(pos, vel, w.material, w.material2, w.ttl, v.id, -1, b.team, w.radius, w.bounce);
+                sounds.push_back({w.name, {pos[0], pos[1], pos[2]}});
+                b.last_shot = t;
+            }
+        }
+    } else {
+        phys.look(v.id, 0, 0, b.vseat);
+    }
+    (void)target_veh;
+    if (b.vseat != 0) return;
+    // Driving: the nearest flag its team does not hold; stop 15 m from it. Stuck: back out for 2 s.
+    const ConquestFlag* goal = nullptr;
+    float best = 1e30f;
+    for (const ConquestFlag& fl : game.flags) {
+        float g = (fl.pos[0] - b.pos[0]) * (fl.pos[0] - b.pos[0]) + (fl.pos[2] - b.pos[2]) * (fl.pos[2] - b.pos[2]);
+        if (fl.team != b.team && !fl.locked && g < best) best = g, goal = &fl;
+    }
+    if (!goal || best < 15 * 15 || target) {  // there, or fighting: hold
+        phys.drive(v.id, 0, 0);
+        return;
+    }
+    int gi = static_cast<int>(goal - game.flags.data());
+    bool stuck = false;
+    if (t >= b.check_at && t >= b.reverse_until) {  // under 2 m in 3 s
+        float mx = b.pos[0] - b.check_pos[0], mz = b.pos[2] - b.check_pos[1];
+        stuck = mx * mx + mz * mz < 4;
+        b.jams = stuck ? b.jams + 1 : 0;
+        b.check_at = t + 3, b.check_pos[0] = b.pos[0], b.check_pos[1] = b.pos[2];
+    }
+    if (b.jams >= 4) {  // hopeless (parked vehicles, rocks): on foot, and no boarding for a minute
+        phys.drive(v.id, 0, 0), leave(b), b.board_at = t + 60, b.jams = 0;
+        return;
+    }
+    if (stuck) b.reverse_until = t + 3, b.replan_at = 0;
+    if (tank_nav.n > 0 && (gi != b.path_goal || (stuck && t >= b.replan_at))) {
+        b.path = nav_path(tank_nav, b.pos[0], b.pos[2], goal->pos[0], goal->pos[2]);
+        b.waypoint = 0, b.path_goal = gi, b.replan_at = t + 5;
+    }
+    float tx = goal->pos[0], tz = goal->pos[2];
+    while (b.waypoint * 2 + 1 < b.path.size()) {
+        float wx = b.path[b.waypoint * 2], wz = b.path[b.waypoint * 2 + 1];
+        if ((wx - b.pos[0]) * (wx - b.pos[0]) + (wz - b.pos[2]) * (wz - b.pos[2]) > 6 * 6) {
+            tx = wx, tz = wz;
+            break;
+        }
+        ++b.waypoint;
+    }
+    float heading = std::atan2(m.m[8], m.m[10]), want = std::atan2(tx - b.pos[0], tz - b.pos[2]);
+    float err = std::remainder(want - heading, 6.2831853f) * 57.29578f;
+    if (t < b.reverse_until) phys.drive(v.id, -1.0f, t < b.reverse_until - 1.5f ? 0.0f : (err > 0 ? -1.0f : 1.0f));  // straight back, then turning
+    else phys.drive(v.id, std::fabs(err) < 45 ? 1.0f : 0.3f, std::clamp(err / 30, -1.0f, 1.0f));
+    (void)step;
+}
+
 void Game::think(float t, float step) {
     auto owned_spawn = [&](int tm) -> const SpawnPt* {
         std::vector<const SpawnPt*> c;
@@ -629,7 +788,7 @@ void Game::think(float t, float step) {
             std::printf("respawned\n");
         }
     for (Bot& b : bots) {
-        if (!b.dead) phys.character_position(b.ch, b.pos);
+        if (!b.dead && b.veh < 0) phys.character_position(b.ch, b.pos);
         if (!b.dead || t - b.died_at < 10 || game.winner) continue;
         const SpawnPt* sp = owned_spawn(b.team);
         if (!sp) continue;
@@ -638,6 +797,7 @@ void Game::think(float t, float step) {
         b.dead = false, b.hp = hitpoints(b.tmpl), b.yaw = sp->yaw, b.target = -2, b.seen_at = -1;
         b.ammo = Ammo::full(b.weapon), b.grenades = Ammo::full(b.grenade);
         if (phys.set_posture(b.ch, 0)) b.posture = 0;
+        b.veh = b.vseat = -1, b.path.clear(), b.path_goal = -1;
         std::copy(sp->pos, sp->pos + 3, b.pos);
     }
     float ppos[3] = {};
@@ -659,9 +819,16 @@ void Game::think(float t, float step) {
             continue;
         }
         float eye[3] = {b.pos[0], b.pos[1] + body_height(b.posture) - 0.2f, b.pos[2]};
+        int own_veh = b.veh >= 0 ? vehicles[static_cast<size_t>(b.veh)].id : -1;
+        if (b.veh >= 0) seat_point(vehicles[static_cast<size_t>(b.veh)], static_cast<size_t>(b.vseat), eye);
         auto aim_point = [&](int who, float out[3], int& ch, int& veh) {
             if (who == -1) return std::copy(ppos, ppos + 3, out), ch = cur >= 0 ? -1 : player, veh = pveh, void();
             const Bot& o = bots[static_cast<size_t>(who)];
+            if (o.veh >= 0) {  // crew: aim at the vehicle
+                const Veh& ov = vehicles[static_cast<size_t>(o.veh)];
+                Mat4 om = phys.transform(ov.id);
+                return out[0] = om.m[12], out[1] = om.m[13] + 1, out[2] = om.m[14], ch = -1, veh = ov.id, void();
+            }
             out[0] = o.pos[0], out[1] = o.pos[1] + body_height(o.posture) * 0.65f, out[2] = o.pos[2], ch = o.ch, veh = -1;
         };
         if (t >= b.next_look) {  // nearest visible opponent; line of sight checked for the three nearest
@@ -678,7 +845,7 @@ void Game::think(float t, float step) {
                 float q[3];
                 int ch, veh;
                 aim_point(cand[c].second, q, ch, veh);
-                if (phys.line_of_sight(eye, q, b.ch, ch, veh)) {
+                if (phys.line_of_sight(eye, q, b.ch, ch, veh, own_veh)) {
                     b.target = cand[c].second;
                     break;
                 }
@@ -686,6 +853,13 @@ void Game::think(float t, float step) {
         }
         if (b.target == -1 && !palive) b.target = -2;
         if (b.target >= 0 && bots[static_cast<size_t>(b.target)].dead) b.target = -2;
+        if (b.veh >= 0) {
+            float q[3];
+            int ch = -1, veh = -1;
+            if (b.target != -2) aim_point(b.target, q, ch, veh);
+            crew(b, t, step, b.target != -2 ? q : nullptr, veh);
+            continue;
+        }
         if (b.target != -2) {
             float q[3];
             int ch, veh;
@@ -724,6 +898,8 @@ void Game::think(float t, float step) {
         }
         b.seen_at = -1;
         if (b.posture != 0 && phys.set_posture(b.ch, 0)) b.posture = 0;  // up again to move on
+        board(b, t);
+        if (b.veh >= 0) continue;
         // The flag it already runs for, while it can still take it; else the nearest one its team does not hold
         // (two flags at about the same distance would otherwise swap goals every step).
         const ConquestFlag* goal = nullptr;
@@ -894,10 +1070,10 @@ void Game::demo_play(float sim_seconds) {
     int alive = 0, running = 0;
     for (const Bot& b : bots) alive += !b.dead, running += !b.dead && b.moving;
     std::printf("after %.0f s: %d of %zu bots alive, %d running for a flag; flags held %d / %d; tickets %.1f / %.1f%s; player %s; "
-                "bot deaths %d / %d; stuck sidesteps %d; grenades %d\n",
+                "bot deaths %d / %d; stuck sidesteps %d; grenades %d; boardings %d, wrecks %d\n",
                 now, alive, bots.size(), running, game.owned(1), game.owned(2), game.tickets[1], game.tickets[2],
                 game.winner ? (game.winner == 1 ? ", team 1 won" : ", team 2 won") : "", player_dead ? "dead" : "alive", deaths[1], deaths[2],
-                detours, grenades_thrown);
+                detours, grenades_thrown, boardings, wrecks);
     // Parked vehicles after 5 s: those pushed away (spawned inside something) or tipped over.
     int moved = 0, tipped = 0;
     for (size_t i = 0; i < vehicles.size(); ++i) {
@@ -1005,9 +1181,10 @@ void Game::pose() {
             cam.x = p[0] - dx * 4.5f, cam.y = p[1] + eye_height() + 0.2f - dy * 4.5f, cam.z = p[2] - dz * 4.5f;
         }
     }
-    for (Bot& b : bots) {  // running, standing or fallen, facing where they go or aim
-        if (!b.dead) phys.character_position(b.ch, b.pos);
-        std::vector<DrawItem> parts = build_object(con, vfs, b.tmpl, translate(b.pos[0], b.pos[1], b.pos[2]) * rotation_ypr(b.yaw, 0, 0),
+    for (Bot& b : bots) {  // running, standing or fallen, facing where they go or aim; crews are not drawn (shortcut)
+        if (!b.dead && b.veh < 0) phys.character_position(b.ch, b.pos);
+        Mat4 bw = b.veh >= 0 ? translate(0, -10000, 0) : translate(b.pos[0], b.pos[1], b.pos[2]) * rotation_ypr(b.yaw, 0, 0);
+        std::vector<DrawItem> parts = build_object(con, vfs, b.tmpl, bw,
                                                    skipped, nullptr, hide_1p);
         for (size_t i = 0; i < parts.size() && i < b.parts; ++i) scene[b.first + i].world = parts[i].world;
         SoldierView v;

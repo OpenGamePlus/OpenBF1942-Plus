@@ -68,6 +68,16 @@ Rules as read from those fields (the retail rules are not documented): soldiers 
 
 Bots of both teams start on their team's spawn points (the player takes one place). Every 0.3 s a bot picks the nearest opponent (bot or player, on foot or in a vehicle) it can see within 120 m, checking the line of sight to the three nearest; with one it turns, waits 0.7 s and fires its kit weapon (the five classes in turn) at half the weapon's rate with ~2° of aim error. Otherwise it runs at 4 m/s for the flag it already chose (else the nearest its team does not hold), along a route on the level's infantry path-finding map ([pathfinding.md](pathfinding.md)) planned when the goal changes and again when stuck (at most every 5 s); still stuck, it sidesteps and jumps for 1.5 s. In a fight scouts lie down and the other classes crouch; they stand again to move. Bots whose kit has a hand grenade throw one at soldiers 12–35 m away, at most every 8 s, on the low arc that lands on the target. No damage from one's own team. Bots come back 10 s after dying, the player after 3 s, on a spawn point their team owns. No vehicles, no squads, no multi-storey routes; all numbers guessed.
 
+Crews:
+- **Boarding:** a bot with nothing to shoot boards a land vehicle within 10 m, checked every 3 s. It takes the driver's seat of an empty vehicle, or a free armed seat of one its team already crews.
+- **Driving:** the driver heads for the nearest flag its team does not hold, along the level's tank path-finding map at 4 m cells, and stops 15 m short. It holds still while there is a target.
+- **Stuck drivers:** a driver that is stuck (under 2 m in 3 s) backs up for 3 s. After four stuck checks in a row it gets out and does not board again for a minute.
+- **Guns:** every armed seat turns its gun with the seat's mouse-look inputs, leading the shell's drop, and fires once within 3°.
+- **Hits:** shots at the crew hit the vehicle, and a wreck kills its crew.
+- **Not done:** aircraft, boats, passengers and drawing seated soldiers.
+
+Over 78 levels in 5 minutes there were 718 boardings and 15 vehicles destroyed. Flag captures rose from 57 to 78 and bot deaths fell from 368 to 173, since bots inside vehicles are nearly immune to rifles.
+
 El Alamein, simulated with `--sim`: outposts change hands from about 3 minutes in, flags go back and forth, and one team runs out of tickets after about 32 minutes. All 78 levels run a 2-minute game (1,689 bots; none on 7 levels whose soldiers start on ships).
 
 ## Open questions

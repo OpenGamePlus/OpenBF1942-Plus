@@ -142,7 +142,8 @@ public:
     void explode(int id);                            // ends it at the next step (a hit there if it has a radius)
     std::vector<Hit> take_hits();                       // since the last call
     // Nothing between a and b except the given soldiers and vehicle (the looker and its target).
-    bool line_of_sight(const float a[3], const float b[3], int ignore_character, int target_character, int target_vehicle) const;
+    bool line_of_sight(const float a[3], const float b[3], int ignore_character, int target_character, int target_vehicle,
+                       int ignore_vehicle = -1) const;  // ignore_vehicle: the one the looker sits in
     void projectiles(std::vector<float>& out) const;    // position and velocity (6 floats) per live projectile
 
     // Soldiers: a 1.8 m capsule (Jolt CharacterVirtual) standing at feet position (x, y, z). It walks on the terrain,

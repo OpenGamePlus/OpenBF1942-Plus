@@ -5,7 +5,8 @@ Append-only. Newest first. At most 3 bullets per stage.
 ## 2026-11-10 — vehicle seats (roadmap B3)
 
 - Nested `PlayerControlObject`s read as seats: each has its own weapon, mouse-look parts, `SeatObject` position and exit. The player enters the first free seat and changes with F1–F8.
-- Open: bots as crew (gunners, drivers, pilots), seated soldiers drawn, seat animations, entry points.
+- Bots board land vehicles and drive them to flags on the tank path-finding map. Armed seats aim with the seat's mouse-look and fire. Stuck drivers back out, then give up. Over 78 levels: 718 boardings, captures 57 → 78, bot deaths 368 → 173 (crews resist rifles).
+- Open: pilots and boats, seated soldiers drawn, seat animations, entry points.
 
 ## 2026-11-10 — fire and reload animations (roadmap B2)
 

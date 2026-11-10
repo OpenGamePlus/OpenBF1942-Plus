@@ -108,15 +108,16 @@ private:
         WeaponDef weapon;
         Mat4 muzzle;  // posed FireArms part, for firing
         bool has_muzzle = false;
-        float next_fire = 0, exit[3] = {-2, 0, 0};
+        float next_fire = 0, exit[3] = {-2, 0, 0}, pos[3] = {};  // pos: the SeatObject, vehicle space
         int who = -2;  // -2 empty, -1 the player, else a bot
     };
     struct Veh {
         int id = -1;
         std::string name;
         size_t first = 0, parts = 0;
-        bool plane = false;
-        float len = 0, throttle = 0;
+        bool plane = false, ship = false;
+        int team = 0;  // of its crew; 0 empty
+        float len = 0, throttle = 0, muzzles_at = -1;
         float hp = 100;
         int material = 0;
         bool wrecked = false;
@@ -154,6 +155,10 @@ private:
         float next_fire = 0, seen_at = -1, next_look = 0, last_shot = -10;
         int target = -2;  // -2 nobody, -1 the player, else a bot
         float check_at = 0, check_pos[2] = {}, detour_until = 0, detour_side = 1;  // getting unstuck
+        int veh = -1, vseat = -1;  // the vehicle and seat it sits in
+        float board_at = 0;        // next look for a vehicle to board
+        float reverse_until = 0;   // driving: backing out of a jam
+        int jams = 0;              // stuck checks in a row while driving; gives up the vehicle at 4
         std::vector<float> path;  // waypoints (x, z) to the flag it runs for
         size_t waypoint = 0;
         int path_goal = -1;       // flag index the path leads to
@@ -202,9 +207,15 @@ private:
     std::vector<SpawnPt> spawn_points;
     std::vector<Bot> bots;
     NavGrid nav;  // infantry map of the level, 2 m cells; empty: bots run straight
+    NavGrid tank_nav;  // tank map, 4 m cells; empty: bot drivers go straight
+    void board(Bot& b, float t);
+    void crew(Bot& b, float t, float step, const float* target, int target_veh);
+    void leave(Bot& b);
+    void refresh_muzzles(Veh& v);
+    void seat_point(const Veh& v, size_t s, float out[3]) const;
     std::array<int, 3> deaths{0, 0, 0};
     int detours = 0;  // sidesteps taken by stuck bots
-    int grenades_thrown = 0;
+    int grenades_thrown = 0, boardings = 0, wrecks = 0;
     DamageTable damage;
     WeaponDef hand;  // the weapon in hand, and its ammunition
     Ammo hand_ammo;
