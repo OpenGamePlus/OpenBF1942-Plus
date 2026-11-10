@@ -8,6 +8,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
+#include <array>
 #include <map>
 #include <memory>
 #include <stdexcept>
@@ -87,11 +88,10 @@ void main() {
         int layer = t.x * ntiles + t.y;
         base = ntiles > 0 ? texture(tiles, vec3(fract(uv), float(layer))) : vec4(0.6);
     }
-    // Skinned meshes have no posed normals (no bind pose to transform them): use the face normal.
+    // Skinned meshes: normals recomputed each frame from the posed triangles (smooth over welded seams).
     // Terrain colour tiles have lighting and shadows baked in: drawn unlit.
     if (mode == 0) { color = fogged(vec4(base.rgb, 1.0)); return; }
-    vec3 n = mode == 3 ? normalize(cross(dFdx(wpos), dFdy(wpos))) : normalize(wnrm);
-    if (mode == 3 && dot(n, sun_dir) < 0.0 && n.y < 0.0) n = -n;
+    vec3 n = normalize(wnrm);  // skinned meshes: smooth normals recomputed on the CPU from the posed mesh
     if (mode != 3 && !gl_FrontFacing) n = -n;  // two-sided: game winding is mirrored by the view
     // shortcut: ambient + diffuse from Init.con, doubled (assumed D3D modulate2x); no lightmaps.
     vec3 light = min(2.0 * (ambient + diffuse * max(dot(n, sun_dir), 0.0)), vec3(1.5));
@@ -200,7 +200,7 @@ void upload_buffers(GpuMesh& g, const std::vector<float>& verts, const std::vect
 
 // LOD 0 of a .sm; lightmap uv dropped. Textures come from the .rs next to it.
 std::unique_ptr<GpuMesh> upload_sm(const SmMesh& m, const std::string& path, const Vfs& vfs, Textures& tex,
-                                   std::vector<float>* keep_vertices = nullptr) {
+                                   std::vector<float>* keep_vertices = nullptr, std::vector<uint32_t>* keep_indices = nullptr) {
     auto g = std::make_unique<GpuMesh>();
     if (m.lods.empty()) return g;
     std::string rs_path = path.substr(0, path.size() - 3) + ".rs";
@@ -223,6 +223,7 @@ std::unique_ptr<GpuMesh> upload_sm(const SmMesh& m, const std::string& path, con
     }
     upload_buffers(*g, verts, idx);
     if (keep_vertices) *keep_vertices = std::move(verts);
+    if (keep_indices) *keep_indices = idx;
     if (!m.collision.empty()) {  // edges of the first collision block, same 10-float layout
         const CollisionMesh& c = m.collision[0];
         std::vector<float> cv;
@@ -252,6 +253,9 @@ struct Animated {
     float hold = -1;  // >= 0: play once from this time and stay on the last frame (deaths)
     std::vector<std::shared_ptr<Animation>> anims0;  // as loaded from the item's states
     std::vector<Mat4> bones;  // last pose (model space)
+    std::vector<uint32_t> idx;  // triangles, for the posed normals
+    std::vector<uint32_t> weld; // per vertex: the first vertex at the same rest position (seams shade smoothly)
+    float normal_sign = 1;      // posed face normals point the stored normals' way
     float upper_speed = 0, upper_hold = -1;  // the upper-body layer's own speed (0: the item's) and play-once start
     float span = 0;                          // > 0: the play-once upper layer is stretched to this many seconds
 };
@@ -461,7 +465,22 @@ Renderer::Impl::Impl(const Vfs& vfs_, Con& con, const Heightmap& hm, const Terra
         try {
             Animated a;
             a.item = i;
-            a.gpu = upload_sm(sm_parse(vfs.read(item.mesh)), item.mesh, vfs, *textures, &a.base);
+            a.gpu = upload_sm(sm_parse(vfs.read(item.mesh)), item.mesh, vfs, *textures, &a.base, &a.idx);
+            {  // weld by rest position; winding sign from the stored normals
+                size_t n = a.base.size() / 10;
+                std::map<std::array<float, 3>, uint32_t> at;
+                a.weld.resize(n);
+                for (size_t v = 0; v < n; ++v)
+                    a.weld[v] = at.emplace(std::array<float, 3>{a.base[v * 10], a.base[v * 10 + 1], a.base[v * 10 + 2]}, static_cast<uint32_t>(v)).first->second;
+                double agree = 0;
+                for (size_t t = 0; t + 2 < a.idx.size(); t += 3) {
+                    const float *p0 = &a.base[a.idx[t] * 10], *p1 = &a.base[a.idx[t + 1] * 10], *p2 = &a.base[a.idx[t + 2] * 10];
+                    float e1[3] = {p1[0] - p0[0], p1[1] - p0[1], p1[2] - p0[2]}, e2[3] = {p2[0] - p0[0], p2[1] - p0[1], p2[2] - p0[2]};
+                    float fn[3] = {e1[1] * e2[2] - e1[2] * e2[1], e1[2] * e2[0] - e1[0] * e2[2], e1[0] * e2[1] - e1[1] * e2[0]};
+                    agree += fn[0] * p0[3] + fn[1] * p0[4] + fn[2] * p0[5];
+                }
+                a.normal_sign = agree < 0 ? -1.0f : 1.0f;
+            }
             auto& sk = skeletons[item.skeleton];
             if (!sk) sk = std::make_shared<Skeleton>(ske_parse(vfs.read(item.skeleton)));
             auto& sn = skins[item.skin];
@@ -622,6 +641,23 @@ void Renderer::Impl::draw(const std::vector<DrawItem>& scene, const Camera& cam,
             skin_apply(*a.skin, a.map, a.to_ske, world, a.base, 10, skinned);
             verts10 = a.base;
             for (size_t v = 0; v < skinned.size() / 3; ++v) std::memcpy(&verts10[v * 10], &skinned[v * 3], 12);
+            // Smooth normals of the posed mesh: area-weighted face normals summed per welded vertex.
+            std::vector<float> acc(skinned.size(), 0.0f);
+            for (size_t t = 0; t + 2 < a.idx.size(); t += 3) {
+                uint32_t i0 = a.idx[t], i1 = a.idx[t + 1], i2 = a.idx[t + 2];
+                if ((static_cast<size_t>(std::max({i0, i1, i2})) + 1) * 3 > skinned.size()) continue;
+                const float *p0 = &skinned[i0 * 3], *p1 = &skinned[i1 * 3], *p2 = &skinned[i2 * 3];
+                float e1[3] = {p1[0] - p0[0], p1[1] - p0[1], p1[2] - p0[2]}, e2[3] = {p2[0] - p0[0], p2[1] - p0[1], p2[2] - p0[2]};
+                float fn[3] = {e1[1] * e2[2] - e1[2] * e2[1], e1[2] * e2[0] - e1[0] * e2[2], e1[0] * e2[1] - e1[1] * e2[0]};
+                for (uint32_t i : {i0, i1, i2})
+                    for (int k = 0; k < 3; ++k) acc[a.weld[i] * 3 + static_cast<size_t>(k)] += fn[k];
+            }
+            for (size_t v = 0; v < skinned.size() / 3; ++v) {
+                const float* n = &acc[a.weld[v] * 3];
+                float l = std::sqrt(n[0] * n[0] + n[1] * n[1] + n[2] * n[2]);
+                if (l > 1e-12f)
+                    for (int k = 0; k < 3; ++k) verts10[v * 10 + 3 + static_cast<size_t>(k)] = n[k] / l * a.normal_sign;
+            }
             glBindBuffer(GL_ARRAY_BUFFER, a.gpu->vbo);
             glBufferSubData(GL_ARRAY_BUFFER, 0, static_cast<GLsizeiptr>(verts10.size() * 4), verts10.data());
         }
