@@ -55,6 +55,9 @@ in vec3 wnrm;
 in vec2 tuv;
 in vec2 luv;
 uniform sampler2D lmap;
+uniform sampler2D detail;     // terrain detail texture (detailTexName), tiled
+uniform vec3 detail_gain;     // 1 / its mean colour: neutral on average
+uniform float detail_scale;   // repeats per metre; 0: none
 uniform int has_lm;
 uniform float lm_scale;
 uniform sampler2DArray tiles;
@@ -90,7 +93,15 @@ void main() {
     }
     // Skinned meshes: normals recomputed each frame from the posed triangles (smooth over welded seams).
     // Terrain colour tiles have lighting and shadows baked in: drawn unlit.
-    if (mode == 0) { color = fogged(vec4(base.rgb, 1.0)); return; }
+    if (mode == 0) {
+        // Detail texture multiplied in near the camera, normalised to its mean; fades out by 200 m (guessed).
+        if (detail_scale > 0.0) {
+            float fade = 1.0 - smoothstep(60.0, 200.0, distance(wpos, cam_pos));
+            base.rgb *= mix(vec3(1.0), texture(detail, wpos.xz * detail_scale).rgb * detail_gain, fade);
+        }
+        color = fogged(vec4(base.rgb, 1.0));
+        return;
+    }
     vec3 n = normalize(wnrm);  // skinned meshes: smooth normals recomputed on the CPU from the posed mesh
     if (mode != 3 && !gl_FrontFacing) n = -n;  // two-sided: game winding is mirrored by the view
     // shortcut: ambient + diffuse from Init.con, doubled (assumed D3D modulate2x); no lightmaps.
@@ -98,6 +109,14 @@ void main() {
     if (has_lm == 1) light = texture(lmap, luv).rgb * lm_scale;  // baked object lighting replaces the sun term
     color = fogged(vec4(base.rgb * light, 1.0));
 })";
+
+// Anisotropic filtering (GL 4.6 core, EXT before): ground textures seen at grazing angles stay sharp, as in the original.
+void anisotropic(GLenum target) {
+    if (!epoxy_has_gl_extension("GL_EXT_texture_filter_anisotropic") && !epoxy_has_gl_extension("GL_ARB_texture_filter_anisotropic")) return;
+    GLfloat most = 1;
+    glGetFloatv(0x84FF, &most);  // GL_MAX_TEXTURE_MAX_ANISOTROPY
+    glTexParameterf(target, 0x84FE, std::min(most, 8.0f));  // GL_TEXTURE_MAX_ANISOTROPY
+}
 
 GLuint compile(GLenum type, const char* src) {
     GLuint s = glCreateShader(type);
@@ -126,6 +145,7 @@ GLuint upload_texture(const Image& img) {
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, img.w, img.h, 0, GL_RGBA, GL_UNSIGNED_BYTE, img.rgba.data());
     glGenerateMipmap(GL_TEXTURE_2D);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+    anisotropic(GL_TEXTURE_2D);
     return t;
 }
 
@@ -392,10 +412,37 @@ Renderer::Impl::Impl(const Vfs& vfs_, Con& con, const Heightmap& hm, const Terra
         }
     glGenerateMipmap(GL_TEXTURE_2D_ARRAY);
     glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+    anisotropic(GL_TEXTURE_2D_ARRAY);
     glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
     glActiveTexture(GL_TEXTURE0);
     std::printf("colour tiles: %dx%d\n", ntiles, ntiles);
+    // Detail texture (Berlin: grey gravel, 512 x 512 DXT5), on unit 3.
+    float detail_gain[3] = {1, 1, 1}, detail_scale = 0;
+    if (!info.detail.empty() && vfs.has(Vfs::key(info.detail) + ".dds")) {
+        try {
+            Image d = dds_decode(vfs.read(Vfs::key(info.detail) + ".dds"));
+            double sum[3] = {};
+            for (size_t i = 0; i + 3 < d.rgba.size(); i += 4)
+                for (int k = 0; k < 3; ++k) sum[k] += d.rgba[i + static_cast<size_t>(k)];
+            for (int k = 0; k < 3; ++k) detail_gain[k] = static_cast<float>(255.0 * static_cast<double>(d.w) * d.h / std::max(sum[k], 1.0));
+            GLuint dt;
+            glGenTextures(1, &dt);
+            glActiveTexture(GL_TEXTURE3);
+            glBindTexture(GL_TEXTURE_2D, dt);
+            glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, d.w, d.h, 0, GL_RGBA, GL_UNSIGNED_BYTE, d.rgba.data());
+            glGenerateMipmap(GL_TEXTURE_2D);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+            anisotropic(GL_TEXTURE_2D);
+            glActiveTexture(GL_TEXTURE0);
+            detail_scale = 1.0f / 4.0f;  // shortcut: one repeat per 4 m, pebble size matched by eye to the original
+        } catch (const std::exception& ex) {
+            std::fprintf(stderr, "detail texture: %s\n", ex.what());
+        }
+    }
 
     // Meshes: one GPU copy per file, shared by all instances.
     std::vector<std::string> alt;
@@ -552,6 +599,9 @@ Renderer::Impl::Impl(const Vfs& vfs_, Con& con, const Heightmap& hm, const Terra
     glUniform1i(glGetUniformLocation(prog, "tex"), 0);
     glUniform1i(glGetUniformLocation(prog, "tiles"), 1);
     glUniform1i(glGetUniformLocation(prog, "lmap"), 2);
+    glUniform1i(glGetUniformLocation(prog, "detail"), 3);
+    glUniform3fv(glGetUniformLocation(prog, "detail_gain"), 1, detail_gain);
+    glUniform1f(glGetUniformLocation(prog, "detail_scale"), detail_scale);
     // shortcut: lightmaps average 0.13-0.21 (Wake, El Alamein, Berlin, Bocage), so x2 (D3D MODULATE2X,
     // the usual lightmap blend of the era) is assumed; x1 leaves buildings at ~20% brightness. Unverified.
     glUniform1f(glGetUniformLocation(prog, "lm_scale"), 2.0f);

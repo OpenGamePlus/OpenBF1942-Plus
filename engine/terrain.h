@@ -9,6 +9,7 @@ namespace obf {
 struct TerrainInfo {
     float world_size = 0, y_scale = 0, water_level = 0;
     std::string heightmap, tex_base;  // VFS paths without extension
+    std::string detail;               // detailTexName: VFS path without extension; empty if none
 };
 
 // shortcut: scans GeometryTemplate.<key> lines instead of running the CON interpreter;

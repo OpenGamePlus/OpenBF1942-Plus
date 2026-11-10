@@ -5,7 +5,7 @@ Append-only. Newest first. At most 3 bullets per stage.
 ## 2026-11-10 — compared with the original client
 
 - Berlin, with the maintainer spawning in the original and screenshots taken; we rendered from the same base's spawn points. Gaps by size: no terrain detail texture, colour and lighting too cold and dark, haze too far, faceted lighting on soldiers.
-- The vertical mouse axis is flipped, at the maintainer's request. Soldiers get smooth normals, recomputed each frame from the posed triangles with welded seams, instead of face normals.
+- The vertical mouse axis is flipped, at the maintainer's request. Soldiers get smooth normals, recomputed each frame from the posed triangles with welded seams, instead of face normals. Terrain detail texture and anisotropic filtering added. Rejected: a ×2 on the terrain tiles, which matched one Berlin street but whitened the desert maps.
 
 ## 2026-11-10 — first live test by the maintainer
 
