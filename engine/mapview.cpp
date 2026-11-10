@@ -187,9 +187,11 @@ int run(int argc, char** argv) {
             if (ev.type == SDL_WINDOWEVENT && ev.window.event == SDL_WINDOWEVENT_FOCUS_LOST) grab = false;
             if (ev.type == SDL_MOUSEBUTTONDOWN && !play.empty() && shot.empty()) grab = true;
             if (ev.type == SDL_MOUSEMOTION && (look || grab)) {
-                mouse_x += static_cast<float>(ev.motion.xrel), mouse_y += static_cast<float>(ev.motion.yrel);
+                // The vertical axis felt inverted to the maintainer (under WSLg); flipped here, turrets included.
+                float yrel = -static_cast<float>(ev.motion.yrel);
+                mouse_x += static_cast<float>(ev.motion.xrel), mouse_y += yrel;
                 cam.yaw += static_cast<float>(ev.motion.xrel) * 0.004f;
-                cam.pitch = std::clamp(cam.pitch - static_cast<float>(ev.motion.yrel) * 0.004f, -1.5f, 1.5f);
+                cam.pitch = std::clamp(cam.pitch - yrel * 0.004f, -1.5f, 1.5f);
             }
         }
         SDL_SetRelativeMouseMode(look || grab ? SDL_TRUE : SDL_FALSE);
