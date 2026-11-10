@@ -1,6 +1,6 @@
 # SYSTEM_SUMMARY
 
-Last updated: 2026-11-09
+Last updated: 2026-11-10
 
 ## Tree
 
@@ -29,7 +29,7 @@ tools/test_*.py      unit tests (synthetic data only)
 | Tree meshes (`.tm`) | done; all 130 parse (Python + C++), drawn with sprite billboards | [tm.md](../formats/tm.md) |
 | Textures (`.dds`/`.tga`) | C++: DDS DXT1/3/5, uncompressed TGA | — |
 | Terrain | C++ viewer: heightmap, colour tiles, water plane, sky box, fog, sun light; all 78 levels open | [terrain.md](../formats/terrain.md) |
-| Map objects in the viewer | static and tree meshes, child templates, spawned vehicles, animated meshes; no LOD, no effects | [con.md](../formats/con.md#object-placement) |
+| Map objects in the viewer | static and tree meshes, child templates, spawned vehicles, animated meshes, object lightmaps; first LOD only, no effects | [con.md](../formats/con.md#object-placement) |
 | Skeletons, skins, animations | Python + C++; viewer skins flags and soldiers on the CPU and plays their state animations | [anim.md](../formats/anim.md) |
 | Engine (C++) | `obf` library + `obf_mapview` | [boundaries.md](../architecture/boundaries.md) |
 
