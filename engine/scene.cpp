@@ -143,9 +143,9 @@ std::vector<DrawItem> build_scene(const Con& con, const Vfs& vfs, std::map<std::
 }
 
 std::vector<DrawItem> build_object(const Con& con, const Vfs& vfs, const std::string& name, const Mat4& world,
-                                   std::map<std::string, int>& skipped, const JointFn& joint) {
-    const std::function<bool(const std::string&)> none;
-    Builder b{con, vfs, skipped, none, {}, 0, nullptr, {}};
+                                   std::map<std::string, int>& skipped, const JointFn& joint,
+                                   const std::function<bool(const std::string&)>& hide) {
+    Builder b{con, vfs, skipped, hide, {}, 0, nullptr, {}};
     b.joint = &joint;
     b.object(name, world, 0);
     return std::move(b.out);

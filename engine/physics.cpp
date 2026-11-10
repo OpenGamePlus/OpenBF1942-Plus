@@ -6,6 +6,9 @@
 #include <Jolt/Core/TempAllocator.h>
 #include <Jolt/Physics/Body/BodyCreationSettings.h>
 #include <Jolt/Physics/Body/BodyFilter.h>
+#include <Jolt/Physics/Character/CharacterVirtual.h>
+#include <Jolt/Physics/Collision/Shape/CapsuleShape.h>
+#include <Jolt/Physics/Collision/Shape/RotatedTranslatedShape.h>
 #include <Jolt/Physics/Collision/CastResult.h>
 #include <Jolt/Physics/Collision/CollisionCollectorImpl.h>
 #include <Jolt/Physics/Collision/RayCast.h>
@@ -175,6 +178,7 @@ struct Walker {
             if (a.empty()) continue;
             if (depth == 0 && k == "mass") def.mass = num(a);
             if (depth == 0 && k == "drag") def.drag = num(a);
+            if (depth == 0 && k == "setsoldierexitlocation") parse_vec3(a[0], def.exit);
             if (type == "engine" && !propeller && k == "settorque") def.torque = num(a);
             if (type == "engine" && !propeller && k == "setdifferential") def.differential = num(a);
             if ((type == "rotationalbundle" || type == "engine") && k == "setinputtoyaw" && lower(a[0]) == "c_piyaw") yaw_input = true;
@@ -286,6 +290,13 @@ struct Physics::Impl {
         std::map<std::pair<std::string, int>, std::array<float, 3>> angle;  // generic joints, degrees
     };
     std::vector<Vehicle> vehicles;
+    struct Soldier {
+        Ref<CharacterVirtual> ch;
+        Vec3 want = Vec3::sZero();
+        bool jump = false, active = true;
+    };
+    std::vector<Soldier> soldiers;
+    void soldier(Soldier& s);
     float acc = 0, water = -1e9f;
 
     void forces(Vehicle& v);
@@ -626,10 +637,62 @@ Mat4 Physics::joint(int vehicle, const std::string& name, int occurrence) const 
     return m;
 }
 
+// shortcut: jump speed and swimming depth are placeholders (no soldier speeds in the templates).
+void Physics::Impl::soldier(Soldier& s) {
+    CharacterVirtual& ch = *s.ch;
+    Vec3 g = sys.GetGravity(), vel = ch.GetLinearVelocity();
+    Vec3 v = Vec3(0, vel.GetY(), 0);
+    if (ch.GetGroundState() == CharacterBase::EGroundState::OnGround && vel.GetY() - ch.GetGroundVelocity().GetY() < 0.1f) {
+        v = ch.GetGroundVelocity();
+        if (s.jump) v += Vec3(0, 4.5f, 0);
+    } else {
+        v += g * kStep;
+    }
+    float feet = static_cast<float>(ch.GetPosition().GetY());
+    if (feet < water - 1.4f) v.SetY(std::max(v.GetY(), (water - 1.4f - feet) * 2.0f));  // swim: head above the surface
+    s.jump = false;
+    ch.SetLinearVelocity(v + s.want);
+    CharacterVirtual::ExtendedUpdateSettings es;
+    ch.ExtendedUpdate(kStep, g, es, sys.GetDefaultBroadPhaseLayerFilter(kMoving), sys.GetDefaultLayerFilter(kMoving), {}, {}, temp);
+}
+
+int Physics::add_character(float x, float y, float z) {
+    Ref<CharacterVirtualSettings> cs = new CharacterVirtualSettings();
+    cs->mShape = new RotatedTranslatedShape(Vec3(0, 0.9f, 0), Quat::sIdentity(), new CapsuleShape(0.6f, 0.3f));
+    cs->mMaxSlopeAngle = DegreesToRadians(50.0f);
+    Impl::Soldier s;
+    s.ch = new CharacterVirtual(cs, RVec3(x, y, z), Quat::sIdentity(), &p_->sys);
+    p_->soldiers.push_back(s);
+    return static_cast<int>(p_->soldiers.size() - 1);
+}
+
+void Physics::walk(int character, float vx, float vz, bool jump) {
+    auto& s = p_->soldiers.at(static_cast<size_t>(character));
+    s.want = Vec3(std::isfinite(vx) ? vx : 0.0f, 0, std::isfinite(vz) ? vz : 0.0f);
+    s.jump = s.jump || jump;
+}
+
+void Physics::place_character(int character, float x, float y, float z) {
+    auto& s = p_->soldiers.at(static_cast<size_t>(character));
+    s.ch->SetPosition(RVec3(x, y, z));
+    s.ch->SetLinearVelocity(Vec3::sZero());
+}
+
+void Physics::set_character_active(int character, bool active) { p_->soldiers.at(static_cast<size_t>(character)).active = active; }
+
+void Physics::character_position(int character, float out[3]) const {
+    RVec3 p = p_->soldiers.at(static_cast<size_t>(character)).ch->GetPosition();
+    out[0] = static_cast<float>(p.GetX()), out[1] = static_cast<float>(p.GetY()), out[2] = static_cast<float>(p.GetZ());
+}
+
+bool Physics::character_on_ground(int character) const { return p_->soldiers.at(static_cast<size_t>(character)).ch->IsSupported(); }
+
 void Physics::step(float dt) {
     p_->acc = std::min(p_->acc + dt, 8 * kStep);  // a long frame drops time rather than spiralling
     while (p_->acc >= kStep) {
         for (auto& v : p_->vehicles) p_->forces(v), p_->animate(v);
+        for (auto& s : p_->soldiers)
+            if (s.active) p_->soldier(s);
         p_->sys.Update(kStep, 1, &p_->temp, &p_->jobs);
         p_->acc -= kStep;
     }

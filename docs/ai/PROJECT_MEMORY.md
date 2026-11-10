@@ -2,6 +2,12 @@
 
 Append-only. Newest first. At most 3 bullets per stage.
 
+## 2026-11-10 — soldier on foot (step 7 starts)
+
+- `--play USSoldier`: Jolt `CharacterVirtual` capsule walking on terrain, buildings and vehicles; lower-body animation follows the movement; E gets into the `--drive` vehicle and out at its `setSoldierExitLocation`.
+- Templates hold no soldier speeds; all movement numbers are guesses to calibrate.
+- Open: entry points, crouch/prone, weapons, several vehicles to choose from.
+
 ## 2026-11-10 — moving parts
 
 - `build_object` takes a joint function (template name + visit index); physics animates rotational bundles from their own input, limits and speeds, wheels from the ground, wing deflections and propellers. Turrets follow the mouse.

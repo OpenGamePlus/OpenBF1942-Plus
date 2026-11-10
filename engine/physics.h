@@ -58,6 +58,7 @@ struct VehicleDef {
     float thrust = 0;           // aircraft and ships: m/s^2 at full throttle, summed over engines
     std::vector<FloatDef> floats;
     std::map<std::pair<std::string, int>, JointDef> joints;  // (lower template name, occurrence) as JointFn
+    float exit[3] = {-2, 0, 0};  // setSoldierExitLocation, vehicle space
     std::vector<WingDef> wings;
     std::vector<WheelDef> wheels;
     std::vector<float> hull;    // xyz points, vehicle space; the chassis is their convex hull
@@ -85,6 +86,15 @@ public:
     void step(float dt);  // fixed 60 Hz substeps
     Mat4 transform(int vehicle) const;
     float speed(int vehicle) const;  // m/s
+
+    // Soldiers: a 1.8 m capsule (Jolt CharacterVirtual) standing at feet position (x, y, z). It walks on the terrain,
+    // static meshes and vehicles, steps up 0.4 m, falls, jumps, and swims at the surface.
+    int add_character(float x, float y, float z);
+    void walk(int character, float vx, float vz, bool jump);  // wanted horizontal velocity, m/s
+    void place_character(int character, float x, float y, float z);
+    void set_character_active(int character, bool active);    // inactive: not simulated (in a vehicle)
+    void character_position(int character, float out[3]) const;
+    bool character_on_ground(int character) const;
 
 private:
     struct Impl;

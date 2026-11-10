@@ -32,6 +32,7 @@ tools/test_*.py      unit tests (synthetic data only)
 | Map objects in the viewer | static and tree meshes, child templates, spawned vehicles, animated meshes, object lightmaps; first LOD only, no effects | [con.md](../formats/con.md#object-placement) |
 | Skeletons, skins, animations | Python + C++; viewer skins flags and soldiers on the CPU and plays their state animations | [anim.md](../formats/anim.md) |
 | Physics + vehicles | Jolt world: terrain height field, static `.sm` collision; drivable cars, tanks, aircraft and boats (`--drive`), handling uncalibrated | [vehicles.md](../formats/vehicles.md), [ADR 0004](../architecture/adr/0004-jolt-physics.md) |
+| Soldier on foot | `--play`: character capsule, run/strafe animation states, get in/out of the `--drive` vehicle | [vehicles.md](../formats/vehicles.md#soldiers-on-foot-implemented-unverified) |
 | Engine (C++) | `obf` library + `obf_mapview` | [boundaries.md](../architecture/boundaries.md) |
 
 ## Commands
@@ -41,7 +42,7 @@ tools/test_*.py      unit tests (synthetic data only)
 | Tests | `python3 -m unittest discover tools` |
 | Build engine | `cmake -S . -B build && cmake --build build -j` |
 | Engine tests | `ctest --test-dir build` |
-| Map viewer | `build/obf_mapview <BF1942_DIR> <mod> <level> [--shot out.ppm] [--cam x y z yaw pitch] [--mode conquest|ctf|tdm|coop] [--soldier <template>] [--drive <vehicle>] [--collision] [--no-objects]` |
+| Map viewer | `build/obf_mapview <BF1942_DIR> <mod> <level> [--shot out.ppm] [--cam x y z yaw pitch] [--mode conquest|ctf|tdm|coop] [--soldier <template>] [--drive <vehicle>] [--play <soldier>] [--collision] [--no-objects]` |
 | Doc checks | `python3 tools/check_docs.py` |
 | List archive | `python3 tools/rfa.py list <archive.rfa>` |
 | Extract archive | `python3 tools/rfa.py extract <archive.rfa> <out_dir>` |
@@ -57,7 +58,7 @@ tools/test_*.py      unit tests (synthetic data only)
 - `Con.templates[subsystem][lower name] = {type, name, props}`; `Con.instances = [{template, props}]`; `props = [(method, args)]`, method lower-cased.
 - `Vfs.files`: lower-cased path -> bytes or archive pointer; `Vfs.read(path) -> bytes`.
 - `sm.parse(bytes) -> {version, bbox, collision: [bytes], lods: [[{name, prim, fvf, stride, alpha, vertices, indices}]], end}`; vertices are float tuples in file order.
-- C++ (`namespace obf`): `lzo1x_decompress`, `rfa_index`, `rfa_read`; `Vfs::mount_mod/add/has/read/paths/key`; `dds_decode`, `tga_decode -> Image{w,h,rgba}`; `parse_terrain_con -> TerrainInfo`; `load_heightmap -> Heightmap::height(row, col)`; `Con::load_game/load_level/run/execute` with `templates`, `instances`, `settings`; `sm_parse` (with `collision`), `collision_parse`, `sm_triangles`, `rs_parse`; `tm_parse`; `ske_parse`, `skn_parse`, `baf_parse`, `pose`, `skin_map`, `skin_apply`; `build_scene(con, vfs, skipped, hide)`, `build_object(con, vfs, name, world, skipped, joint) -> [DrawItem{mesh, world, skin, skeleton, states, lightmap, owner, spawned}]`; `vehicle_def(con, vfs, name) -> VehicleDef`; `Physics(hm, world_size, water_level)` with `add_scene`, `add_static`, `add_vehicle`, `drive(v, throttle, yaw, pitch, roll)`, `look(v, x, y)`, `joint(v, name, occurrence)`, `set_velocity`, `step`, `transform`, `speed`. All throw `std::runtime_error` on bad data.
+- C++ (`namespace obf`): `lzo1x_decompress`, `rfa_index`, `rfa_read`; `Vfs::mount_mod/add/has/read/paths/key`; `dds_decode`, `tga_decode -> Image{w,h,rgba}`; `parse_terrain_con -> TerrainInfo`; `load_heightmap -> Heightmap::height(row, col)`; `Con::load_game/load_level/run/execute` with `templates`, `instances`, `settings`; `sm_parse` (with `collision`), `collision_parse`, `sm_triangles`, `rs_parse`; `tm_parse`; `ske_parse`, `skn_parse`, `baf_parse`, `pose`, `skin_map`, `skin_apply`; `build_scene(con, vfs, skipped, hide)`, `build_object(con, vfs, name, world, skipped, joint, hide) -> [DrawItem{mesh, world, skin, skeleton, states, lightmap, owner, spawned}]`; `vehicle_def(con, vfs, name) -> VehicleDef`; `Physics(hm, world_size, water_level)` with `add_scene`, `add_static`, `add_vehicle`, `drive(v, throttle, yaw, pitch, roll)`, `look(v, x, y)`, `joint(v, name, occurrence)`, `set_velocity`, `add_character`, `walk`, `place_character`, `set_character_active`, `character_position`, `character_on_ground`, `step`, `transform`, `speed`. All throw `std::runtime_error` on bad data.
 - `anim.parse_ske/parse_skn/parse_baf(bytes)`; `anim.pose(skeleton, [baf], frame, biped_root) -> {bone: 4x4}`; `anim.skin(vertices, records, names, world) -> [pos]`.
 - `tm.parse(bytes) -> {bbox, groups: [[(first, count, texture)] x 3], vertices, indices}`.
 - `sm.parse_collision(block) -> {vertices: [(x, y, z, material)], faces: [(a, b, c, material)], tree}`.

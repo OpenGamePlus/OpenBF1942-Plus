@@ -37,6 +37,7 @@
 | Grip, rollover, idle hold | shortcut | friction 1, grip at 80 % of centre-of-mass height, centre of mass at wheel-centre height, no `c_PGF*` or material friction |
 | Tank turn rate | unverified | engine yaw `setMaxSpeed` × 8 °/s |
 | Physics scope | not implemented | no gears, jets, gear retraction, submarine diving, track animation; trees, animated meshes and spawner vehicles have no collision; M3A1 and Sexton hulls touch the ground; C-47 does not lift off; big ships turn very slowly |
+| Soldier movement | shortcut | speeds, jump, swim depth guessed; entry by distance, not `EntryPoint`; no crouch, prone, ladders, jump or swim animations, held weapon |
 | Moving parts | shortcut | propeller rpm guessed; tracks, hands, gear retraction, engine rotation not drawn; spawner subtrees inside a vehicle (Fletcher's LCVP spawners) could shift joint visit counts of same-named parts |
 | Boat model | unverified | water drag rates, ship thrust = Σ torque / 4; float rest heights match retail spawns, see [vehicles.md](../formats/vehicles.md#boats-implemented-unverified) |
 | Aircraft model | unverified | wing force constants, regulator as 1 g shared, thrust = Σ torque / 4; see [vehicles.md](../formats/vehicles.md#aircraft-implemented-unverified) |

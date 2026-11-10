@@ -356,6 +356,31 @@ int main() {
         assert(phys.transform(b).m[8] > 0.05f);  // yaw +1: bow towards +x
     }
 
+    // Soldier: lands on the ground, walks 5 m in 1 s, jumps, and swims with the head above water.
+    {
+        Heightmap hm;
+        hm.n = 32, hm.y_scale = 1, hm.h.assign(32 * 32, 0);
+        Physics phys(hm, 128, -1);
+        int ch = phys.add_character(64, 2, 64);
+        float p[3];
+        for (int i = 0; i < 90; ++i) phys.step(1.0f / 60);
+        phys.character_position(ch, p);
+        assert(std::fabs(p[1]) < 0.05f && phys.character_on_ground(ch));
+        phys.walk(ch, 0, 5, false);
+        for (int i = 0; i < 60; ++i) phys.step(1.0f / 60);
+        phys.character_position(ch, p);
+        assert(std::fabs(p[2] - 69) < 0.3f && std::fabs(p[0] - 64) < 0.05f);
+        phys.walk(ch, 0, 0, true);
+        for (int i = 0; i < 18; ++i) phys.step(1.0f / 60);
+        phys.character_position(ch, p);
+        assert(p[1] > 0.5f && !phys.character_on_ground(ch));
+        Physics sea(hm, 128, 10);  // ground 10 m under the surface
+        int sw = sea.add_character(64, 12, 64);
+        for (int i = 0; i < 300; ++i) sea.step(1.0f / 60);
+        sea.character_position(sw, p);
+        assert(std::fabs(p[1] - 8.6f) < 0.3f);
+    }
+
     std::puts("engine tests ok");
     return 0;
 }

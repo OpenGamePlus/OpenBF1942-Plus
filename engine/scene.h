@@ -31,7 +31,8 @@ std::vector<DrawItem> build_scene(const Con& con, const Vfs& vfs, std::map<std::
 using JointFn = std::function<Mat4(const std::string& name, int occurrence)>;
 // One template tree (e.g. a vehicle) placed at world, without a level instance.
 std::vector<DrawItem> build_object(const Con& con, const Vfs& vfs, const std::string& name, const Mat4& world,
-                                   std::map<std::string, int>& skipped, const JointFn& joint = nullptr);
+                                   std::map<std::string, int>& skipped, const JointFn& joint = nullptr,
+                                   const std::function<bool(const std::string&)>& hide = nullptr);
 // "x/y/z" -> 3 floats; atof semantics, missing parts are 0.
 void parse_vec3(const std::string& s, float out[3]);
 
