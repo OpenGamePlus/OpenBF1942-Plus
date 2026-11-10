@@ -7,6 +7,7 @@
 
 #include "con.h"
 #include "game.h"
+#include "hud.h"
 #include "scene.h"
 #include "terrain.h"
 #include "vfs.h"
@@ -21,6 +22,8 @@ public:
     // seconds: animation clock; projectiles: 6 floats each (position, velocity), drawn as tracers.
     void draw(const std::vector<DrawItem>& scene, const Camera& cam, int w, int h, float seconds, bool show_collision,
               const std::vector<float>& projectiles, const std::vector<SoldierView>& soldiers);
+    // Screen-space quads over the frame; font_texture: VFS path of the font image (loaded once).
+    void hud(const std::vector<HudQuad>& quads, int w, int h, const std::string& font_texture);
     void save_ppm(const std::string& path, int w, int h) const;
     const float* clear_colour() const;
 

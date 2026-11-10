@@ -290,6 +290,7 @@ std::string Game::driving(float pos[3], float& control) const {
 
 void Game::player_dies() {
     player_dead = true, respawn_at = game_time() + 3;
+    note("You were killed");
     phys.set_character_active(player, false);
     game.death(team);
     std::printf("you died\n");
@@ -321,6 +322,7 @@ void Game::apply_hits() {
                 game.death(b.team);
                 ++deaths[static_cast<size_t>(std::clamp(b.team, 0, 2))];
                 if (h.tag == team) std::printf("%s (team %d) killed\n", b.tmpl.c_str(), b.team);
+                note(b.tmpl + (h.tag == team ? " killed by your team" : " killed"));
             }
             continue;
         }
@@ -335,6 +337,7 @@ void Game::apply_hits() {
             if (v.hp > 0) continue;
             v.wrecked = true;
             std::printf("%s destroyed\n", v.name.c_str());
+            note(v.name + " destroyed");
             if (static_cast<int>(i) == cur && player >= 0) get_in_out(), player_dies();  // the crew dies with it
             phys.drive(v.id, 0, 0);
         }
@@ -497,7 +500,7 @@ void Game::think(float t, float step) {
             if (!b.dead && near(b.pos)) ++present[i][static_cast<size_t>(std::clamp(b.team, 0, 2))];
         if (palive && near(ppos)) ++present[i][static_cast<size_t>(std::clamp(team, 0, 2))];
     }
-    for (const std::string& ev : game.update(step, present)) std::printf("[%.0f s] %s\n", t, ev.c_str());
+    for (const std::string& ev : game.update(step, present)) std::printf("[%.0f s] %s\n", t, ev.c_str()), note(ev);
 }
 
 void Game::step(float t, float dt, const GameInput& in) {
@@ -659,17 +662,23 @@ void Game::pose() {
     }
 }
 
-bool Game::hud(std::string& title) {
-    if (player < 0) return false;
-    std::array<int, 6> now_shown{static_cast<int>(game.tickets[1]), static_cast<int>(game.tickets[2]), static_cast<int>(player_hp),
-                                 game.owned(1), game.owned(2), game.winner};
-    if (now_shown == hud_shown) return false;
-    hud_shown = now_shown;
-    char buf[160];  // shortcut: the window title is the HUD until text drawing exists
-    std::snprintf(buf, sizeof buf, "OpenBF1942-Plus | tickets %d : %d | flags %d : %d | team %d, hp %d%s", hud_shown[0], hud_shown[1], hud_shown[3],
-                  hud_shown[4], team, std::max(0, hud_shown[2]), game.winner ? (game.winner == team ? " | VICTORY" : " | DEFEAT") : "");
-    title = buf;
-    return true;
+HudInfo Game::hud_info() const {
+    HudInfo h;
+    if (player < 0) return h;
+    float full = std::max(1.0f, hitpoints(soldier_tmpl));
+    h.on = true, h.team = team, h.hp = static_cast<int>(std::ceil(std::max(0.0f, player_hp) * 100 / full));  // percent
+    h.winner = game.winner;
+    for (int t = 0; t < 2; ++t) h.tickets[t] = static_cast<int>(game.tickets[t + 1]), h.flags[t] = game.owned(t + 1);
+    h.weapon = hand.name;
+    if (cur >= 0) {
+        const Veh& v = vehicles[static_cast<size_t>(cur)];
+        h.vehicle = v.name, h.vehicle_hp = static_cast<int>(std::ceil(std::max(0.0f, v.hp)));
+        h.weapon = v.weapon.name;
+    }
+    for (const auto& [t, m] : feed)
+        if (now - t < 6) h.feed.push_back(m);
+    if (h.feed.size() > 5) h.feed.erase(h.feed.begin(), h.feed.end() - 5);
+    return h;
 }
 
 }  // namespace obf

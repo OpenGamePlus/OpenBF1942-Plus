@@ -50,7 +50,7 @@ Objetivo: jugar con clientes y servidores originales de Battlefield 1942. Lo sig
 
 1. **Consolidar** (hecho) — separar el visor en una biblioteca de juego y un renderizador; integración continua.
 2. **Investigación del protocolo de red** — grabar y decodificar el tráfico entre cliente y servidor originales (en paralelo con lo siguiente).
-3. **Navegación de la IA** (primera parte hecha), **audio** (suenan armas y motores), **HUD**.
+3. **Navegación de la IA** (primera parte hecha), **audio** (suenan armas y motores), **HUD** (primera parte hecha).
 4. **Soldados y armas completos**, **tripulaciones de vehículos**, **efectos**.
 5. **Fidelidad** — medir el original y calibrar.
 6. **Modos de juego**, **menús**.

@@ -12,6 +12,7 @@
 #include "con.h"
 #include "conquest.h"
 #include "damage.h"
+#include "hud.h"
 #include "math.h"
 #include "nav.h"
 #include "physics.h"
@@ -59,7 +60,7 @@ public:
     void demo(float sim_seconds);                        // --shot: the scripted run for --play or --drive
     void pose();                                         // scene matrices, soldier views, camera
     bool controls_camera() const { return cur >= 0 || player >= 0; }
-    bool hud(std::string& title);                        // true when the title changed
+    HudInfo hud_info() const;                            // what the on-screen HUD shows now
     void print_weapon() const;
 
     // The vehicle under control: its template, position and engine load 0..1; "" on foot.
@@ -158,7 +159,11 @@ private:
     WeaponDef hand;
     float hand_next = 0, player_hp = 30, respawn_at = -1, now = 0;
     bool player_dead = false;
-    std::array<int, 6> hud_shown{-1, -1, -1, -1, -1, -1};
+    std::vector<std::pair<float, std::string>> feed;  // (game time, message): kills, captures, destroyed vehicles
+    void note(std::string m) {
+        while (!feed.empty() && now - feed.front().first > 6) feed.erase(feed.begin());
+        feed.emplace_back(now, std::move(m));
+    }
     std::mt19937 rng{1942};  // AI aim error; fixed seed: --shot runs repeat
 };
 

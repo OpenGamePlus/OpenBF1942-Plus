@@ -50,7 +50,7 @@ Goal: play with original Battlefield 1942 clients and servers. Next, in order ([
 
 1. **Consolidate** (done) — split the viewer into a game library and a renderer; CI.
 2. **Network protocol research** — record and decode original client/server traffic (alongside the steps below).
-3. **AI navigation** (first part done), **audio** (weapons and engines play), **HUD**.
+3. **AI navigation** (first part done), **audio** (weapons and engines play), **HUD** (first part done).
 4. **Complete soldiers and weapons**, **vehicle crews**, **effects**.
 5. **Fidelity** — measure the original and calibrate.
 6. **Game modes**, **menus**.

@@ -155,6 +155,13 @@ int run(int argc, char** argv) {
     SDL_GL_SetSwapInterval(1);
     Renderer renderer(vfs, con, hm, info, scene, objects);
     game.print_weapon();
+    Font font;
+    bool has_font = false;
+    try {
+        font = font_parse(text(vfs, "font/bf1942.font")), has_font = true;
+    } catch (const std::exception& e) {
+        std::fprintf(stderr, "HUD font: %s (no HUD)\n", e.what());
+    }
 
     bool running = true, look = false;
     Uint64 last = SDL_GetPerformanceCounter();
@@ -203,8 +210,7 @@ int run(int argc, char** argv) {
             std::string v = game.driving(vp, control);
             sounds.engine(v, vp, control);
         }
-        std::string title;
-        if (game.hud(title)) SDL_SetWindowTitle(win, title.c_str());
+
         float speed = (k[SDL_SCANCODE_LSHIFT] ? 400.f : 60.f) * dt * !game.controls_camera();  // free camera
         float fx = std::sin(cam.yaw), fz = std::cos(cam.yaw);
         if (k[SDL_SCANCODE_W]) cam.x += fx * speed, cam.z += fz * speed;
@@ -219,6 +225,7 @@ int run(int argc, char** argv) {
         // shortcut: the .baf frame rate is a guess; --shot renders at t = 1 s so captures are repeatable.
         float seconds = shot.empty() ? static_cast<float>(SDL_GetTicks()) / 1000.0f : 1.0f;
         renderer.draw(scene, cam, W, H, seconds, show_collision, projectiles, game.soldiers);
+        if (has_font) renderer.hud(hud_layout(font, game.hud_info(), W, H), W, H, font.texture);
         if (!shot.empty()) {
             renderer.save_ppm(shot, W, H);
             running = false;

@@ -96,7 +96,8 @@ Image tga_decode(const std::vector<uint8_t>& d) {
             }
         return img;
     }
-    if (d[2] != 2 || (d[16] != 24 && d[16] != 32)) throw std::runtime_error("TGA: only uncompressed 24/32-bit or 8-bit mapped");
+    bool gray = d[2] == 3 && d[16] == 8;  // grayscale (font/bf1942.tga): r = g = b = a = value
+    if (!gray && (d[2] != 2 || (d[16] != 24 && d[16] != 32))) throw std::runtime_error("TGA: only uncompressed 8-bit gray, 24/32-bit or 8-bit mapped");
     size_t bpp = d[16] / 8, start = 18u + d[0];
     if (d.size() < start + static_cast<size_t>(img.w) * img.h * bpp) throw std::runtime_error("TGA: truncated");
     img.rgba.resize(static_cast<size_t>(img.w) * img.h * 4);
@@ -104,7 +105,8 @@ Image tga_decode(const std::vector<uint8_t>& d) {
         for (int x = 0; x < img.w; ++x) {
             const uint8_t* s = &d[start + (static_cast<size_t>(top_first ? y : img.h - 1 - y) * img.w + x) * bpp];
             uint8_t* o = &img.rgba[(static_cast<size_t>(y) * img.w + x) * 4];
-            o[0] = s[2], o[1] = s[1], o[2] = s[0], o[3] = bpp == 4 ? s[3] : 255;  // stored BGR(A)
+            if (gray) o[0] = o[1] = o[2] = o[3] = s[0];
+            else o[0] = s[2], o[1] = s[1], o[2] = s[0], o[3] = bpp == 4 ? s[3] : 255;  // stored BGR(A)
         }
     return img;
 }

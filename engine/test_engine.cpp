@@ -11,6 +11,7 @@
 
 #include "anim.h"
 #include "audio.h"
+#include "hud.h"
 #include "con.h"
 #include "conquest.h"
 #include "damage.h"
@@ -593,6 +594,31 @@ int main() {
         mixer.release(h);  // no TimeRelease effect: stops at once
         mixer.mix(out.data(), 2048, Listener{});
         assert(mixer.voices() == 0);
+    }
+    {  // HUD: .font, layout, gray TGA
+        Font f = font_parse("Texture = font/BF1942.tga\r\nTextureWidth = 128\r\nTextureHeight = 128\r\nBetweenWidth = 1\r\nSpaceWidth = 1\r\n"
+                            "Height = 11\r\n-------\r\n  0 0 0\r\n! 0 0 1\r\nA 31 12 36\r\nZ 120 125 127\r\n");
+        assert(f.texture == "font/bf1942.tga" && f.height == 11 && f.glyphs['A'].x0 == 31 && f.glyphs['A'].y == 12);
+        assert(f.glyphs['Z'].x1 < f.glyphs['Z'].x0);  // runs off the texture: dropped
+        assert(text_width(f, "A!", 1) == 6 + 1 + 2 + 1);  // glyph widths (x1 inclusive) plus BetweenWidth each
+        std::vector<HudQuad> q;
+        const float white[4] = {1, 1, 1, 1};
+        hud_text(f, "A A", 10, 20, 2, white, q);
+        assert(q.size() == 2 && q[0].w == 12 && q[0].h == 22 && q[0].u0 == 31.0f / 128 && q[1].x == 10 + 2 * (7 + 4.0f));
+        bool threw = false;
+        try {
+            font_parse("Height = 11\n");
+        } catch (const std::runtime_error&) {
+            threw = true;
+        }
+        assert(threw);
+        HudInfo info;
+        assert(hud_layout(f, info, 640, 480).empty());  // no player, no HUD
+        info.on = true, info.hp = 50, info.feed = {"A"};
+        assert(hud_layout(f, info, 640, 480).size() == 8);  // crosshair 4, tickets panel, health panel and bar, feed "A" (no digit glyphs)
+        std::vector<uint8_t> gray(18 + 4, 0);
+        gray[2] = 3, gray[12] = 2, gray[14] = 2, gray[16] = 8, gray[17] = 0x20, gray[18] = 200;
+        assert(tga_decode(gray).rgba[3] == 200 && tga_decode(gray).rgba[0] == 200);
     }
     std::puts("engine tests ok");
     return 0;

@@ -277,6 +277,8 @@ struct State {
 struct Renderer::Impl {
     std::unique_ptr<Textures> textures;
     GLuint vao = 0, prog = 0, tracer_vao = 0, tracer_vbo = 0;
+    GLuint hud_prog = 0, hud_vao = 0, hud_vbo = 0, hud_tex = 0;
+    std::string hud_font;
     GLsizei terrain_count = 0;
     size_t water_first = 0;
     float ws = 0, fogc[3] = {};
@@ -643,6 +645,71 @@ void Renderer::draw(const std::vector<DrawItem>& scene, const Camera& cam, int w
 }
 
 const float* Renderer::clear_colour() const { return p_->fogc; }
+
+void Renderer::hud(const std::vector<HudQuad>& quads, int w, int h, const std::string& font_texture) {
+    Impl& p = *p_;
+    if (!p.hud_prog) {
+        static const char* vs = R"(#version 330 core
+layout(location = 0) in vec2 pos; layout(location = 1) in vec2 uv; layout(location = 2) in vec4 col;
+uniform vec2 screen; out vec2 v_uv; out vec4 v_col;
+void main() { gl_Position = vec4(pos.x / screen.x * 2.0 - 1.0, 1.0 - pos.y / screen.y * 2.0, 0.0, 1.0); v_uv = uv; v_col = col; })";
+        static const char* fs = R"(#version 330 core
+in vec2 v_uv; in vec4 v_col; uniform sampler2D font; out vec4 o;
+void main() { o = v_uv.x < 0.0 ? v_col : vec4(v_col.rgb, v_col.a * texture(font, v_uv).a); })";
+        p.hud_prog = glCreateProgram();
+        glAttachShader(p.hud_prog, compile(GL_VERTEX_SHADER, vs));
+        glAttachShader(p.hud_prog, compile(GL_FRAGMENT_SHADER, fs));
+        glLinkProgram(p.hud_prog);
+        glGenVertexArrays(1, &p.hud_vao);
+        glBindVertexArray(p.hud_vao);
+        glGenBuffers(1, &p.hud_vbo);
+        glBindBuffer(GL_ARRAY_BUFFER, p.hud_vbo);
+        glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 32, nullptr);
+        glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 32, reinterpret_cast<void*>(8));
+        glVertexAttribPointer(2, 4, GL_FLOAT, GL_FALSE, 32, reinterpret_cast<void*>(16));
+        for (GLuint a = 0; a < 3; ++a) glEnableVertexAttribArray(a);
+    }
+    if (font_texture != p.hud_font) {
+        p.hud_font = font_texture;
+        Image img{1, 1, {255, 255, 255, 255}};
+        try {
+            if (p.vfs.has(font_texture)) img = tga_decode(p.vfs.read(font_texture));
+        } catch (const std::exception& e) {
+            std::fprintf(stderr, "font %s: %s\n", font_texture.c_str(), e.what());
+        }
+        if (!p.hud_tex) glGenTextures(1, &p.hud_tex);
+        glBindTexture(GL_TEXTURE_2D, p.hud_tex);
+        glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, img.w, img.h, 0, GL_RGBA, GL_UNSIGNED_BYTE, img.rgba.data());
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);  // pixel font, integer scales
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    }
+    std::vector<float> v;
+    v.reserve(quads.size() * 48);
+    for (const HudQuad& q : quads) {
+        float x[2] = {q.x, q.x + q.w}, y[2] = {q.y, q.y + q.h}, u[2] = {q.u0, q.u1}, t[2] = {q.v0, q.v1};
+        for (int c : {0, 1, 2, 2, 1, 3}) {
+            int i = c & 1, j = c >> 1;
+            v.insert(v.end(), {x[i], y[j], q.u0 < 0 ? -1.0f : u[i], t[j], q.rgba[0], q.rgba[1], q.rgba[2], q.rgba[3]});
+        }
+    }
+    if (v.empty()) return;
+    glDisable(GL_DEPTH_TEST);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glUseProgram(p.hud_prog);
+    glUniform2f(glGetUniformLocation(p.hud_prog, "screen"), static_cast<float>(w), static_cast<float>(h));
+    glUniform1i(glGetUniformLocation(p.hud_prog, "font"), 0);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, p.hud_tex);
+    glBindVertexArray(p.hud_vao);
+    glBindBuffer(GL_ARRAY_BUFFER, p.hud_vbo);
+    glBufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(v.size() * 4), v.data(), GL_STREAM_DRAW);
+    glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(v.size() / 8));
+    glDisable(GL_BLEND);
+    glEnable(GL_DEPTH_TEST);
+    glUseProgram(p.prog);
+}
 
 void Renderer::save_ppm(const std::string& path, int w, int h) const {
     std::vector<uint8_t> px(static_cast<size_t>(w) * h * 3);

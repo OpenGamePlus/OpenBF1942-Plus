@@ -2,6 +2,11 @@
 
 Append-only. Newest first. At most 3 bullets per stage.
 
+## 2026-11-10 — HUD (roadmap C2, first part)
+
+- `.font` decoded (glyph `x0 y x1`, gray TGA type 3 added to the decoder). An on-screen overlay replaces the window-title HUD: crosshair, tickets and flags, health, weapon, vehicle hit points, a feed of kills / captures / wrecks, round result.
+- Open: original HUD textures and layout, `.dif` fonts, ammo (needs magazines, roadmap B2), minimap.
+
 ## 2026-11-10 — audio (roadmap C1, first part)
 
 - SDL2 device plus our own mixer ([ADR 0006](../architecture/adr/0006-audio.md)); `.ssc` layers with distance / time / control curves; every shot and the driven vehicle's engine play. Templates now record their script folder (relative `loadSoundScript` paths), in both CON interpreters.
