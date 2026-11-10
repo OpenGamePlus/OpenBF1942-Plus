@@ -119,6 +119,13 @@ Not moved: `Engine` rotation (a car's wheels hang under it), `AnimatedBundle` (t
 
 `--play 1|2` plays a team (soldier and kit from the level, see [weapons.md](weapons.md#teams-kits-and-soldiers)). `BFSoldier` templates (e.g. `USSoldier`: `mass 100`, `speedmod 0.5`, `setAnimationState 0 Lb_Stand`) carry no walking speeds. The engine uses a 1.8 × 0.3 m capsule (Jolt `CharacterVirtual`): runs at 5 m/s, walks at 2.5 m/s, jumps at 4.5 m/s, climbs 0.4 m steps and 50° slopes, and swims with the feet 1.4 m under the surface; all guessed. The lower-body state follows the movement (`Lb_Stand`, `Lb_RunForward/Backward`, `Lb_StrafeLeft/Right`).
 
+Postures (left ctrl held crouches, Z toggles prone):
+- The capsule shrinks to 1.2 m crouching and 0.7 m prone. It stays upright when prone, not lying along the body.
+- Speed drops to half crouching and a quarter prone. Jumping only works standing; all of these are guessed.
+- Standing up fails under anything lower than a standing soldier.
+- Animations: `Lb_Crouch*` / `Ub_Crouch` and `Lb_Lie*` / `Ub_Lie` (from `animationStatesCrouching.con` and `animationStatesLie.con`). The transitions (`Lb_StandToCrouch`, …) are not played.
+- Hits on a crouching or prone player are mapped to head, chest or limbs as if standing.
+
 Getting in: the nearest vehicle within 5 m + half its length (not yet the `EntryPoint` radius). Getting out: at the vehicle's `setSoldierExitLocation` (Willys: −1.5/0/−0.8, left rear).
 
 ## Parked vehicles

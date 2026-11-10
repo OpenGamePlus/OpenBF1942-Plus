@@ -1,4 +1,5 @@
 // Engine unit tests on synthetic data (no game files). Run via ctest.
+#include <algorithm>
 #include <cassert>
 #include <cmath>
 #include <cstring>
@@ -362,6 +363,29 @@ int main() {
         phys.drive(b, 1, 1);
         for (int i = 0; i < 120; ++i) phys.step(1.0f / 60);
         assert(phys.transform(b).m[8] > 0.05f);  // yaw +1: bow towards +x
+    }
+
+    // Postures: a shot at chest height passes over a prone soldier and hits a standing one.
+    {
+        Heightmap hm;
+        hm.n = 32, hm.y_scale = 1, hm.h.assign(32 * 32, 0);
+        Physics phys(hm, 128, -1);
+        int ch = phys.add_character(64, 0.1f, 64);
+        for (int i = 0; i < 30; ++i) phys.step(1.0f / 60);
+        assert(phys.set_posture(ch, 1) && phys.set_posture(ch, 2));
+        for (int i = 0; i < 10; ++i) phys.step(1.0f / 60);
+        float from[3] = {64, 1.0f, 54}, at[3] = {0, 0.2f, 300};  // nearly flat, through the chest of a standing man
+        phys.fire(from, at, 220, -1, 1);
+        for (int i = 0; i < 30; ++i) phys.step(1.0f / 60);
+        auto hits = phys.take_hits();
+        assert(std::none_of(hits.begin(), hits.end(), [&](const Physics::Hit& h) { return h.character == ch; }));
+        assert(phys.set_posture(ch, 0));
+        for (int i = 0; i < 10; ++i) phys.step(1.0f / 60);
+        phys.fire(from, at, 220, -1, 1);
+        for (int i = 0; i < 30; ++i) phys.step(1.0f / 60);
+        hits = phys.take_hits();
+        // (the first shot, over the prone soldier, lands in the water 200 m on meanwhile)
+        assert(std::count_if(hits.begin(), hits.end(), [&](const Physics::Hit& h) { return h.character == ch; }) == 1);
     }
 
     // Soldier: lands on the ground, walks 5 m in 1 s, jumps, and swims with the head above water.

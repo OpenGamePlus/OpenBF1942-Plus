@@ -143,6 +143,9 @@ public:
     void set_character_active(int character, bool active);    // inactive: not simulated (in a vehicle)
     void kill_character(int character);                       // out of the world for good (shots pass)
     void character_position(int character, float out[3]) const;
+    // 0 stand (1.8 m), 1 crouch (1.2 m), 2 prone (0.7 m capsule; shortcut: upright, not lying along the body).
+    // False, posture kept, when there is no room (standing up under a low roof).
+    bool set_posture(int character, int posture);
     bool character_on_ground(int character) const;
 
 private:

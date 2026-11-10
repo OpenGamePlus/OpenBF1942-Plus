@@ -309,7 +309,10 @@ void Game::get_in_out() {
 void Game::walk(float forward, float right, bool jump, bool slow) {
     move_f = forward, move_r = right;
     if (player < 0) return;
-    float l = std::sqrt(forward * forward + right * right), sp = (slow ? 2.5f : 5.0f) / std::max(l, 1.0f);
+    // shortcut: crouching at half speed, crawling at a quarter (no soldier speeds in the templates)
+    float l = std::sqrt(forward * forward + right * right),
+          sp = (slow ? 2.5f : 5.0f) * (posture == 2 ? 0.25f : posture == 1 ? 0.5f : 1.0f) / std::max(l, 1.0f);
+    jump = jump && posture == 0;
     float fx = std::sin(cam.yaw), fz = std::cos(cam.yaw);
     phys.walk(player, (fx * forward + fz * right) * sp, (fz * forward - fx * right) * sp, jump);
 }
@@ -423,7 +426,7 @@ void Game::fire(float t) {
         hand_next = t + hand.interval;
         float p[3], d[3] = {std::sin(cam.yaw) * std::cos(cam.pitch), std::sin(cam.pitch), std::cos(cam.yaw) * std::cos(cam.pitch)}, pos[3], vel[3];
         phys.character_position(player, p);
-        for (int i = 0; i < 3; ++i) pos[i] = p[i] + (i == 1 ? 1.5f : 0.0f) + d[i] * 0.6f, vel[i] = d[i] * hand.velocity;
+        for (int i = 0; i < 3; ++i) pos[i] = p[i] + (i == 1 ? eye_height() : 0.0f) + d[i] * 0.6f, vel[i] = d[i] * hand.velocity;
         int id = phys.fire(pos, vel, hand.material, hand.material2, hand.ttl, -1, player, team, hand.radius, hand.bounce);
         if (id >= 0 && hand.bounce && hand.ttl > 60) placed.push_back({id, hand.near});  // not a grenade: waits for a trigger
         sounds.push_back({hand.name, {pos[0], pos[1], pos[2]}});
@@ -489,6 +492,8 @@ void Game::apply_hits() {
         // shortcut: heights stand in for the bones; arms count as chest.
         int part = h.height > 1.45f ? 40 : h.height > 0.85f ? 41 : 42;
         if (h.character >= 0 && h.character == player) {
+            float hh = h.height * 1.8f / (posture == 2 ? 0.7f : posture == 1 ? 1.2f : 1.8f);  // as if standing
+            part = hh > 1.45f ? 40 : hh > 0.85f ? 41 : 42;
             if (!player_dead && h.tag != team) hurt_player(direct(part));
         } else if (h.character >= 0) {
             for (Bot& b : bots)
@@ -541,6 +546,7 @@ void Game::think(float t, float step) {
             phys.set_character_active(player, true);
             player_dead = false, player_hp = hitpoints(soldier_tmpl), cam.yaw = sp->yaw * 3.14159265f / 180.0f;
             refill_loadout();
+            if (phys.set_posture(player, 0)) posture = 0, lying = false;
             std::printf("respawned\n");
         }
     for (Bot& b : bots) {
@@ -562,7 +568,7 @@ void Game::think(float t, float step) {
         ppos[0] = m.m[12], ppos[1] = m.m[13] + 1, ppos[2] = m.m[14], pveh = vehicles[static_cast<size_t>(cur)].id;
     } else if (palive) {
         phys.character_position(player, ppos);
-        ppos[1] += 1.2f;
+        ppos[1] += posture == 2 ? 0.3f : posture == 1 ? 0.8f : 1.2f;
     }
     std::normal_distribution<float> err(0.0f, 0.035f);
     for (size_t bi = 0; bi < bots.size(); ++bi) {
@@ -702,6 +708,8 @@ void Game::step(float t, float dt, const GameInput& in) {
     if (in.use) get_in_out();
     if (player >= 0) {
         if (in.select >= 0 && cur < 0) select(static_cast<size_t>(in.select));
+        if (in.prone) lying = !lying;
+        if (int want = lying ? 2 : in.crouch ? 1 : 0; cur < 0 && !player_dead && want != posture && phys.set_posture(player, want)) posture = want;
         placed_charges(in.detonate);
         hand_ammo.tick(t, hand);
         if (in.reload) hand_ammo.reload(t, hand);
@@ -844,13 +852,19 @@ void Game::pose() {
         Mat4 w = cur >= 0 ? translate(0, -10000, 0) : translate(p[0], p[1], p[2]) * rotation_ypr(cam.yaw * 57.29578f, 0, 0);
         std::vector<DrawItem> parts = build_object(con, vfs, soldier_tmpl, w, skipped, nullptr, hide_1p);
         for (size_t i = 0; i < parts.size() && i < sol_parts; ++i) scene[sol_first + i].world = parts[i].world;
-        if (phys.character_on_ground(player) || cur >= 0)  // in the air: keep the last state
-            lower_state = move_f > 0.1f ? "lb_runforward" : move_f < -0.1f ? "lb_runbackward"
-                        : move_r > 0.1f ? "lb_straferight" : move_r < -0.1f ? "lb_strafeleft" : "lb_stand";
-        soldiers.push_back({sol_first, sol_parts, lower_state, "", -1});
+        if (phys.character_on_ground(player) || cur >= 0) {  // in the air: keep the last state
+            const char* base = posture == 2 ? "lb_lie" : posture == 1 ? "lb_crouch" : "";
+            if (*base)
+                lower_state = std::string(base) + (move_f > 0.1f ? "forward" : move_f < -0.1f ? "backward"
+                                                 : move_r > 0.1f ? "straferight" : move_r < -0.1f ? "strafeleft" : "");
+            else
+                lower_state = move_f > 0.1f ? "lb_runforward" : move_f < -0.1f ? "lb_runbackward"
+                            : move_r > 0.1f ? "lb_straferight" : move_r < -0.1f ? "lb_strafeleft" : "lb_stand";
+        }
+        soldiers.push_back({sol_first, sol_parts, lower_state, posture == 2 ? "ub_lie" : posture == 1 ? "ub_crouch" : "", -1});
         if (cur < 0) {  // third-person camera over the shoulder
             float dx = std::sin(cam.yaw) * std::cos(cam.pitch), dy = std::sin(cam.pitch), dz = std::cos(cam.yaw) * std::cos(cam.pitch);
-            cam.x = p[0] - dx * 4.5f, cam.y = p[1] + 1.7f - dy * 4.5f, cam.z = p[2] - dz * 4.5f;
+            cam.x = p[0] - dx * 4.5f, cam.y = p[1] + eye_height() + 0.2f - dy * 4.5f, cam.z = p[2] - dz * 4.5f;
         }
     }
     for (Bot& b : bots) {  // running, standing or fallen, facing where they go or aim

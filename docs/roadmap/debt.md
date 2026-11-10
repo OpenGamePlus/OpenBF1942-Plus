@@ -44,7 +44,7 @@
 | Collision blocks | open question | static collision uses the first block of each mesh; the last is more detailed (armour materials); which one the original uses for soldiers is unknown, see [pathfinding.md](../formats/pathfinding.md#use-in-the-engine) |
 | Conquest rules | unverified | capture, ticket bleed and win rules read from field names; conquest mode only |
 | Parked vehicles | shortcut | lifted onto the terrain; LCVPs on davits drop into the sea; two Salerno Willys fall 50–70 m (unexplained); column hulls approximate concave parts |
-| Soldier movement | shortcut | speeds, jump, swim depth guessed; entry by distance, not `EntryPoint`; no crouch, prone, ladders, jump or swim animations, held weapon |
+| Soldier movement | shortcut | speeds, jump, swim depth guessed; entry by distance, not `EntryPoint`; crouch and prone speeds and capsules guessed, prone capsule upright, bots always stand; no ladders, jump or swim animations, held weapon |
 | Moving parts | shortcut | propeller rpm guessed; drawn wheel droop capped at 0.2 m; tracks, hands, gear retraction, engine rotation not drawn |
 | Boat model | unverified | water drag rates, ship thrust = Σ torque / 4; float rest heights match retail spawns, see [vehicles.md](../formats/vehicles.md#boats-implemented-unverified) |
 | Aircraft model | unverified | wing force constants, regulator as 1 g shared, thrust = Σ torque / 4; see [vehicles.md](../formats/vehicles.md#aircraft-implemented-unverified) |

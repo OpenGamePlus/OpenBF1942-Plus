@@ -2,6 +2,11 @@
 
 Append-only. Newest first. At most 3 bullets per stage.
 
+## 2026-11-10 — crouch and prone (roadmap B2)
+
+- The player crouches (ctrl) and lies down (Z). The capsule shrinks, so shots pass over a prone soldier. Speeds are guessed, standing up needs room, and the crouch / lie animation states play.
+- Open: bots always stand, prone capsule upright, posture transitions.
+
 ## 2026-11-10 — explosions and kit weapons (roadmap B2)
 
 - Projectile `radius` read: `material2` damage hits everything within it, falling off linearly (unverified); fuses that run out explode. Over 78 levels bot deaths 236 → 258.

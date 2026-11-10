@@ -40,7 +40,7 @@ int run(int argc, char** argv) {
                      "  --shot with --drive: settles 2 s, drives 4 s (last 2 s steering right), prints the track;\n"
                      "  aircraft: 20 s take-off run, pulling up from 12 s to 16 s; the vehicle fires from 2 s (--fire-ahead: gun\n"
                      "  straight ahead, no steering)\n"
-                     "  --play: walk a soldier (WASD, shift walks, space jumps, right mouse looks, left mouse fires, R reloads, 1-9 weapons, G detonates explosive packs), E gets into / out of the nearest vehicle\n"
+                     "  --play: walk a soldier (WASD, shift walks, space jumps, right mouse looks, left mouse fires, R reloads, 1-9 weapons, G detonates explosive packs, left ctrl crouches, Z lies down), E gets into / out of the nearest vehicle\n"
                      "  (parked vehicles are drivable with --play or --drive); with --shot: runs 2 s, gets into the nearest vehicle,\n"
                      "  drives 2 s, gets out, then reports how far the parked vehicles moved while settling, then plays --sim seconds\n"
                      "  (default 10) of conquest and prints flag changes and tickets\n");
@@ -170,11 +170,13 @@ int run(int argc, char** argv) {
         SDL_Event ev;
         float mouse_x = 0, mouse_y = 0;  // this frame's look motion (turrets when driving)
         bool toggle_vehicle = false;     // E: get in / out
+        bool toggle_prone = false;       // Z: lie down / get up
         Camera& cam = game.cam;
         while (SDL_PollEvent(&ev)) {
             if (ev.type == SDL_QUIT || (ev.type == SDL_KEYDOWN && ev.key.keysym.sym == SDLK_ESCAPE)) running = false;
             if (ev.type == SDL_KEYDOWN && ev.key.keysym.sym == SDLK_c) show_collision = !show_collision;
             if (ev.type == SDL_KEYDOWN && ev.key.keysym.sym == SDLK_e && !ev.key.repeat) toggle_vehicle = true;
+            if (ev.type == SDL_KEYDOWN && ev.key.keysym.sym == SDLK_z && !ev.key.repeat) toggle_prone = true;
             if (ev.type == SDL_MOUSEBUTTONDOWN && ev.button.button == SDL_BUTTON_RIGHT) look = true;
             if (ev.type == SDL_MOUSEBUTTONUP && ev.button.button == SDL_BUTTON_RIGHT) look = false;
             if (ev.type == SDL_MOUSEMOTION && look) {
@@ -196,6 +198,7 @@ int run(int argc, char** argv) {
             in.pitch = key(SDL_SCANCODE_UP, SDL_SCANCODE_DOWN), in.roll = key(SDL_SCANCODE_RIGHT, SDL_SCANCODE_LEFT);
             in.look_x = mouse_x / 20.0f, in.look_y = mouse_y / 20.0f;  // mouse right / down = +1 at ~20 px per frame
             in.jump = k[SDL_SCANCODE_SPACE], in.slow = k[SDL_SCANCODE_LSHIFT], in.use = toggle_vehicle, in.reload = k[SDL_SCANCODE_R], in.detonate = k[SDL_SCANCODE_G];
+            in.crouch = k[SDL_SCANCODE_LCTRL], in.prone = toggle_prone;
             for (int n = 0; n < 9; ++n)
                 if (k[SDL_SCANCODE_1 + n]) in.select = n;
             in.fire = SDL_GetMouseState(nullptr, nullptr) & SDL_BUTTON(SDL_BUTTON_LEFT);

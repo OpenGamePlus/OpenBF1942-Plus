@@ -38,6 +38,8 @@ struct GameInput {
     bool jump = false, slow = false, fire = false, use = false, reload = false;
     int select = -1;  // number key: kit weapon slot (0-based), -1 none
     bool detonate = false;  // explosive packs placed by the player
+    bool crouch = false;    // held
+    bool prone = false;     // pressed this frame: lie down / get up
 };
 
 // The lower / upper body animation states a soldier's skinned parts should play; empty: as loaded.
@@ -189,6 +191,9 @@ private:
     void select(size_t i);
     void refill_loadout();
     bool fire_held = false;  // trigger held last step (fireOnce weapons)
+    int posture = 0;         // the player's: 0 stand, 1 crouch, 2 prone
+    bool lying = false;      // prone toggled on
+    float eye_height() const { return posture == 2 ? 0.35f : posture == 1 ? 1.0f : 1.5f; }
     struct Placed {  // the player's mines (go off near a vehicle) and explosive packs (go off on detonate)
         int shot = -1;
         float near = 0;

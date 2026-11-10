@@ -401,6 +401,7 @@ struct Physics::Impl {
         Ref<CharacterVirtual> ch;
         Vec3 want = Vec3::sZero();
         bool jump = false, active = true;
+        int posture = 0;
     };
     std::vector<Soldier> soldiers;
     void soldier(Soldier& s);
@@ -948,9 +949,31 @@ void Physics::Impl::soldier(Soldier& s) {
     ch.ExtendedUpdate(kStep, g, es, sys.GetDefaultBroadPhaseLayerFilter(kMoving), sys.GetDefaultLayerFilter(kMoving), {}, {}, temp);
 }
 
+namespace {
+Ref<Shape> soldier_shape(int posture) {  // a capsule of radius 0.3 standing on the feet
+    float h = posture == 2 ? 0.7f : posture == 1 ? 1.2f : 1.8f;
+    return new RotatedTranslatedShape(Vec3(0, h / 2, 0), Quat::sIdentity(), new CapsuleShape(h / 2 - 0.3f, 0.3f));
+}
+}  // namespace
+
+bool Physics::set_posture(int character, int posture) {
+    auto& s = p_->soldiers.at(static_cast<size_t>(character));
+    posture = std::clamp(posture, 0, 2);
+    if (posture == s.posture) return true;
+    Ref<Shape> sh = soldier_shape(posture);
+    IgnoreSingleBodyFilter self(s.ch->GetInnerBodyID());
+    // Getting lower always fits; getting up must not push into anything.
+    if (!s.ch->SetShape(sh, posture > s.posture ? 1e6f : 0.01f, p_->sys.GetDefaultBroadPhaseLayerFilter(kMoving),
+                        p_->sys.GetDefaultLayerFilter(kMoving), self, {}, p_->temp))
+        return false;
+    s.ch->SetInnerBodyShape(sh);
+    s.posture = posture;
+    return true;
+}
+
 int Physics::add_character(float x, float y, float z) {
     Ref<CharacterVirtualSettings> cs = new CharacterVirtualSettings();
-    cs->mShape = new RotatedTranslatedShape(Vec3(0, 0.9f, 0), Quat::sIdentity(), new CapsuleShape(0.6f, 0.3f));
+    cs->mShape = soldier_shape(0);
     cs->mMaxSlopeAngle = DegreesToRadians(50.0f);
     cs->mInnerBodyShape = cs->mShape;  // a body in the broad phase, so projectiles can hit soldiers
     cs->mInnerBodyLayer = kMoving;
