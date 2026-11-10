@@ -57,6 +57,7 @@ struct WeaponDef {
     int mag_size = 0, mags = 0;         // magSize, numOfMag (0: unlimited)
     float reload = 0;                   // reloadTime (s)
     bool fire_once = false;             // fireOnce: one round per trigger pull
+    int ammo_type = 0;                  // ammoType: which supply depots refill it
 };
 
 struct VehicleDef {

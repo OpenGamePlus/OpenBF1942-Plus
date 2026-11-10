@@ -1,5 +1,7 @@
 #include "game.h"
 
+#include <functional>
+
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
@@ -91,6 +93,33 @@ Game::Game(const Vfs& vfs_, Con& con_, const Heightmap& hm_, const TerrainInfo& 
             }
             break;
         }
+        // Supply depots under placed objects (Ammobox -> AmmoboxSupplyDepot); shortcut: at the root's position.
+        std::function<const ConObject*(const std::string&, int)> depot_of = [&](const std::string& n, int depth) -> const ConObject* {
+            const ConObject* t = object_template(n);
+            if (!t || depth > 6) return nullptr;
+            if (lower(t->type) == "supplydepot") return t;
+            for (auto& [k, a] : t->props)
+                if (k == "addtemplate" && !a.empty())
+                    if (const ConObject* d = depot_of(a[0], depth + 1)) return d;
+            return nullptr;
+        };
+        for (auto& inst : con.instances) {
+            const ConObject* t = inst.deleted ? nullptr : depot_of(inst.name, 0);
+            if (!t) continue;
+            Depot d;
+            bool soldiers = true;
+            for (auto& [k, a] : t->props) {
+                if (a.empty()) continue;
+                if (k == "radius") d.radius = static_cast<float>(std::atof(a[0].c_str()));
+                else if (k == "team") d.team = std::atoi(a[0].c_str());
+                else if (k == "workonsoldiers") soldiers = std::atoi(a[0].c_str()) != 0;
+                else if (k == "sethealth" && a.size() >= 2) d.health = std::max(0.0f, static_cast<float>(std::atof(a[1].c_str())));
+                else if (k == "addammotype" && a.size() >= 3) d.ammo[std::atoi(a[0].c_str())] = static_cast<float>(std::atof(a[2].c_str()));
+            }
+            for (auto& [k, a] : inst.props)
+                if (k == "absoluteposition" && !a.empty()) parse_vec3(a[0], d.pos);
+            if (soldiers && d.radius > 0 && (d.health > 0 || !d.ammo.empty())) depots.push_back(d);
+        }
         for (auto& inst : con.instances) {
             const ConObject* t = inst.deleted ? nullptr : object_template(inst.name);
             if (!t || lower(t->type) != "spawnpoint") continue;
@@ -122,8 +151,8 @@ Game::Game(const Vfs& vfs_, Con& con_, const Heightmap& hm_, const TerrainInfo& 
             bots.push_back(std::move(b));
         }
         int n1 = static_cast<int>(std::count_if(bots.begin(), bots.end(), [](const Bot& b) { return b.team == 1; }));
-        std::printf("conquest: %zu flags, tickets %.0f / %.0f; bots: %d team 1, %zu team 2; %zu spawn points; navigation %d x %d\n",
-                    game.flags.size(), game.tickets[1], game.tickets[2], n1, bots.size() - static_cast<size_t>(n1), spawn_points.size(), nav.n, nav.n);
+        std::printf("conquest: %zu flags, tickets %.0f / %.0f; bots: %d team 1, %zu team 2; %zu spawn points; navigation %d x %d; %zu supply depots\n",
+                    game.flags.size(), game.tickets[1], game.tickets[2], n1, bots.size() - static_cast<size_t>(n1), spawn_points.size(), nav.n, nav.n, depots.size());
     }
     // Combat: damage tables, the soldier's kit weapon.
     damage = damage_table(con.settings["materialmanager"]);
@@ -264,6 +293,17 @@ Ammo Ammo::full(const WeaponDef& w) {
     return a;
 }
 
+void Ammo::supply(float r, const WeaponDef& w) {
+    if (unlimited || w.mag_size <= 0) return;
+    int most = std::max(0, w.mags - 1);
+    if (spare >= most) {
+        refill = 0;
+        return;
+    }
+    refill += r;
+    while (refill >= static_cast<float>(w.mag_size) && spare < most) refill -= static_cast<float>(w.mag_size), ++spare;
+}
+
 bool Ammo::take(float t) {
     if (unlimited) return true;
     if (reloading(t) || rounds <= 0) return false;
@@ -282,6 +322,38 @@ void Ammo::tick(float t, const WeaponDef& w) {
         rounds = w.mag_size, --spare, reload_until = -1;
     }
     if (rounds <= 0) reload(t, w);  // autoReload is 0 on many weapons; reloading on empty spares a key press
+}
+
+// Soldiers inside a depot's radius get ammunition (spare magazines) and hit points.
+void Game::supply(float step) {
+    auto at = [&](const float p[3], int tm, Ammo& ammo, const WeaponDef& w, float& hp, float full) {
+        for (const Depot& d : depots) {
+            float dx = p[0] - d.pos[0], dy = p[1] - d.pos[1], dz = p[2] - d.pos[2];
+            if ((d.team && d.team != tm) || dx * dx + dy * dy + dz * dz > d.radius * d.radius) continue;
+            auto r = d.ammo.find(w.ammo_type);
+            if (r != d.ammo.end()) ammo.supply(r->second * step, w);
+            hp = std::min(full, hp + d.health * step);
+        }
+    };
+    if (player >= 0 && !player_dead && cur < 0) {
+        float p[3];
+        phys.character_position(player, p);
+        at(p, team, hand_ammo, hand, player_hp, hitpoints(soldier_tmpl));
+    }
+    for (Bot& b : bots)
+        if (!b.dead) at(b.pos, b.team, b.ammo, b.weapon, b.hp, hitpoints(b.tmpl));
+}
+
+int Game::nearest_depot(const float pos[3], int tm, const WeaponDef& w) const {
+    int best = -1;
+    float bd = 1e30f;
+    for (size_t i = 0; i < depots.size(); ++i) {
+        const Depot& d = depots[i];
+        float dx = pos[0] - d.pos[0], dz = pos[2] - d.pos[2];
+        if ((d.team && d.team != tm) || !d.ammo.count(w.ammo_type) || dx * dx + dz * dz >= bd) continue;
+        bd = dx * dx + dz * dz, best = static_cast<int>(i);
+    }
+    return best;
 }
 
 void Game::fire(float t) {
@@ -483,13 +555,22 @@ void Game::think(float t, float step) {
             float g = (f.pos[0] - b.pos[0]) * (f.pos[0] - b.pos[0]) + (f.pos[2] - b.pos[2]) * (f.pos[2] - b.pos[2]);
             if (!goal && f.team != b.team && !f.locked && g < best) best = g, goal = &f;
         }
-        b.moving = goal && best > 8 * 8;
+        float gpos[3] = {}, arrive = 8;
+        int gi = -1;
+        if (goal) std::copy(goal->pos, goal->pos + 3, gpos), gi = static_cast<int>(goal - game.flags.data());
+        // Out of spare magazines: to the nearest depot of its team that has its ammunition, and wait there until full.
+        bool dry = !b.ammo.unlimited && b.ammo.spare == 0 && b.ammo.rounds < std::max(1, b.weapon.mag_size / 2);
+        if (int di = dry ? nearest_depot(b.pos, b.team, b.weapon) : -1; di >= 0) {
+            const Depot& d = depots[static_cast<size_t>(di)];
+            std::copy(d.pos, d.pos + 3, gpos), gi = static_cast<int>(game.flags.size()) + di, arrive = d.radius * 0.7f;
+            best = (gpos[0] - b.pos[0]) * (gpos[0] - b.pos[0]) + (gpos[2] - b.pos[2]) * (gpos[2] - b.pos[2]);
+        }
+        b.moving = gi >= 0 && best > arrive * arrive;
         if (!b.moving) {
             phys.walk(b.ch, 0, 0, false);
             continue;
         }
         // Route on the infantry map: planned when the goal changes, and again when stuck (at most every 5 s).
-        int gi = static_cast<int>(goal - game.flags.data());
         bool stuck = false;
         if (t >= b.check_at) {  // under 2 m in 2 s
             float mx = b.pos[0] - b.check_pos[0], mz = b.pos[2] - b.check_pos[1];
@@ -497,11 +578,11 @@ void Game::think(float t, float step) {
             b.check_at = t + 2, b.check_pos[0] = b.pos[0], b.check_pos[1] = b.pos[2];
         }
         if (nav.n > 0 && (gi != b.path_goal || (stuck && t >= b.replan_at))) {
-            b.path = nav_path(nav, b.pos[0], b.pos[2], goal->pos[0], goal->pos[2]);
+            b.path = nav_path(nav, b.pos[0], b.pos[2], gpos[0], gpos[2]);
             b.waypoint = 0, b.path_goal = gi, b.replan_at = t + 5;
             stuck = stuck && b.path.empty();
         }
-        float tx = goal->pos[0], tz = goal->pos[2];
+        float tx = gpos[0], tz = gpos[2];
         while (b.waypoint * 2 + 1 < b.path.size()) {
             float wx = b.path[b.waypoint * 2], wz = b.path[b.waypoint * 2 + 1];
             if ((wx - b.pos[0]) * (wx - b.pos[0]) + (wz - b.pos[2]) * (wz - b.pos[2]) > 2.5f * 2.5f) {
@@ -520,6 +601,7 @@ void Game::think(float t, float step) {
         b.yaw = std::atan2(gx, gz) * 57.29578f;
         phys.walk(b.ch, gx * 4, gz * 4, t < b.detour_until);  // jumping while stuck helps over low walls
     }
+    supply(step);
     // Who stands at each flag.
     std::vector<std::array<int, 3>> present(game.flags.size(), std::array<int, 3>{0, 0, 0});
     for (size_t i = 0; i < game.flags.size(); ++i) {

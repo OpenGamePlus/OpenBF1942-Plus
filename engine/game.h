@@ -56,6 +56,8 @@ struct Ammo {
     void reload(float t, const WeaponDef& w);  // starts one if a spare magazine is left and none is running
     void tick(float t, const WeaponDef& w);    // a finished reload fills the magazine
     bool reloading(float t) const { return t < reload_until; }
+    float refill = 0;  // rounds received from a supply depot towards the next spare magazine
+    void supply(float rounds, const WeaponDef& w);  // adds rounds, as spare magazines up to numOfMag
 };
 
 struct Camera {
@@ -105,6 +107,14 @@ private:
         bool has_muzzle = false;
         Mat4 start;  // where it was placed
     };
+    struct Depot {  // SupplyDepot working on soldiers (ammo boxes, medic lockers, half-tracks are not placed by levels)
+        float pos[3] = {}, radius = 0, health = 0;  // health: hit points per second (setHealth second value; unverified)
+        int team = 0;                                // 0: both
+        std::map<int, float> ammo;                   // ammoType -> rounds per second (addAmmoType third value; unverified)
+    };
+    std::vector<Depot> depots;
+    void supply(float step);
+    int nearest_depot(const float pos[3], int team, const WeaponDef& w) const;
     struct SpawnPt {
         float pos[3] = {}, yaw = 0;
         int group = -1;

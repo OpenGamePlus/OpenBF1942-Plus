@@ -5,7 +5,8 @@ Append-only. Newest first. At most 3 bullets per stage.
 ## 2026-11-10 — magazines and reload (roadmap B2, first part)
 
 - `magSize`, `numOfMag`, `reloadTime` and `fireOnce` read. Player and bots count rounds, reload on empty or with R; the HUD shows rounds / spare magazines.
-- Bots now run dry: bot deaths over 78 levels in 5 minutes fell from 494 to 233. Supply depots and ammo pickups are the fix, still open.
+- Supply depots read (1,567 over 78 levels): ammunition and health within their radius; bots out of spare magazines walk to one.
+- Bot deaths over 78 levels in 5 minutes fell from 494 to 236. Measured: reload pauses cut bot shots by about a third (El Alamein 663 → 445); running dry was not the cause. Kept, as it is the original rule.
 
 ## 2026-11-10 — HUD (roadmap C2, first part)
 

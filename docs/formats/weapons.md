@@ -13,6 +13,9 @@ Status: **damage formula checked against the retail tables' own comments and kno
 | `roundOfFire` | rounds per second | Sherman 0.35 (one shell every 2.9 s), M1 Garand 3.2, Thompson 10, MG42 15 |
 | `magSize`, `numOfMag`, `reloadTime` | rounds per magazine, magazines (read as including the loaded one; unverified), reload seconds | M1 Garand 8, 4, 4.0 |
 | `fireOnce` | one round per trigger pull | M1 Garand 1 |
+| `ammoType` | which supply depots refill it | rifles 1 |
+
+Supply depots (`SupplyDepot`, under placed objects such as `Ammobox`, `mediclocker`, the airfield ammo; 1,567 over the 78 levels): `radius`, `team` (0 both), `workOnSoldiers` / `workOnVehicles`, `addAmmoType <type> -1 <rate> 0` (Ammobox: type 1 at 15), `setHealth -1 <rate> 0` (medic locker 4.0). We read the rates as rounds and hit points per second (unverified). Soldiers in range get spare magazines and health; bots out of spare magazines walk to the nearest depot of their team that stocks their ammunition and wait there until full.
 
 `Projectile`: `material` (hit), `material2` (explosion; the damage file calls it splash damage), `timeToLive CRD_NONE/<s>/…`, `damageType`.
 
