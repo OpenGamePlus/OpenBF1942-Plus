@@ -2,6 +2,12 @@
 
 Append-only. Newest first. At most 3 bullets per stage.
 
+## 2026-11-10 — skeletons, skins, animations (Python)
+
+- Decoded `.ske`, `.skn` (with bone name table) and `.baf` (per-channel RLE of i16); all 1,799 files parse to their end; skin links to `.sm` vertices by position.
+- Conventions fixed visually with a throwaway rasterizer: standard quaternions, `T·R` locals; the conjugate gives impossible knees.
+- Open: the Biped root (`Bip01`) is in 3ds Max space — replaced by identity for soldiers; residual 20° stance lean unverified.
+
 ## 2026-11-10 — map objects in the viewer
 
 - C++ ports of the CON interpreter (parity with Python on all 78 levels) and `.sm`; new `.tm` format; `scene` places instances, children and spawner vehicles.

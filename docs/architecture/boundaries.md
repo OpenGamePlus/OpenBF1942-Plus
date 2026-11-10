@@ -14,7 +14,7 @@
 | `engine/math.h` | 4x4 matrices, game rotation convention | std only |
 | `engine/scene.*` | instances → mesh paths + world matrices | `con`, `vfs`, `math` |
 | `engine/mapview.cpp` | executable: window, GL, camera | all of the above, SDL2, epoxy |
-| `tools/*.py` | Python reference implementations | `rfa` ← `con` ← `sm`, `tm` |
+| `tools/*.py` | Python reference implementations | `rfa` ← `con` ← `sm`, `tm`, `anim` |
 
 ## Rules
 

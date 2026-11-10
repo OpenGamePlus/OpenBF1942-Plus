@@ -21,6 +21,8 @@
 | Viewer draws LOD 0 only, distance cull 1.5 km | shortcut | per-mesh `setLodDistance` exists in geometry templates |
 | `AnimatedMesh`, effects not drawn | not implemented | step 5 and later |
 | Spawner team in the viewer | shortcut | instance `setTeam`, else first `setObjectTemplate`; no game state |
+| Soldier root bone and standing pose | unverified | root replaced by identity, 180° turn; ≈ 20° hip flexion in the stand pose, see [anim.md](../formats/anim.md#soldier-root-unverified) |
+| `.baf` block second byte | open question | always present, unused by the decoder |
 | TM collision block layout | open question | skipped by anchoring geometry at the end of file |
 | No model viewer in the engine | deliberate | step 3 exports OBJ for Blender; rendering starts with the map viewer |
 | Networking protocol | risk | undocumented; roadmap step 8 |

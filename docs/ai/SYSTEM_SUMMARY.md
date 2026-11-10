@@ -14,6 +14,7 @@ tools/rfa.py         RFA archive reader (list, extract)
 tools/con.py         CON interpreter + virtual file system (mod/level loader)
 tools/sm.py          static mesh reader, .rs shader parser, OBJ export
 tools/tm.py          tree mesh reader
+tools/anim.py        skeleton, skin and animation readers, pose and skinning reference
 tools/check_docs.py  documentation checker
 tools/test_*.py      unit tests (synthetic data only)
 ```
@@ -29,7 +30,7 @@ tools/test_*.py      unit tests (synthetic data only)
 | Textures (`.dds`/`.tga`) | C++: DDS DXT1/3/5, uncompressed TGA | — |
 | Terrain | C++ viewer: heightmap, colour tiles, water plane; all 78 levels open | [terrain.md](../formats/terrain.md) |
 | Map objects in the viewer | static and tree meshes, child templates, spawned vehicles; no animated meshes, LOD | [con.md](../formats/con.md#object-placement) |
-| Animation | not started | — |
+| Skeletons, skins, animations | Python reference: all files parse, soldier poses checked visually; not in C++ yet | [anim.md](../formats/anim.md) |
 | Engine (C++) | `obf` library + `obf_mapview` | [boundaries.md](../architecture/boundaries.md) |
 
 ## Commands
@@ -56,5 +57,6 @@ tools/test_*.py      unit tests (synthetic data only)
 - `Vfs.files`: lower-cased path -> bytes or archive pointer; `Vfs.read(path) -> bytes`.
 - `sm.parse(bytes) -> {version, bbox, collision: [bytes], lods: [[{name, prim, fvf, stride, alpha, vertices, indices}]], end}`; vertices are float tuples in file order.
 - C++ (`namespace obf`): `lzo1x_decompress`, `rfa_index`, `rfa_read`; `Vfs::mount_mod/add/has/read/paths/key`; `dds_decode`, `tga_decode -> Image{w,h,rgba}`; `parse_terrain_con -> TerrainInfo`; `load_heightmap -> Heightmap::height(row, col)`; `Con::load_game/load_level/run/execute` with `templates`, `instances`, `settings`; `sm_parse`, `sm_triangles`, `rs_parse`; `tm_parse`; `build_scene -> [DrawItem{mesh, world}]`. All throw `std::runtime_error` on bad data.
+- `anim.parse_ske/parse_skn/parse_baf(bytes)`; `anim.pose(skeleton, [baf], frame, biped_root) -> {bone: 4x4}`; `anim.skin(vertices, records, names, world) -> [pos]`.
 - `tm.parse(bytes) -> {bbox, groups: [[(first, count, texture)] x 3], vertices, indices}`.
 - `sm.triangles(material) -> [(a, b, c)]` for lists and strips; `sm.parse_rs(text) -> {material lower: {shader, key: value}}`.
