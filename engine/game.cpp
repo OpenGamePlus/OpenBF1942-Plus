@@ -157,6 +157,9 @@ Game::Game(const Vfs& vfs_, Con& con_, const Heightmap& hm_, const TerrainInfo& 
     // Combat: damage tables, the soldier's kit weapon.
     damage = damage_table(con.settings["materialmanager"]);
     hand = weapon_def(con, weapon_name);
+    for (const std::string& w : kit_weapons(team, opt.kit)) loadout.push_back({weapon_def(con, w), Ammo::full(weapon_def(con, w))});
+    if (loadout.empty() && !hand.name.empty()) loadout.push_back({hand, Ammo::full(hand)});
+    if (!loadout.empty()) hand = loadout[0].first;
     hand_ammo = Ammo::full(hand);
     player_hp = hitpoints(soldier_tmpl);
     if (cam.x < 0) cam.x = info.world_size * 0.15f, cam.y = 300, cam.z = info.world_size * 0.15f;  // default: corner, looking across
@@ -166,6 +169,14 @@ void Game::print_weapon() const {
     if (player >= 0)
         std::printf("weapon %s: %.0f m/s every %.2f s, material %d; damage table: %zu materials, %zu modifiers\n", hand.name.c_str(),
                     hand.velocity, hand.interval, hand.material, damage.materials.size(), damage.mods.size());
+    if (player >= 0 && !loadout.empty()) {
+        std::printf("kit:");
+        for (size_t i = 0; i < loadout.size(); ++i) {
+            const WeaponDef& w = loadout[i].first;
+            std::printf(" %zu %s (%d x %d%s)", i + 1, w.name.c_str(), w.mag_size, w.mags, w.radius > 0 ? ", explodes" : "");
+        }
+        std::printf("\n");
+    }
 }
 
 const VehicleDef* Game::def_for(const std::string& name) {
@@ -233,12 +244,30 @@ float Game::hitpoints(const std::string& n) const {
     return std::isfinite(hp) && hp > 0 ? hp : 30.0f;
 }
 
-std::string Game::primary(int tm, int kt) const {  // the kit's first weapon with a projectile
+std::vector<std::string> Game::kit_weapons(int tm, int kt) const {
+    std::vector<std::string> w;
     auto k = kits.find({tm, kt});
     if (const ConObject* t = k != kits.end() ? object_template(k->second) : nullptr)
         for (auto& [m, a] : t->props)
-            if (m == "addtemplate" && !a.empty() && !weapon_def(con, a[0]).name.empty()) return a[0];
-    return "";
+            if (m == "addtemplate" && !a.empty() && !weapon_def(con, a[0]).name.empty()) w.push_back(a[0]);
+    return w;
+}
+
+std::string Game::primary(int tm, int kt) const {  // the kit's first weapon with a projectile
+    auto w = kit_weapons(tm, kt);
+    return w.empty() ? "" : w[0];
+}
+
+void Game::select(size_t i) {
+    if (i >= loadout.size() || i == slot) return;
+    loadout[slot].second = hand_ammo;
+    hand_ammo.reload_until = -1;  // switching away cancels a reload (shortcut: no switch time)
+    slot = i, hand = loadout[i].first, hand_ammo = loadout[i].second, hand_next = now + 0.3f;
+}
+
+void Game::refill_loadout() {
+    for (auto& [w, a] : loadout) a = Ammo::full(w);
+    if (slot < loadout.size()) hand_ammo = loadout[slot].second;
 }
 
 int Game::spawn_team(const SpawnPt& sp) const {
@@ -366,14 +395,14 @@ void Game::fire(float t) {
         if (!(l > 1e-6f)) return;
         float pos[3], vel[3];
         for (int i = 0; i < 3; ++i) d[i] /= l, pos[i] = m.m[12 + i] + d[i] * (v.has_muzzle ? 1.0f : v.len), vel[i] = d[i] * v.weapon.velocity;
-        phys.fire(pos, vel, v.weapon.material, v.weapon.material2, v.weapon.ttl, v.id, -1, team);
+        phys.fire(pos, vel, v.weapon.material, v.weapon.material2, v.weapon.ttl, v.id, -1, team, v.weapon.radius);
         sounds.push_back({v.weapon.name, {pos[0], pos[1], pos[2]}});
     } else if (player >= 0 && !hand.name.empty() && t >= hand_next && hand_ammo.take(t)) {
         hand_next = t + hand.interval;
         float p[3], d[3] = {std::sin(cam.yaw) * std::cos(cam.pitch), std::sin(cam.pitch), std::cos(cam.yaw) * std::cos(cam.pitch)}, pos[3], vel[3];
         phys.character_position(player, p);
         for (int i = 0; i < 3; ++i) pos[i] = p[i] + (i == 1 ? 1.5f : 0.0f) + d[i] * 0.6f, vel[i] = d[i] * hand.velocity;
-        phys.fire(pos, vel, hand.material, hand.material2, hand.ttl, -1, player, team);
+        phys.fire(pos, vel, hand.material, hand.material2, hand.ttl, -1, player, team, hand.radius);
         sounds.push_back({hand.name, {pos[0], pos[1], pos[2]}});
     }
 }
@@ -397,50 +426,76 @@ void Game::player_dies() {
     std::printf("you died\n");
 }
 
-// Hits: damage = hit material vs the armour face met (else the vehicle's material), plus the explosion material.
-// Soldiers take no damage from their own team (shots carry the shooter's team as their tag).
+// Hits: damage = hit material vs the armour face met (else the vehicle's material). The explosion material (material2)
+// hits everything within the projectile's radius, falling off linearly to 0 at its edge (unverified); without a radius
+// it adds to the direct hit. Soldiers take no damage from their own team (shots carry the shooter's team as their tag).
 void Game::apply_hits() {
+    auto hurt_player = [&](float d) {
+        player_hp -= d;
+        std::printf("you are hit: %.1f hp left\n", std::max(0.0f, player_hp));
+        if (player_hp <= 0) player_dies();
+    };
+    auto hurt_bot = [&](Bot& b, float d, int tag) {
+        b.hp -= d;
+        if (b.hp > 0) return;
+        b.dead = true, b.died_at = game_time();
+        phys.character_position(b.ch, b.pos);
+        phys.kill_character(b.ch);
+        game.death(b.team);
+        ++deaths[static_cast<size_t>(std::clamp(b.team, 0, 2))];
+        if (tag == team) std::printf("%s (team %d) killed\n", b.tmpl.c_str(), b.team);
+        note(b.tmpl + (tag == team ? " killed by your team" : " killed"));
+    };
+    auto hurt_vehicle = [&](size_t i, float d, int armour) {
+        Veh& v = vehicles[i];
+        v.hp -= d;
+        std::printf("hit %s (armour %d): %.1f damage, %.1f hp left\n", v.name.c_str(), armour, d, std::max(0.0f, v.hp));
+        if (v.hp > 0) return;
+        v.wrecked = true;
+        std::printf("%s destroyed\n", v.name.c_str());
+        note(v.name + " destroyed");
+        if (static_cast<int>(i) == cur && player >= 0) get_in_out(), player_dies();  // the crew dies with it
+        phys.drive(v.id, 0, 0);
+    };
     for (const Physics::Hit& h : phys.take_hits()) {
+        bool splash = h.radius > 0 && h.material2 >= 0;
+        auto direct = [&](int target) {
+            return damage.damage(h.material, target) + (h.material2 >= 0 && !splash ? damage.damage(h.material2, target) : 0.0f);
+        };
+        // Body part by hit height: head 40, chest 41, limbs 42 (setSkeletonCollisionBone materials).
+        // shortcut: heights stand in for the bones; arms count as chest.
+        int part = h.height > 1.45f ? 40 : h.height > 0.85f ? 41 : 42;
         if (h.character >= 0 && h.character == player) {
-            if (player_dead || h.tag == team) continue;
-            int part = h.height > 1.45f ? 40 : h.height > 0.85f ? 41 : 42;
-            player_hp -= damage.damage(h.material, part) + (h.material2 >= 0 ? damage.damage(h.material2, part) : 0.0f);
-            std::printf("you are hit: %.1f hp left\n", std::max(0.0f, player_hp));
-            if (player_hp <= 0) player_dies();
-            continue;
+            if (!player_dead && h.tag != team) hurt_player(direct(part));
+        } else if (h.character >= 0) {
+            for (Bot& b : bots)
+                if (b.ch == h.character && !b.dead && h.tag != b.team) hurt_bot(b, direct(part), h.tag);
+        } else if (h.vehicle >= 0) {
+            for (size_t i = 0; i < vehicles.size(); ++i)
+                if (vehicles[i].id == h.vehicle && !vehicles[i].wrecked) {
+                    int target = h.armor >= 0 ? h.armor : vehicles[i].material;
+                    hurt_vehicle(i, direct(target), target);
+                }
         }
-        if (h.character >= 0) {
-            for (Bot& b : bots) {
-                if (b.ch != h.character || b.dead || h.tag == b.team) continue;
-                // Body part by hit height: head 40, chest 41, limbs 42 (setSkeletonCollisionBone materials).
-                // shortcut: heights stand in for the bones; arms count as chest.
-                int part = h.height > 1.45f ? 40 : h.height > 0.85f ? 41 : 42;
-                b.hp -= damage.damage(h.material, part) + (h.material2 >= 0 ? damage.damage(h.material2, part) : 0.0f);
-                if (b.hp > 0) continue;
-                b.dead = true, b.died_at = game_time();
-                phys.character_position(b.ch, b.pos);
-                phys.kill_character(b.ch);
-                game.death(b.team);
-                ++deaths[static_cast<size_t>(std::clamp(b.team, 0, 2))];
-                if (h.tag == team) std::printf("%s (team %d) killed\n", b.tmpl.c_str(), b.team);
-                note(b.tmpl + (h.tag == team ? " killed by your team" : " killed"));
-            }
-            continue;
+        if (!splash) continue;
+        auto falloff = [&](const float q[3], float lift) {
+            float dx = q[0] - h.pos[0], dy = q[1] + lift - h.pos[1], dz = q[2] - h.pos[2];
+            return std::max(0.0f, 1 - std::sqrt(dx * dx + dy * dy + dz * dz) / h.radius);
+        };
+        if (player >= 0 && !player_dead && cur < 0 && h.tag != team) {
+            float q[3];
+            phys.character_position(player, q);
+            if (float f = falloff(q, 1); f > 0) hurt_player(damage.damage(h.material2, 41) * f);
         }
-        if (h.vehicle < 0) continue;
+        for (Bot& b : bots)
+            if (!b.dead && h.tag != b.team)
+                if (float f = falloff(b.pos, 1); f > 0) hurt_bot(b, damage.damage(h.material2, 41) * f, h.tag);
         for (size_t i = 0; i < vehicles.size(); ++i) {
-            Veh& v = vehicles[i];
-            if (v.id != h.vehicle || v.wrecked) continue;
-            int target = h.armor >= 0 ? h.armor : v.material;
-            float d = damage.damage(h.material, target) + (h.material2 >= 0 ? damage.damage(h.material2, target) : 0.0f);
-            v.hp -= d;
-            std::printf("hit %s (armour %d): %.1f damage, %.1f hp left\n", v.name.c_str(), target, d, std::max(0.0f, v.hp));
-            if (v.hp > 0) continue;
-            v.wrecked = true;
-            std::printf("%s destroyed\n", v.name.c_str());
-            note(v.name + " destroyed");
-            if (static_cast<int>(i) == cur && player >= 0) get_in_out(), player_dies();  // the crew dies with it
-            phys.drive(v.id, 0, 0);
+            if (vehicles[i].wrecked) continue;
+            Mat4 m = phys.transform(vehicles[i].id);
+            float q[3] = {m.m[12], m.m[13], m.m[14]};
+            // shortcut: distance to the vehicle's centre of mass, not its hull
+            if (float f = falloff(q, 0); f > 0) hurt_vehicle(i, damage.damage(h.material2, vehicles[i].material) * f, vehicles[i].material);
         }
     }
 }
@@ -462,7 +517,7 @@ void Game::think(float t, float step) {
             phys.place_character(player, sp->pos[0], sp->pos[1] + 0.2f, sp->pos[2]);
             phys.set_character_active(player, true);
             player_dead = false, player_hp = hitpoints(soldier_tmpl), cam.yaw = sp->yaw * 3.14159265f / 180.0f;
-            hand_ammo = Ammo::full(hand);
+            refill_loadout();
             std::printf("respawned\n");
         }
     for (Bot& b : bots) {
@@ -536,7 +591,7 @@ void Game::think(float t, float step) {
                 float dir[3] = {d[0] / dist + err(rng), d[1] / dist + err(rng), d[2] / dist + err(rng)};
                 float l = std::sqrt(dir[0] * dir[0] + dir[1] * dir[1] + dir[2] * dir[2]), pos[3], vel[3];
                 for (int i = 0; i < 3; ++i) pos[i] = eye[i] + dir[i] / l * 0.6f, vel[i] = dir[i] / l * b.weapon.velocity;
-                phys.fire(pos, vel, b.weapon.material, b.weapon.material2, b.weapon.ttl, -1, b.ch, b.team);
+                phys.fire(pos, vel, b.weapon.material, b.weapon.material2, b.weapon.ttl, -1, b.ch, b.team, b.weapon.radius);
                 sounds.push_back({b.weapon.name, {pos[0], pos[1], pos[2]}});
             }
             continue;
@@ -623,6 +678,7 @@ void Game::step(float t, float dt, const GameInput& in) {
     move_f = move_r = 0;
     if (in.use) get_in_out();
     if (player >= 0) {
+        if (in.select >= 0 && cur < 0) select(static_cast<size_t>(in.select));
         hand_ammo.tick(t, hand);
         if (in.reload) hand_ammo.reload(t, hand);
     }

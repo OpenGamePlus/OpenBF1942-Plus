@@ -58,6 +58,7 @@ struct WeaponDef {
     float reload = 0;                   // reloadTime (s)
     bool fire_once = false;             // fireOnce: one round per trigger pull
     int ammo_type = 0;                  // ammoType: which supply depots refill it
+    float radius = 0;                   // projectile radius: explosion (material2 damage falls off to 0 at it)
 };
 
 struct VehicleDef {
@@ -119,9 +120,10 @@ public:
         int material = 0, material2 = -1;
         int tag = 0;          // as given to fire (the game uses the shooter's team)
         float pos[3] = {};
+        float radius = 0;     // explosion radius as given to fire; also reported when the shot's time runs out
     };
     void fire(const float pos[3], const float vel[3], int material, int material2, float ttl, int ignore_vehicle = -1,
-              int ignore_character = -1, int tag = 0);
+              int ignore_character = -1, int tag = 0, float radius = 0);
     std::vector<Hit> take_hits();                       // since the last call
     // Nothing between a and b except the given soldiers and vehicle (the looker and its target).
     bool line_of_sight(const float a[3], const float b[3], int ignore_character, int target_character, int target_vehicle) const;

@@ -34,7 +34,7 @@ tools/test_*.py      unit tests (synthetic data only)
 | Map objects in the viewer | static and tree meshes, child templates, spawned vehicles, animated meshes, object lightmaps; first LOD only, no effects | [con.md](../formats/con.md#object-placement) |
 | Skeletons, skins, animations | Python + C++; viewer skins flags and soldiers on the CPU and plays their state animations | [anim.md](../formats/anim.md) |
 | Physics + vehicles | Jolt world: terrain height field, static `.sm` collision; drivable cars, tanks, aircraft and boats (`--drive`), handling uncalibrated | [vehicles.md](../formats/vehicles.md), [ADR 0004](../architecture/adr/0004-jolt-physics.md) |
-| Weapons and damage | vehicle guns from their posed barrel, soldier M1 Garand; ballistic projectiles; damage from MaterialManager tables and the armour face hit; wrecks | [weapons.md](../formats/weapons.md) |
+| Weapons and damage | vehicle guns from their posed barrel, the soldier kit (keys 1–9) with magazines and reload; ballistic projectiles; damage from MaterialManager tables and the armour face hit; explosions with radius; supply depots; wrecks | [weapons.md](../formats/weapons.md) |
 | Soldier on foot | `--play 1` or `2`: team soldier and kit weapon, bots of both teams (see, shoot, run for flags on path-finding routes), conquest flags and tickets (`engine/conquest.*`), deaths and respawns; character capsule, run/strafe animation states, get in/out of any parked vehicle (spawners become physics vehicles) | [vehicles.md](../formats/vehicles.md#soldiers-on-foot-implemented-unverified) |
 | Engine (C++) | `obf` (game, headless) + `obf_render` (GL) libraries; `obf_mapview` (window), `obf_sim` (headless runs) | [boundaries.md](../architecture/boundaries.md) |
 

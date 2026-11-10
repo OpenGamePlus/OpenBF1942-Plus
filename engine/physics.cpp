@@ -297,6 +297,7 @@ WeaponDef weapon_def(const Con& con, const std::string& name) {
         if (a.empty()) continue;
         if (k == "material") wd.material = std::atoi(a[0].c_str());
         else if (k == "material2") wd.material2 = std::atoi(a[0].c_str());
+        else if (k == "radius") wd.radius = std::clamp(num(a), 0.0f, 100.0f);
         else if (k == "timetolive") {  // CRD_NONE/<seconds>/...
             auto s = a[0].find('/');
             if (s != std::string::npos) wd.ttl = std::clamp(static_cast<float>(std::atof(a[0].c_str() + s + 1)), 0.1f, 30.0f);
@@ -406,6 +407,7 @@ struct Physics::Impl {
         int material, material2, ignore, ignore_character;
         float ttl;
         int tag;
+        float radius;
     };
     std::vector<Shot> shots;
     std::vector<Physics::Hit> hits;
@@ -793,7 +795,7 @@ int Physics::Impl::armor(const Vehicle& v, RVec3 from, Vec3 dir) const {
     return mat;
 }
 
-// shortcut: no drag, full gravity; direct hits only (no splash radius yet).
+// shortcut: no drag, full gravity; shots stop at the first contact (grenades do not bounce).
 void Physics::Impl::projectiles() {
     Vec3 g = sys.GetGravity();
     for (size_t i = 0; i < shots.size();) {
@@ -814,7 +816,7 @@ void Physics::Impl::projectiles() {
             RRayCast ray{RVec3(s.p), step};
             RayCastResult hit;
             Physics::Hit h;
-            h.material = s.material, h.material2 = s.material2, h.tag = s.tag;
+            h.material = s.material, h.material2 = s.material2, h.tag = s.tag, h.radius = s.radius;
             if (sys.GetNarrowPhaseQuery().CastRay(ray, hit, {}, {}, filter)) {
                 RVec3 at = ray.GetPointOnRay(hit.mFraction);
                 for (size_t k = 0; k < soldiers.size(); ++k)
@@ -837,6 +839,12 @@ void Physics::Impl::projectiles() {
                 hits.push_back(h), done = true;
             }
         }
+        if (done && s.ttl <= 0 && s.radius > 0) {  // fuse ran out (grenades): explodes where it is
+            Physics::Hit h;
+            h.material = s.material, h.material2 = s.material2, h.tag = s.tag, h.radius = s.radius;
+            h.pos[0] = s.p.GetX(), h.pos[1] = s.p.GetY(), h.pos[2] = s.p.GetZ();
+            hits.push_back(h);
+        }
         if (done) {
             shots[i] = shots.back(), shots.pop_back();
             continue;
@@ -847,11 +855,11 @@ void Physics::Impl::projectiles() {
 }
 
 void Physics::fire(const float pos[3], const float vel[3], int material, int material2, float ttl, int ignore_vehicle,
-                   int ignore_character, int tag) {
+                   int ignore_character, int tag, float radius) {
     for (int k = 0; k < 3; ++k)
         if (!std::isfinite(pos[k]) || !std::isfinite(vel[k])) return;
     p_->shots.push_back({Vec3(pos[0], pos[1], pos[2]), Vec3(vel[0], vel[1], vel[2]), material, material2, ignore_vehicle,
-                         ignore_character, std::clamp(ttl, 0.0f, 30.0f), tag});
+                         ignore_character, std::clamp(ttl, 0.0f, 30.0f), tag, std::max(0.0f, radius)});
 }
 
 std::vector<Physics::Hit> Physics::take_hits() { return std::exchange(p_->hits, {}); }

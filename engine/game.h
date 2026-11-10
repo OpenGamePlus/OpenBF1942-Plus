@@ -36,6 +36,7 @@ struct GameInput {
     float look_x = 0, look_y = 0;                      // turrets, mouse motion scaled
     float forward = 0, right = 0;                      // on foot
     bool jump = false, slow = false, fire = false, use = false, reload = false;
+    int select = -1;  // number key: kit weapon slot (0-based), -1 none
 };
 
 // The lower / upper body animation states a soldier's skinned parts should play; empty: as loaded.
@@ -143,6 +144,7 @@ private:
     const ConObject* object_template(const std::string& n) const;
     float hitpoints(const std::string& n) const;
     std::string primary(int tm, int kt) const;
+    std::vector<std::string> kit_weapons(int tm, int kt) const;  // kit order, those with a projectile
     int spawn_team(const SpawnPt& sp) const;
     void get_in_out();
     void walk(float forward, float right, bool jump, bool slow);
@@ -179,8 +181,12 @@ private:
     std::array<int, 3> deaths{0, 0, 0};
     int detours = 0;  // sidesteps taken by stuck bots
     DamageTable damage;
-    WeaponDef hand;
+    WeaponDef hand;  // the weapon in hand, and its ammunition
     Ammo hand_ammo;
+    std::vector<std::pair<WeaponDef, Ammo>> loadout;  // the kit's weapons that fire; the held one's ammo lives in hand_ammo
+    size_t slot = 0;
+    void select(size_t i);
+    void refill_loadout();
     bool fire_held = false;  // trigger held last step (fireOnce weapons)
     float hand_next = 0, player_hp = 30, respawn_at = -1, now = 0;
     bool player_dead = false;

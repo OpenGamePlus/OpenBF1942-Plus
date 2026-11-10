@@ -460,6 +460,12 @@ int main() {
         std::vector<float> live;
         phys.projectiles(live);
         assert(live.size() == 6);  // the shot from inside is still flying
+        float high[3] = {20, 40, 20}, still[3] = {0, 0, 0};
+        phys.fire(high, still, 70, 205, 0.5f, -1, -1, 2, 15);  // a grenade: its fuse runs out in the air
+        phys.fire(high, still, 220, -1, 0.5f);                  // a bullet without radius: just gone
+        for (int i = 0; i < 40; ++i) phys.step(1.0f / 60);
+        hits = phys.take_hits();
+        assert(hits.size() == 1 && hits[0].radius == 15 && hits[0].material2 == 205 && hits[0].tag == 2 && hits[0].pos[1] > 35);
     }
 
     // Navigation: level-0 map tiles (free, blocked, bits), coarse grid, A* around a wall with string pulling.

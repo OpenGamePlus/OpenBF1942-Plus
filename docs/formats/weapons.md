@@ -15,6 +15,10 @@ Status: **damage formula checked against the retail tables' own comments and kno
 | `fireOnce` | one round per trigger pull | M1 Garand 1 |
 | `ammoType` | which supply depots refill it | rifles 1 |
 
+Projectile `radius` (29 projectiles, all explosive: grenades 15, bazooka 4, shells 10–20, bombs 20–30, depth charge 100): the explosion. We apply the projectile's `material2` damage to every soldier and vehicle within it, scaled linearly from full at the centre to 0 at the edge (unverified), and no longer add it to the direct hit. Shots with a radius whose `timeToLive` runs out explode where they are (grenade fuses). `minDamage`, `distToStartLoseDamage`, `distToMinDamage`, `forceOnExplosion` and `explodeNearEnemyDistance` are not read yet.
+
+Kits: the player carries every kit weapon that fires (e.g. Allied assault: BAR 1918, Colt, knife, grenades), keys 1–9, each with its own magazines.
+
 Supply depots (`SupplyDepot`, under placed objects such as `Ammobox`, `mediclocker`, the airfield ammo; 1,567 over the 78 levels): `radius`, `team` (0 both), `workOnSoldiers` / `workOnVehicles`, `addAmmoType <type> -1 <rate> 0` (Ammobox: type 1 at 15), `setHealth -1 <rate> 0` (medic locker 4.0). We read the rates as rounds and hit points per second (unverified). Soldiers in range get spare magazines and health; bots out of spare magazines walk to the nearest depot of their team that stocks their ammunition and wait there until full.
 
 `Projectile`: `material` (hit), `material2` (explosion; the damage file calls it splash damage), `timeToLive CRD_NONE/<s>/…`, `damageType`.
