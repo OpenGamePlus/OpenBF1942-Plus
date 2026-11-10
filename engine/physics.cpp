@@ -20,6 +20,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdlib>
+#include <array>
 #include <map>
 #include <mutex>
 #include <set>
@@ -76,6 +77,14 @@ struct Walker {
     std::vector<std::string> owner;  // spring template of each wheel
     std::set<std::string> gear;      // running gear: a moving bundle holding springs, and everything below it
     int visits = 0;
+    std::map<std::string, int> seen;  // visits by name: joint keys, counted as scene.cpp's build_object does
+
+    static JointDef::Input input(const std::string& s) {
+        std::string in = lower(s);
+        return in == "c_pipitch" ? JointDef::Pitch : in == "c_piroll" ? JointDef::Roll : in == "c_piyaw" ? JointDef::Yaw
+             : in == "c_pithrottle" ? JointDef::Throttle : in == "c_pimouselookx" ? JointDef::LookX
+             : in == "c_pimouselooky" ? JointDef::LookY : JointDef::None;
+    }
 
     void wing(const ConObject& t, const Mat4& world) {
         WingDef w;
@@ -98,6 +107,7 @@ struct Walker {
         float range = std::max(std::fabs(mn[1]), std::fabs(mx[1]));
         if (range > 0 && speed[1] > 0) w.rate = speed[1] / range;
         if (acc[1] < 0) w.sign = -1;
+        w.range = range;
         xform(world, 0, 0, 0, w.pos);
         for (int i = 0; i < 3; ++i) w.pos[i] += off[i];  // offset in vehicle axes: main wings use it to act at the centre
         // Normal without its forward part: sweep + dihedral tilt it ~0.5 deg back, which would act as built-in incidence
@@ -108,10 +118,31 @@ struct Walker {
         def.wings.push_back(w);
     }
 
-    void walk(const std::string& name, const Mat4& world, int depth, WheelDef ctx, bool in_gear = false) {
+    void walk(const std::string& name, const Mat4& world, int depth, WheelDef ctx, bool in_gear = false, bool prop = false) {
         const ConObject* t = find(con, name);
         if (!t || depth > 16 || ++visits > 10000) return;
         std::string type = lower(t->type);
+        std::pair<std::string, int> key{lower(name), seen[lower(name)]++};
+        if (prop) def.joints[key].propeller = true;
+        if (type == "spring") def.joints[key].wheel = static_cast<int>(def.wheels.size());
+        if (type == "wing") def.joints[key].wing = static_cast<int>(def.wings.size());
+        if (type == "rotationalbundle") {
+            JointDef j;
+            float acc[3] = {};
+            for (auto& [k, a] : t->props) {
+                if (a.empty()) continue;
+                if (k == "setinputtoyaw") j.input[0] = input(a[0]);
+                else if (k == "setinputtopitch") j.input[1] = input(a[0]);
+                else if (k == "setinputtoroll") j.input[2] = input(a[0]);
+                else if (k == "setminrotation") parse_vec3(a[0], j.mn);
+                else if (k == "setmaxrotation") parse_vec3(a[0], j.mx);
+                else if (k == "setmaxspeed") parse_vec3(a[0], j.speed);
+                else if (k == "setacceleration") parse_vec3(a[0], acc);
+                else if (k == "setautomaticreset") j.reset = num(a) != 0;
+            }
+            for (int i = 0; i < 3; ++i) j.sign[i] = acc[i] < 0 ? -1.0f : 1.0f;
+            if (j.input[0] || j.input[1] || j.input[2]) def.joints[key] = j;
+        }
         bool yaw_input = false;
         // Engine kinds: c_ETCar / c_ETTank drive wheels; c_ETPlane / c_ETShip push the hull (propellers). Amphibians
         // (Elco, LVT, Schwimmwagen) carry both kinds.
@@ -183,8 +214,14 @@ struct Walker {
             if (ct && lower(ct->type) == "spring" && (type == "animatedbundle" || type == "rotationalbundle" || type == "engine")) in_gear = true;
         }
         if (in_gear) gear.insert(lower(name));
-        for (auto& c : children)
-            walk(c.name, world * translate(c.pos[0], c.pos[1], c.pos[2]) * rotation_ypr(c.rot[0], c.rot[1], c.rot[2]), depth + 1, ctx, in_gear);
+        for (auto& c : children) {
+            const ConObject* ct = find(con, c.name);
+            std::string ctype = ct ? lower(ct->type) : "";
+            // Propellers: the meshes hanging straight off an aircraft engine (gear legs are LandingGear, not these).
+            bool child_prop = etype == "c_etplane" && (ctype == "lodobject" || ctype == "simpleobject");
+            walk(c.name, world * translate(c.pos[0], c.pos[1], c.pos[2]) * rotation_ypr(c.rot[0], c.rot[1], c.rot[2]), depth + 1, ctx,
+                 in_gear, child_prop);
+        }
     }
 };
 
@@ -192,7 +229,7 @@ struct Walker {
 
 VehicleDef vehicle_def(const Con& con, const Vfs& vfs, const std::string& name) {
     VehicleDef def;
-    Walker w{con, def, {}, {}, 0};
+    Walker w{con, def, {}, {}, 0, {}};
     w.walk(name, Mat4::identity(), 0, WheelDef{});
     std::map<std::string, int> skipped;
     std::map<std::string, SmMesh> cache;
@@ -243,13 +280,16 @@ struct Physics::Impl {
     struct Vehicle {
         VehicleDef def;
         BodyID id;
-        float throttle = 0, steer = 0, pitch = 0, roll = 0;
+        float throttle = 0, steer = 0, pitch = 0, roll = 0, look_x = 0, look_y = 0, prop_angle = 0;
         std::vector<float> wheel_steer, deflection;
+        std::vector<float> wheel_spin, wheel_offset;  // degrees; metres along the spring from the model position
+        std::map<std::pair<std::string, int>, std::array<float, 3>> angle;  // generic joints, degrees
     };
     std::vector<Vehicle> vehicles;
     float acc = 0, water = -1e9f;
 
     void forces(Vehicle& v);
+    void animate(Vehicle& v);
     void wings(Vehicle& v, const RMat44& T, Vec3 lin, Vec3 ang, RVec3 com);
     bool floats(Vehicle& v, const RMat44& T, Vec3 lin, Vec3 ang, RVec3 com);
 };
@@ -365,9 +405,13 @@ int Physics::add_vehicle(const VehicleDef& def, const Mat4& world) {
     bs.mAngularDamping = 0.5f;
     bs.mAllowSleeping = false;
     bs.mMotionQuality = EMotionQuality::LinearCast;  // fast, thin hulls (aircraft) must not tunnel through the terrain
-    Impl::Vehicle v{def, p_->sys.GetBodyInterface().CreateAndAddBody(bs, EActivation::Activate), 0, 0, 0, 0, {}, {}};
+    Impl::Vehicle v;
+    v.def = def;
+    v.id = p_->sys.GetBodyInterface().CreateAndAddBody(bs, EActivation::Activate);
     v.wheel_steer.assign(def.wheels.size(), 0.0f);
     v.deflection.assign(def.wings.size(), 0.0f);
+    v.wheel_spin.assign(def.wheels.size(), 0.0f);
+    v.wheel_offset.assign(def.wheels.size(), 0.0f);
     p_->vehicles.push_back(std::move(v));
     return static_cast<int>(p_->vehicles.size() - 1);
 }
@@ -405,6 +449,8 @@ void Physics::Impl::forces(Vehicle& v) {
     rs.SetBackFaceMode(EBackFaceMode::CollideWithBackFaces);  // collision mesh winding is unverified
     for (size_t i = 0; i < d.wheels.size(); ++i) {
         const WheelDef& w = d.wheels[i];
+        // Drawing: wheels roll with the ground; unloaded (dummy) rollers with the hull's forward speed.
+        v.wheel_spin[i] = std::fmod(v.wheel_spin[i] + lin.Dot(T.GetAxisZ()) / w.radius * kStep * 57.29578f, 360.0f);
         if (w.strength <= 0) continue;
         float target = v.steer * w.steer_deg, step = w.steer_rate > 0 ? w.steer_rate * kStep : 1e9f;
         v.wheel_steer[i] += std::clamp(target - v.wheel_steer[i], -step, step);
@@ -414,8 +460,10 @@ void Physics::Impl::forces(Vehicle& v) {
         RRayCast ray{T * Vec3(w.pos[0], w.pos[1] + rest, w.pos[2]), -up * len};
         ClosestHitCollisionCollector<CastRayCollector> hit;
         sys.GetNarrowPhaseQuery().CastRay(ray, rs, hit, {}, {}, self);
+        v.wheel_offset[i] = -rest;  // hanging free
         if (!hit.HadHit()) continue;
         float x = len - hit.mHit.mFraction * len;
+        v.wheel_offset[i] = x - rest;
         if (x <= 0) continue;
         RVec3 p = ray.GetPointOnRay(hit.mHit.mFraction);
         Vec3 n = up;
@@ -523,10 +571,65 @@ bool Physics::Impl::floats(Vehicle& v, const RMat44& T, Vec3 lin, Vec3 ang, RVec
     return wet_share > 0;
 }
 
+// Moving parts (drawing only): generic joints, propellers. Absolute inputs drive towards setMin/MaxRotation at
+// setMaxSpeed deg/s (back to 0 with setAutomaticReset); mouse-look inputs turn at setMaxSpeed and stop at the limits
+// when there are any (turret yaw usually has none).
+void Physics::Impl::animate(Vehicle& v) {
+    v.prop_angle = std::fmod(v.prop_angle + (300.0f + 1500.0f * std::max(0.0f, v.throttle)) * kStep, 360.0f);  // shortcut: rpm guessed
+    for (auto& [key, j] : v.def.joints) {
+        if (!j.input[0] && !j.input[1] && !j.input[2]) continue;
+        auto& a = v.angle[key];
+        for (int i = 0; i < 3; ++i) {
+            float in = 0;
+            switch (j.input[i]) {
+                case JointDef::None: continue;
+                case JointDef::Pitch: in = v.pitch; break;
+                case JointDef::Roll: in = v.roll; break;
+                case JointDef::Yaw: in = v.steer; break;
+                case JointDef::Throttle: in = v.throttle; break;
+                case JointDef::LookX: in = v.look_x; break;
+                case JointDef::LookY: in = v.look_y; break;
+            }
+            in *= j.sign[i];
+            float lo = std::min(j.mn[i], j.mx[i]), hi = std::max(j.mn[i], j.mx[i]), step = j.speed[i] * kStep;
+            if (j.input[i] == JointDef::LookX || j.input[i] == JointDef::LookY) {
+                a[i] += in * step;
+                if (lo < hi) a[i] = std::clamp(a[i], lo, hi);
+                else a[i] = std::remainder(a[i], 360.0f);
+                continue;
+            }
+            if (in == 0 && !j.reset) continue;
+            float target = in > 0 ? in * hi : -in * lo;
+            a[i] += std::clamp(target - a[i], -step, step);
+        }
+    }
+}
+
+void Physics::look(int vehicle, float x, float y) {
+    auto& v = p_->vehicles.at(static_cast<size_t>(vehicle));
+    v.look_x = std::clamp(x, -1.0f, 1.0f), v.look_y = std::clamp(y, -1.0f, 1.0f);
+}
+
+Mat4 Physics::joint(int vehicle, const std::string& name, int occurrence) const {
+    const auto& v = p_->vehicles.at(static_cast<size_t>(vehicle));
+    auto it = v.def.joints.find({name, occurrence});
+    if (it == v.def.joints.end()) return Mat4::identity();
+    const JointDef& j = it->second;
+    Mat4 m = Mat4::identity();
+    if (j.wheel >= 0 && static_cast<size_t>(j.wheel) < v.wheel_spin.size())
+        m = translate(0, v.wheel_offset[static_cast<size_t>(j.wheel)], 0) * rotation_ypr(0, v.wheel_spin[static_cast<size_t>(j.wheel)], 0);
+    if (j.wing >= 0 && static_cast<size_t>(j.wing) < v.deflection.size())
+        m = m * rotation_ypr(0, v.deflection[static_cast<size_t>(j.wing)] * v.def.wings[static_cast<size_t>(j.wing)].range, 0);
+    if (j.propeller) m = m * rotation_ypr(0, 0, v.prop_angle);
+    auto a = v.angle.find(it->first);
+    if (a != v.angle.end()) m = m * rotation_ypr(a->second[0], a->second[1], a->second[2]);
+    return m;
+}
+
 void Physics::step(float dt) {
     p_->acc = std::min(p_->acc + dt, 8 * kStep);  // a long frame drops time rather than spiralling
     while (p_->acc >= kStep) {
-        for (auto& v : p_->vehicles) p_->forces(v);
+        for (auto& v : p_->vehicles) p_->forces(v), p_->animate(v);
         p_->sys.Update(kStep, 1, &p_->temp, &p_->jobs);
         p_->acc -= kStep;
     }

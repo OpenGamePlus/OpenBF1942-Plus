@@ -2,6 +2,12 @@
 
 Append-only. Newest first. At most 3 bullets per stage.
 
+## 2026-11-10 — moving parts
+
+- `build_object` takes a joint function (template name + visit index); physics animates rotational bundles from their own input, limits and speeds, wheels from the ground, wing deflections and propellers. Turrets follow the mouse.
+- Engine rotation deliberately not applied: car wheels hang under the Engine and would orbit its axis.
+- Open: tracks (`AnimatedBundle`), gear retraction, propeller rpm.
+
 ## 2026-11-10 — boats
 
 - `FloatingBundle` = buoyant column (lift × submerged fraction); with it LCVP, Hatsuzuki, Prince of Wales, Fletcher, Shokaku, Sub 7C and Elco rest within ~0.3 m of where the retail levels place them — the strongest check so far.

@@ -102,6 +102,19 @@ Yamato (−2.54) and Gato (−2.62) share spawners with other ships, so their re
 
 Sweep in 30 m of water: every `VCSea` vehicle with floats and both amphibians float upright without drift, reach their top speed and turn on the rudder: boats 12–20 °/s, submarines 2–3 °/s, destroyers 0.7–1.4 °/s, carriers and battleships 0.2–0.3 °/s.
 
+## Moving parts (drawing)
+
+`build_object` takes a joint function: an extra local transform per template node, keyed by lower-case template name and visit index of that name in pre-order (the physics walker counts the same way; all 2,783 joints of the three mods are found). Applied after `setPosition` / `setRotation`, so children follow.
+
+| Part | Motion |
+|---|---|
+| `RotationalBundle` | per axis (yaw / pitch / roll = `setInputToYaw/Pitch/Roll`): absolute inputs (`c_PIYaw`, `c_PIPitch`, `c_PIRoll`, `c_PIThrottle`) drive towards `setMinRotation` / `setMaxRotation` at `setMaxSpeed` °/s, back to 0 with `setAutomaticReset`; `c_PIMouseLookX/Y` turn at `setMaxSpeed` and stop at the limits if any (turret yaw has none). Direction: sign of `setAcceleration`. Steering hubs, steering wheels, turrets, guns, the LCVP ramp |
+| `Spring` | rolls with the ground speed (dummy rollers with the hull's) and sits where its spring is compressed |
+| `Wing` | pitched by its deflection × range |
+| Meshes directly under a `c_ETPlane` engine | propeller spin, 300 + 1,500 × throttle °/s (guessed) |
+
+Not moved: `Engine` rotation (a car's wheels hang under it), `AnimatedBundle` (tracks, hand IK), `LandingGear` retraction, ships' `FloatingBundle` pitch input.
+
 ## Open questions
 
 - Units of `setTorque`, `setDifferential`, `drag`, the 55000 engine speed; gear changes (`setGearUp/Down`).

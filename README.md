@@ -39,7 +39,7 @@ C++17, CMake, SDL2, OpenGL 3.3 (libepoxy), Jolt Physics (downloaded by CMake on 
 cmake -S . -B build && cmake --build build -j
 ctest --test-dir build
 build/obf_mapview "<BF1942_DIR>" bf1942 Wake      # right mouse: look, WASD/QE: move, shift: fast
-build/obf_mapview "<BF1942_DIR>" bf1942 El_Alamein --drive Willy   # WASD drives; aircraft: W/S throttle, arrows, A/D rudder
+build/obf_mapview "<BF1942_DIR>" bf1942 El_Alamein --drive Willy   # WASD drives, right mouse aims turrets; aircraft: W/S throttle, arrows, A/D rudder
 ```
 
 ## Roadmap

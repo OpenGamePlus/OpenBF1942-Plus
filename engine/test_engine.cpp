@@ -258,6 +258,26 @@ int main() {
         phys.drive(v, 1, 1);
         for (int i = 0; i < 120; ++i) phys.step(1.0f / 60);
         assert(phys.transform(v).m[12] > 65);
+        // Moving parts: a steering hub (yaw input, +-30 deg at 200 deg/s, auto reset), an unlimited mouse-look turret,
+        // and wheel 0 rolling.
+        VehicleDef rig = car;
+        JointDef hub, turret, wheel;
+        hub.input[0] = JointDef::Yaw, hub.mn[0] = -30, hub.mx[0] = 30, hub.speed[0] = 200, hub.reset = true;
+        turret.input[0] = JointDef::LookX, turret.speed[0] = 35;
+        wheel.wheel = 0;
+        rig.joints[{"hub", 0}] = hub, rig.joints[{"turret", 0}] = turret, rig.joints[{"wheel", 0}] = wheel;
+        int r = phys.add_vehicle(rig, translate(100, 2, 30));
+        for (int i = 0; i < 120; ++i) phys.step(1.0f / 60);
+        phys.drive(r, 1, 1);
+        phys.look(r, 1, 0);
+        for (int i = 0; i < 60; ++i) phys.step(1.0f / 60);
+        assert(std::fabs(phys.joint(r, "hub", 0).m[8] - 0.5f) < 0.01f);            // sin 30: clamped at the limit
+        assert(std::fabs(phys.joint(r, "turret", 0).m[8] - 0.5736f) < 0.02f);     // sin 35: 1 s at 35 deg/s
+        assert(phys.joint(r, "wheel", 0).m[5] < 0.999f);                           // rolled
+        assert(phys.joint(r, "other", 0).m[0] == 1 && phys.joint(r, "hub", 1).m[0] == 1);  // not a joint: identity
+        phys.drive(r, 0, 0);
+        for (int i = 0; i < 30; ++i) phys.step(1.0f / 60);
+        assert(std::fabs(phys.joint(r, "hub", 0).m[8]) < 0.01f);                  // automatic reset
         // Tracked: zero-strength rollers carry nothing; full steer with no throttle turns on the spot.
         VehicleDef tank = car;
         tank.tracked = true, tank.turn_rate = 32, tank.mass = 20000;

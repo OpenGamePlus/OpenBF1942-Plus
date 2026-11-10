@@ -30,6 +30,8 @@ struct Builder {
     const std::function<bool(const std::string&)>& hide;
     std::vector<DrawItem> out;
     long calls = 0;  // total template visits; fan-out (many addTemplate of the same child) is exponential
+    const JointFn* joint = nullptr;
+    std::map<std::string, int> seen;  // template visits by name: the occurrence index passed to joint
 
     const ConObject* find(const std::string& sub, const std::string& name) const {
         auto s = con.templates.find(sub);
@@ -62,11 +64,13 @@ struct Builder {
         ++skipped["missing mesh file"];
     }
 
-    void object(const std::string& name, const Mat4& world, int depth, int team = 0, Anim anim = {}) {
+    void object(const std::string& name, const Mat4& placed, int depth, int team = 0, Anim anim = {}) {
         if (depth > 16) return void(++skipped["template nesting too deep"]);
         if (++calls > 2000000) return void(++skipped["template budget exceeded"]);
         const ConObject* t = find("objecttemplate", name);
         if (!t) return void(++skipped["missing object template"]);
+        int occurrence = seen[lower(name)]++;
+        const Mat4 world = joint && *joint ? placed * (*joint)(lower(name), occurrence) : placed;
         if (lower(t->type) == "objectspawner") {
             // setObjectTemplate <team> <template>: show the instance's team, else the first one listed.
             // shortcut: in game the owner of the nearby control point decides; the viewer has no game state.
@@ -117,7 +121,7 @@ struct Builder {
 
 std::vector<DrawItem> build_scene(const Con& con, const Vfs& vfs, std::map<std::string, int>& skipped,
                                   const std::function<bool(const std::string&)>& hide) {
-    Builder b{con, vfs, skipped, hide, {}};
+    Builder b{con, vfs, skipped, hide, {}, 0, nullptr, {}};
     for (auto& inst : con.instances) {
         if (inst.deleted) continue;
         float pos[3] = {}, rot[3] = {}, scl[3] = {1, 1, 1};
@@ -139,9 +143,10 @@ std::vector<DrawItem> build_scene(const Con& con, const Vfs& vfs, std::map<std::
 }
 
 std::vector<DrawItem> build_object(const Con& con, const Vfs& vfs, const std::string& name, const Mat4& world,
-                                   std::map<std::string, int>& skipped) {
+                                   std::map<std::string, int>& skipped, const JointFn& joint) {
     const std::function<bool(const std::string&)> none;
-    Builder b{con, vfs, skipped, none, {}};
+    Builder b{con, vfs, skipped, none, {}, 0, nullptr, {}};
+    b.joint = &joint;
     b.object(name, world, 0);
     return std::move(b.out);
 }

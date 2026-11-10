@@ -1,7 +1,9 @@
 // Physics (ADR 0004): Jolt owns rigid bodies, contacts and collision queries; the Refractor vehicle parts
 // (Spring wheels, Engine) are ours and act on Jolt bodies as forces. Spec: docs/formats/vehicles.md
 #pragma once
+#include <map>
 #include <memory>
+#include <utility>
 #include <string>
 #include <vector>
 #include "con.h"
@@ -26,12 +28,24 @@ struct WingDef {
     float lift = 0, flap = 0, regulate = 0;    // setWingLift, setFlapLift, setRegulateToLift (always 4.91 in retail)
     int input = 0;                             // setInputToPitch: 0 none, 1 c_PIPitch, 2 c_PIRoll, 3 c_PIYaw
     float sign = 1, rate = 4;                  // direction (sign of setAcceleration), full deflections per second
+    float range = 0;                           // degrees at full deflection (drawing)
 };
 
 // FloatingBundle: a buoyant column from pos down setHullHeight; lifts setFloatMaxLift x mass x submerged fraction.
 struct FloatDef {
     float pos[3] = {};
     float height = 1, lift = 0;
+};
+
+// A moving part, drawn through build_object's JointFn. Generic joints follow an input per axis (yaw, pitch, roll):
+// absolute inputs drive towards min/max, mouse-look inputs move at setMaxSpeed and stop at the limits.
+struct JointDef {
+    enum Input { None, Pitch, Roll, Yaw, Throttle, LookX, LookY };
+    Input input[3] = {None, None, None};
+    float mn[3] = {}, mx[3] = {}, speed[3] = {}, sign[3] = {1, 1, 1};
+    bool reset = false;
+    int wheel = -1, wing = -1;  // wheels spin and ride their springs; wings show their deflection
+    bool propeller = false;     // spins with the throttle
 };
 
 struct VehicleDef {
@@ -43,6 +57,7 @@ struct VehicleDef {
     bool ship = false;          // has a c_ETShip engine: propeller thrust only in water
     float thrust = 0;           // aircraft and ships: m/s^2 at full throttle, summed over engines
     std::vector<FloatDef> floats;
+    std::map<std::pair<std::string, int>, JointDef> joints;  // (lower template name, occurrence) as JointFn
     std::vector<WingDef> wings;
     std::vector<WheelDef> wheels;
     std::vector<float> hull;    // xyz points, vehicle space; the chassis is their convex hull
@@ -64,6 +79,9 @@ public:
     // wing down; pitch +1 = nose down (stick forward).
     void drive(int vehicle, float throttle, float yaw, float pitch = 0, float roll = 0);
     void set_velocity(int vehicle, float x, float y, float z);
+    void look(int vehicle, float x, float y);  // c_PIMouseLookX / Y in [-1, 1] (turrets, guns)
+    // Local transform of a moving part for build_object (identity for parts that do not move).
+    Mat4 joint(int vehicle, const std::string& name, int occurrence) const;
     void step(float dt);  // fixed 60 Hz substeps
     Mat4 transform(int vehicle) const;
     float speed(int vehicle) const;  // m/s

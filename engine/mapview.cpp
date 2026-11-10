@@ -286,7 +286,7 @@ int run(int argc, char** argv) {
         std::fprintf(stderr,
                      "usage: obf_mapview <BF1942_DIR> <mod> <level> [--shot out.ppm] [--cam x y z yaw pitch] [--mode conquest|ctf|tdm|coop] [--soldier <template>] [--drive <vehicle>] [--collision] [--no-objects]\n"
                      "  right mouse: look, WASD/QE: move (or drive), shift: fast, C: collision meshes, esc: quit\n"
-                     "  aircraft: W/S throttle (held), arrows pitch (up = nose down) and roll, A/D rudder\n"
+                     "  aircraft: W/S throttle (held), arrows pitch (up = nose down) and roll, A/D rudder; right mouse aims turrets\n"
                      "  --shot with --drive: settles 2 s, drives 4 s (last 2 s steering right), prints the track;\n"
                      "  aircraft: 20 s take-off run, pulling up from 12 s to 16 s\n");
         return 2;
@@ -349,7 +349,7 @@ int run(int argc, char** argv) {
     bool plane = false;
     float plane_throttle = 0, veh_len = 0;
     size_t veh_first = scene.size();
-    std::vector<Mat4> veh_local;
+    size_t veh_parts = 0;
     if (objects && !drive.empty()) {
         float sx = cx < 0 ? info.world_size * 0.15f : cx, sz = cx < 0 ? info.world_size * 0.15f : cz;
         sx += std::sin(yaw) * 10, sz += std::cos(yaw) * 10;
@@ -360,11 +360,11 @@ int run(int argc, char** argv) {
         for (size_t i = 2; i < def.hull.size(); i += 3) veh_len = std::max(veh_len, std::fabs(def.hull[i]));
         vehicle = phys.add_vehicle(def, translate(sx, std::max(hm.height(r, c), info.water_level) + 1, sz) * rotation_ypr(yaw * 57.29578f, 0, 0));
         for (DrawItem& item : build_object(con, vfs, drive, Mat4::identity(), skipped)) {
-            veh_local.push_back(item.world);
+            ++veh_parts;
             scene.push_back(std::move(item));
         }
         std::printf("drive %s: mass %.0f, %zu wheels, %zu hull points, %zu parts\n", drive.c_str(), def.mass, def.wheels.size(),
-                    def.hull.size() / 3, veh_local.size());
+                    def.hull.size() / 3, veh_parts);
         for (auto& w : def.wheels) std::printf("  wheel %.2f %.2f %.2f r %.2f k %.0f c %.0f steer %.0f driven %d\n", w.pos[0], w.pos[1], w.pos[2], w.radius, w.strength, w.damping, w.steer_deg, w.driven);
         float lo[3] = {1e9f, 1e9f, 1e9f}, hi[3] = {-1e9f, -1e9f, -1e9f};
         for (size_t i = 0; i < def.hull.size(); ++i) lo[i % 3] = std::min(lo[i % 3], def.hull[i]), hi[i % 3] = std::max(hi[i % 3], def.hull[i]);
@@ -596,12 +596,14 @@ int run(int argc, char** argv) {
     const Mat4 identity = Mat4::identity();
     while (running) {
         SDL_Event ev;
+        float mouse_x = 0, mouse_y = 0;  // this frame's look motion (turrets when driving)
         while (SDL_PollEvent(&ev)) {
             if (ev.type == SDL_QUIT || (ev.type == SDL_KEYDOWN && ev.key.keysym.sym == SDLK_ESCAPE)) running = false;
             if (ev.type == SDL_KEYDOWN && ev.key.keysym.sym == SDLK_c) show_collision = !show_collision;
             if (ev.type == SDL_MOUSEBUTTONDOWN && ev.button.button == SDL_BUTTON_RIGHT) look = true;
             if (ev.type == SDL_MOUSEBUTTONUP && ev.button.button == SDL_BUTTON_RIGHT) look = false;
             if (ev.type == SDL_MOUSEMOTION && look) {
+                mouse_x += static_cast<float>(ev.motion.xrel), mouse_y += static_cast<float>(ev.motion.yrel);
                 yaw += static_cast<float>(ev.motion.xrel) * 0.004f;
                 pitch = std::clamp(pitch - static_cast<float>(ev.motion.yrel) * 0.004f, -1.5f, 1.5f);
             }
@@ -618,19 +620,24 @@ int run(int argc, char** argv) {
                 if (plane) plane_throttle = std::clamp(plane_throttle + th * 0.5f * dt, 0.0f, 1.0f), th = plane_throttle;
                 phys.drive(vehicle, th, key(SDL_SCANCODE_D, SDL_SCANCODE_A), key(SDL_SCANCODE_UP, SDL_SCANCODE_DOWN),
                            key(SDL_SCANCODE_RIGHT, SDL_SCANCODE_LEFT));
+                // Mouse-look inputs: mouse right / down = +1 at ~20 px per frame.
+                phys.look(vehicle, mouse_x / 20.0f, mouse_y / 20.0f);
                 phys.step(dt);
             } else {  // repeatable demo run for --shot
                 int steps = plane ? 1200 : 360;
                 for (int i = 0; i < steps; ++i) {
                     if (plane) phys.drive(vehicle, i < 120 ? 0.0f : 1.0f, 0, i >= 720 && i < 960 ? -0.4f : 0.0f);
                     else phys.drive(vehicle, i < 120 ? 0.0f : 1.0f, i < 240 ? 0.0f : 1.0f);
+                    phys.look(vehicle, i >= 120 ? 1.0f : 0.0f, i >= 120 ? -1.0f : 0.0f);  // turrets swing round, guns up
                     phys.step(1.0f / 60);
                     Mat4 t = phys.transform(vehicle);
                     if (i % 30 == 29) std::printf("t %.1f s: pos %.1f %.1f %.1f, up %.2f %.2f %.2f, speed %.1f m/s\n", (i + 1) / 60.0, t.m[12], t.m[13], t.m[14], t.m[4], t.m[5], t.m[6], phys.speed(vehicle));
                 }
             }
             Mat4 t = phys.transform(vehicle);
-            for (size_t i = 0; i < veh_local.size(); ++i) scene[veh_first + i].world = t * veh_local[i];
+            // Rebuild the part matrices with the moving parts (wheels, turrets, control surfaces, propellers).
+            std::vector<DrawItem> parts = build_object(con, vfs, drive, t, skipped, [&](const std::string& n, int k) { return phys.joint(vehicle, n, k); });
+            for (size_t i = 0; i < parts.size() && i < veh_parts; ++i) scene[veh_first + i].world = parts[i].world;
             // Chase camera behind the vehicle, looking along its heading.
             float hx = t.m[8], hz = t.m[10], hl = std::sqrt(hx * hx + hz * hz);
             if (hl > 1e-3f) hx /= hl, hz /= hl;

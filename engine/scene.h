@@ -26,9 +26,12 @@ struct DrawItem {
 std::vector<DrawItem> build_scene(const Con& con, const Vfs& vfs, std::map<std::string, int>& skipped,
                                   const std::function<bool(const std::string&)>& hide = nullptr);
 
+// Extra local transform of a template node (a moving part), by lower-case template name and the how-many-th visit of
+// that name in pre-order (0 for the first). Applied after the node's setPosition / setRotation, so children follow.
+using JointFn = std::function<Mat4(const std::string& name, int occurrence)>;
 // One template tree (e.g. a vehicle) placed at world, without a level instance.
 std::vector<DrawItem> build_object(const Con& con, const Vfs& vfs, const std::string& name, const Mat4& world,
-                                   std::map<std::string, int>& skipped);
+                                   std::map<std::string, int>& skipped, const JointFn& joint = nullptr);
 // "x/y/z" -> 3 floats; atof semantics, missing parts are 0.
 void parse_vec3(const std::string& s, float out[3]);
 
