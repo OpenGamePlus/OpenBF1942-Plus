@@ -42,7 +42,7 @@ using JointFn = std::function<Mat4(const std::string& name, int occurrence)>;
 // destroyer's landing craft) are not followed: what they place is a vehicle of its own.
 std::vector<DrawItem> build_object(const Con& con, const Vfs& vfs, const std::string& name, const Mat4& world,
                                    std::map<std::string, int>& skipped, const JointFn& joint = nullptr,
-                                   const std::function<bool(const std::string&)>& hide = nullptr);
+                                   const std::function<bool(const std::string&)>& hide = nullptr, bool wreck = false);
 // "x/y/z" -> 3 floats; atof semantics, missing parts are 0.
 void parse_vec3(const std::string& s, float out[3]);
 

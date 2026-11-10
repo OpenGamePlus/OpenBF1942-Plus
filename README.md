@@ -16,7 +16,7 @@ Clean-room reimplementation of the Refractor 1 engine so Battlefield 1942 runs o
 | 4. Terrain + map objects | done — C++ viewer renders every map with buildings and trees |
 | 5. Skinned meshes + animations | in progress — soldiers and flags animate in the viewer (`--soldier USSoldier`) |
 | 6. Physics + vehicles | in progress — cars, tanks, aircraft and boats in the viewer (`--drive Willy`, `Sherman`, `Spitfire`, `LCVP`); handling not yet calibrated |
-| 7. Gameplay | started — walk a soldier and get into any parked vehicle (`--play USSoldier`, E) |
+| 7. Gameplay | started — walk a soldier, get into any parked vehicle (E), fire (left mouse); hits use the retail armour and damage tables |
 | 8 | not started (see [roadmap](#roadmap)) |
 
 ## Tools
@@ -40,7 +40,7 @@ C++17, CMake, SDL2, OpenGL 3.3 (libepoxy), Jolt Physics (downloaded by CMake on 
 cmake -S . -B build && cmake --build build -j
 ctest --test-dir build
 build/obf_mapview "<BF1942_DIR>" bf1942 Wake      # right mouse: look, WASD/QE: move, shift: fast
-build/obf_mapview "<BF1942_DIR>" bf1942 El_Alamein --drive Willy   # WASD drives, right mouse aims turrets; aircraft: W/S throttle, arrows, A/D rudder
+build/obf_mapview "<BF1942_DIR>" bf1942 El_Alamein --drive Willy   # WASD drives, right mouse aims turrets, left mouse fires; aircraft: W/S throttle, arrows, A/D rudder
 ```
 
 ## Roadmap

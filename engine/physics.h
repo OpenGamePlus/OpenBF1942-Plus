@@ -48,6 +48,14 @@ struct JointDef {
     bool propeller = false;     // spins with the throttle
 };
 
+// The first FireArms with a projectile in a vehicle tree, and that projectile. Spec: docs/formats/weapons.md
+struct WeaponDef {
+    std::string name;                   // lower-case FireArms template: its drawn part is the muzzle
+    float velocity = 0, interval = 0.1f;  // velocity (m/s); 1 / roundOfFire (rounds per second: Sherman 0.35, MG42 15)
+    float ttl = 10;                     // projectile timeToLive
+    int material = 0, material2 = -1;   // projectile hit and explosion materials (damage table)
+};
+
 struct VehicleDef {
     float mass = 1000, drag = 0;
     float torque = 0, differential = 1;  // Engine setTorque / setDifferential
@@ -59,6 +67,11 @@ struct VehicleDef {
     std::vector<FloatDef> floats;
     std::map<std::pair<std::string, int>, JointDef> joints;  // (lower template name, occurrence) as JointFn
     float exit[3] = {-2, 0, 0};  // setSoldierExitLocation, vehicle space
+    float hitpoints = 100;
+    int material = 0;            // the PlayerControlObject's material: armour where no face is hit
+    std::vector<float> armor;    // triangles (9 floats), vehicle space: the parts' projectile collision blocks
+    std::vector<int> armor_material;  // per triangle
+    WeaponDef weapon;            // empty name: unarmed
     std::vector<WingDef> wings;
     std::vector<WheelDef> wheels;
     std::vector<float> hull;    // xyz points, vehicle space
@@ -66,6 +79,9 @@ struct VehicleDef {
     // and island, a tank's hull and turret). Empty: one convex hull of all points.
     std::vector<size_t> hull_split;
 };
+
+// FireArms / HandFireArms template and its projectile; empty name if it has none.
+WeaponDef weapon_def(const Con& con, const std::string& name);
 
 // Walks an object template tree (first LodObject child only). Throws if it has no hull geometry.
 VehicleDef vehicle_def(const Con& con, const Vfs& vfs, const std::string& name);
@@ -89,6 +105,17 @@ public:
     void step(float dt);  // fixed 60 Hz substeps
     Mat4 transform(int vehicle) const;
     float speed(int vehicle) const;  // m/s
+
+    // Projectiles: ballistic points (gravity), tested against the world each step; never hit `ignore_vehicle`.
+    struct Hit {
+        int vehicle = -1;     // or -1: terrain, water, static objects
+        int armor = -1;       // material of the armour face hit (vehicles), else -1
+        int material = 0, material2 = -1;
+        float pos[3] = {};
+    };
+    void fire(const float pos[3], const float vel[3], int material, int material2, float ttl, int ignore_vehicle = -1);
+    std::vector<Hit> take_hits();                       // since the last call
+    void projectiles(std::vector<float>& out) const;    // position and velocity (6 floats) per live projectile
 
     // Soldiers: a 1.8 m capsule (Jolt CharacterVirtual) standing at feet position (x, y, z). It walks on the terrain,
     // static meshes and vehicles, steps up 0.4 m, falls, jumps, and swims at the surface.

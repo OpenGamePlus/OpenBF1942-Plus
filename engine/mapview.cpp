@@ -14,6 +14,7 @@
 
 #include "anim.h"
 #include "con.h"
+#include "damage.h"
 #include "dds.h"
 #include "math.h"
 #include "physics.h"
@@ -284,12 +285,13 @@ std::unique_ptr<GpuMesh> upload_tm(const TmMesh& m, Textures& tex) {
 int run(int argc, char** argv) {
     if (argc < 4) {
         std::fprintf(stderr,
-                     "usage: obf_mapview <BF1942_DIR> <mod> <level> [--shot out.ppm] [--cam x y z yaw pitch] [--mode conquest|ctf|tdm|coop] [--soldier <template>] [--drive <vehicle>] [--play <soldier>] [--collision] [--no-objects]\n"
+                     "usage: obf_mapview <BF1942_DIR> <mod> <level> [--shot out.ppm] [--cam x y z yaw pitch] [--mode conquest|ctf|tdm|coop] [--soldier <template>] [--drive <vehicle>] [--play <soldier>] [--fire-ahead] [--collision] [--no-objects]\n"
                      "  right mouse: look, WASD/QE: move (or drive), shift: fast, C: collision meshes, esc: quit\n"
                      "  aircraft: W/S throttle (held), arrows pitch (up = nose down) and roll, A/D rudder; right mouse aims turrets\n"
                      "  --shot with --drive: settles 2 s, drives 4 s (last 2 s steering right), prints the track;\n"
-                     "  aircraft: 20 s take-off run, pulling up from 12 s to 16 s\n"
-                     "  --play: walk a soldier (WASD, shift walks, space jumps, right mouse looks), E gets into / out of the nearest vehicle\n"
+                     "  aircraft: 20 s take-off run, pulling up from 12 s to 16 s; the vehicle fires from 2 s (--fire-ahead: gun\n"
+                     "  straight ahead, no steering)\n"
+                     "  --play: walk a soldier (WASD, shift walks, space jumps, right mouse looks, left mouse fires), E gets into / out of the nearest vehicle\n"
                      "  (parked vehicles are drivable with --play or --drive); with --shot: runs 2 s, gets into the nearest vehicle,\n"
                      "  drives 2 s, gets out, then reports how far the parked vehicles moved while settling\n");
         return 2;
@@ -298,6 +300,7 @@ int run(int argc, char** argv) {
     float cx = -1, cy = 0, cz = 0, yaw = 0.6f, pitch = -0.5f;
     bool objects = true, show_collision = false;
     std::string mode = "conquest", soldier, drive, play;
+    bool look_demo = false;  // --shot vehicle demo: keep the gun straight ahead (--fire-ahead)
     for (int i = 4; i < argc; ++i) {
         if (!std::strcmp(argv[i], "--shot") && i + 1 < argc) shot = argv[++i];
         else if (!std::strcmp(argv[i], "--no-objects")) objects = false;
@@ -306,6 +309,7 @@ int run(int argc, char** argv) {
         else if (!std::strcmp(argv[i], "--soldier") && i + 1 < argc) soldier = argv[++i];
         else if (!std::strcmp(argv[i], "--drive") && i + 1 < argc) drive = argv[++i];
         else if (!std::strcmp(argv[i], "--play") && i + 1 < argc) play = argv[++i];
+        else if (!std::strcmp(argv[i], "--fire-ahead")) look_demo = true;
         else if (!std::strcmp(argv[i], "--cam") && i + 5 < argc) {
             cx = std::stof(argv[i + 1]), cy = std::stof(argv[i + 2]), cz = std::stof(argv[i + 3]);
             yaw = std::stof(argv[i + 4]), pitch = std::stof(argv[i + 5]);
@@ -326,6 +330,7 @@ int run(int argc, char** argv) {
     std::map<std::string, int> skipped;
     if (objects) {
         con.load_game();
+        con.run("bf1942/game/materialmanagersettings.con");  // shortcut: assumed engine-loaded; damage tables
         // shortcut: assumed engine-loaded like objects/; defines AnimationStateMachine states.
         con.run("animations/animationstates.con");
         con.load_level(argv[3], mode);
@@ -359,6 +364,13 @@ int run(int argc, char** argv) {
         size_t first = 0, parts = 0;
         bool plane = false;
         float len = 0, exit[3] = {-2, 0, 0}, throttle = 0;
+        float hp = 100, next_fire = 0;
+        int material = 0;
+        bool wrecked = false;
+        size_t wreck_first = 0, wreck_parts = 0;  // the wreck detail level, drawn once destroyed
+        WeaponDef weapon;
+        Mat4 muzzle;  // posed FireArms part, for firing
+        bool has_muzzle = false;
         Mat4 start;  // where it was placed
     };
     std::vector<Veh> vehicles;
@@ -405,6 +417,10 @@ int run(int argc, char** argv) {
         std::copy(def->exit, def->exit + 3, v.exit);
         for (size_t i = 2; i < def->hull.size(); i += 3) v.len = std::max(v.len, std::fabs(def->hull[i]));
         for (DrawItem& item : build_object(con, vfs, name, Mat4::identity(), skipped)) ++v.parts, scene.push_back(std::move(item));
+        v.wreck_first = scene.size();
+        for (DrawItem& item : build_object(con, vfs, name, Mat4::identity(), skipped, nullptr, nullptr, true))
+            ++v.wreck_parts, scene.push_back(std::move(item));
+        v.hp = def->hitpoints, v.material = def->material, v.weapon = def->weapon;
         vehicles.push_back(v);
     };
     if (objects && (!drive.empty() || !play.empty())) {
@@ -624,6 +640,24 @@ int run(int argc, char** argv) {
         return an;
     };
     std::string lower_state = "lb_stand";
+    // Combat: damage tables, the soldier's weapon (shortcut: an M1 Garand for everyone, no kits yet), tracers.
+    DamageTable damage = damage_table(con.settings["materialmanager"]);
+    WeaponDef hand = weapon_def(con, "M1Garand");
+    if (player >= 0)
+        std::printf("weapon %s: %.0f m/s every %.2f s, material %d; damage table: %zu materials, %zu modifiers\n", hand.name.c_str(),
+                    hand.velocity, hand.interval, hand.material, damage.materials.size(), damage.mods.size());
+    float hand_next = 0;
+    GLuint tracer_vao = 0, tracer_vbo = 0;
+    glGenVertexArrays(1, &tracer_vao);
+    glBindVertexArray(tracer_vao);
+    glGenBuffers(1, &tracer_vbo);
+    glBindBuffer(GL_ARRAY_BUFFER, tracer_vbo);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 40, nullptr);
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 40, reinterpret_cast<void*>(12));
+    glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 40, reinterpret_cast<void*>(24));
+    glVertexAttribPointer(3, 2, GL_FLOAT, GL_FALSE, 40, reinterpret_cast<void*>(32));
+    for (GLuint a = 0; a < 4; ++a) glEnableVertexAttribArray(a);
+    glBindVertexArray(0);
     std::map<std::string, std::unique_ptr<GpuMesh>> meshes;
     int mesh_errors = 0;
     for (auto& item : scene) {
@@ -740,9 +774,51 @@ int run(int argc, char** argv) {
             float fx = std::sin(yaw), fz = std::cos(yaw);
             phys.walk(player, (fx * forward + fz * right) * sp, (fz * forward - fx * right) * sp, jump);
         };
+        // Fire the controlled vehicle's weapon from its posed barrel, or the soldier's along the camera. t: game time.
+        auto fire = [&](float t) {
+            if (cur >= 0) {
+                Veh& v = vehicles[static_cast<size_t>(cur)];
+                if (v.wrecked || v.weapon.name.empty() || t < v.next_fire) return;
+                v.next_fire = t + v.weapon.interval;
+                Mat4 m = v.has_muzzle ? v.muzzle : phys.transform(v.id);
+                float d[3] = {m.m[8], m.m[9], m.m[10]}, l = std::sqrt(d[0] * d[0] + d[1] * d[1] + d[2] * d[2]);
+                if (!(l > 1e-6f)) return;
+                float pos[3], vel[3];
+                for (int i = 0; i < 3; ++i) d[i] /= l, pos[i] = m.m[12 + i] + d[i] * (v.has_muzzle ? 1.0f : v.len), vel[i] = d[i] * v.weapon.velocity;
+                phys.fire(pos, vel, v.weapon.material, v.weapon.material2, v.weapon.ttl, v.id);
+            } else if (player >= 0 && !hand.name.empty() && t >= hand_next) {
+                hand_next = t + hand.interval;
+                float p[3], d[3] = {std::sin(yaw) * std::cos(pitch), std::sin(pitch), std::cos(yaw) * std::cos(pitch)}, pos[3], vel[3];
+                phys.character_position(player, p);
+                for (int i = 0; i < 3; ++i) pos[i] = p[i] + (i == 1 ? 1.5f : 0.0f) + d[i] * 0.6f, vel[i] = d[i] * hand.velocity;
+                phys.fire(pos, vel, hand.material, hand.material2, hand.ttl);
+            }
+        };
+        // Hits: damage = hit material vs the armour face met (else the vehicle's material), plus the explosion material.
+        auto apply_hits = [&] {
+            for (const Physics::Hit& h : phys.take_hits()) {
+                if (h.vehicle < 0) continue;
+                for (size_t i = 0; i < vehicles.size(); ++i) {
+                    Veh& v = vehicles[i];
+                    if (v.id != h.vehicle || v.wrecked) continue;
+                    int target = h.armor >= 0 ? h.armor : v.material;
+                    float d = damage.damage(h.material, target) + (h.material2 >= 0 ? damage.damage(h.material2, target) : 0.0f);
+                    v.hp -= d;
+                    std::printf("hit %s (armour %d): %.1f damage, %.1f hp left\n", v.name.c_str(), target, d, std::max(0.0f, v.hp));
+                    if (v.hp > 0) continue;
+                    v.wrecked = true;
+                    std::printf("%s destroyed\n", v.name.c_str());
+                    if (static_cast<int>(i) == cur && player >= 0) get_in_out();
+                    phys.drive(v.id, 0, 0);
+                }
+            }
+        };
+        bool firing = SDL_GetMouseState(nullptr, nullptr) & SDL_BUTTON(SDL_BUTTON_LEFT);
+        float now_s = static_cast<float>(SDL_GetTicks()) / 1000.0f;
         if (shot.empty()) {
             if (toggle_vehicle) get_in_out();
-            if (cur >= 0) {
+            if (firing) fire(now_s);
+            if (cur >= 0 && !vehicles[static_cast<size_t>(cur)].wrecked) {
                 Veh& v = vehicles[static_cast<size_t>(cur)];
                 float th = key(SDL_SCANCODE_W, SDL_SCANCODE_S);
                 if (v.plane) v.throttle = std::clamp(v.throttle + th * 0.5f * dt, 0.0f, 1.0f), th = v.throttle;
@@ -754,6 +830,7 @@ int run(int argc, char** argv) {
                 walk(key(SDL_SCANCODE_W, SDL_SCANCODE_S), key(SDL_SCANCODE_D, SDL_SCANCODE_A), k[SDL_SCANCODE_SPACE], k[SDL_SCANCODE_LSHIFT]);
             }
             phys.step(dt);
+            apply_hits();
         } else if (player >= 0) {  // demo: settle, run 2 s, get into the nearest vehicle, drive 2 s, get out
             auto track = [&](const char* what) {
                 float p[3];
@@ -766,7 +843,12 @@ int run(int argc, char** argv) {
             walk(0, 0, false, false);
             track("ran 2 s");
             get_in_out();
-            for (int i = 0; i < 120 && cur >= 0; ++i) phys.drive(vehicles[static_cast<size_t>(cur)].id, 1, 0), phys.step(1.0f / 60);
+            for (int i = 0; i < 120 && cur >= 0; ++i) {
+                phys.drive(vehicles[static_cast<size_t>(cur)].id, 1, 0);
+                fire(3 + static_cast<float>(i) / 60.0f);
+                phys.step(1.0f / 60);
+                apply_hits();
+            }
             get_in_out();
             for (int i = 0; i < 60; ++i) phys.step(1.0f / 60);
             track("end");
@@ -786,18 +868,27 @@ int run(int argc, char** argv) {
             int steps = v.plane ? 1200 : 360;
             for (int i = 0; i < steps; ++i) {
                 if (v.plane) phys.drive(v.id, i < 120 ? 0.0f : 1.0f, 0, i >= 720 && i < 960 ? -0.4f : 0.0f);
-                else phys.drive(v.id, i < 120 ? 0.0f : 1.0f, i < 240 ? 0.0f : 1.0f);
-                phys.look(v.id, i >= 120 ? 1.0f : 0.0f, i >= 120 ? -1.0f : 0.0f);  // turrets swing round, guns up
+                else phys.drive(v.id, i < 120 ? 0.0f : 1.0f, i < 240 || look_demo ? 0.0f : 1.0f);
+                if (!look_demo) phys.look(v.id, i >= 120 ? 1.0f : 0.0f, i >= 120 ? -1.0f : 0.0f);  // turrets swing round, guns up
+                if (i >= 120 && i % 20 == 0) fire(static_cast<float>(i) / 60.0f);
                 phys.step(1.0f / 60);
+                apply_hits();
                 Mat4 t = phys.transform(v.id);
                 if (i % 30 == 29) std::printf("t %.1f s: pos %.1f %.1f %.1f, up %.2f %.2f %.2f, speed %.1f m/s\n", (i + 1) / 60.0, t.m[12], t.m[13], t.m[14], t.m[4], t.m[5], t.m[6], phys.speed(v.id));
             }
         }
         // Pose every vehicle's parts (wheels, turrets, control surfaces, propellers).
-        for (const Veh& v : vehicles) {
-            std::vector<DrawItem> parts = build_object(con, vfs, v.name, phys.transform(v.id), skipped,
+        const Mat4 hidden = translate(0, -10000, 0);
+        for (Veh& v : vehicles) {
+            Mat4 t = phys.transform(v.id);
+            std::vector<DrawItem> parts = build_object(con, vfs, v.name, v.wrecked ? hidden : t, skipped,
                                                        [&](const std::string& n, int o) { return phys.joint(v.id, n, o); });
-            for (size_t i = 0; i < parts.size() && i < v.parts; ++i) scene[v.first + i].world = parts[i].world;
+            for (size_t i = 0; i < parts.size() && i < v.parts; ++i) {
+                scene[v.first + i].world = parts[i].world;
+                if (!v.weapon.name.empty() && parts[i].owner == v.weapon.name) v.muzzle = parts[i].world, v.has_muzzle = true;
+            }
+            std::vector<DrawItem> wreck = build_object(con, vfs, v.name, v.wrecked ? t : hidden, skipped, nullptr, nullptr, true);
+            for (size_t i = 0; i < wreck.size() && i < v.wreck_parts; ++i) scene[v.wreck_first + i].world = wreck[i].world;
         }
         if (cur >= 0) {  // chase camera behind the vehicle, distance from its length (Fletcher ~110 m)
             const Veh& v = vehicles[static_cast<size_t>(cur)];
@@ -920,6 +1011,20 @@ int run(int argc, char** argv) {
         glUniform1i(u_mode, 1);
         glDrawArrays(GL_TRIANGLES, static_cast<GLint>(water_first), 6);
         glDisable(GL_BLEND);
+        {  // tracers: a 3 cm-per-m/s streak behind each projectile, collision-line colour
+            std::vector<float> live, lines;
+            phys.projectiles(live);
+            for (size_t i = 0; i + 5 < live.size(); i += 6)
+                for (float back : {0.0f, 0.03f})
+                    lines.insert(lines.end(), {live[i] - live[i + 3] * back, live[i + 1] - live[i + 4] * back, live[i + 2] - live[i + 5] * back, 0, 1, 0, 0, 0, 0, 0});
+            if (!lines.empty()) {
+                glBindVertexArray(tracer_vao);
+                glBindBuffer(GL_ARRAY_BUFFER, tracer_vbo);
+                glBufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(lines.size() * 4), lines.data(), GL_STREAM_DRAW);
+                glUniform1i(u_mode, 5);
+                glDrawArrays(GL_LINES, 0, static_cast<GLsizei>(lines.size() / 10));
+            }
+        }
         if (!shot.empty()) {
             save_ppm(shot, W, H);
             running = false;

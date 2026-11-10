@@ -34,6 +34,7 @@ struct Builder {
     const JointFn* joint = nullptr;
     std::vector<SpawnPoint>* spawns = nullptr;
     bool follow_spawners = true;
+    bool wreck = false;
     std::map<std::string, int> seen;  // template visits by name: the occurrence index passed to joint
 
     const ConObject* find(const std::string& sub, const std::string& name) const {
@@ -116,7 +117,11 @@ struct Builder {
         }
         // LodObject children are alternative detail levels (complex, simple, wreck); draw the first only.
         // shortcut: no distance-based switching yet (the lodSelector templates define it).
-        if (lower(t->type) == "lodobject" && children.size() > 1) children.resize(1);
+        if (lower(t->type) == "lodobject" && children.size() > 1) {
+            // A destroyed vehicle shows its last detail level when that is a wreck (complex, simple, wreck).
+            bool to_wreck = wreck && children.size() >= 3 && lower(children.back().name).find("wreck") != std::string::npos;
+            children.erase(to_wreck ? children.begin() : children.begin() + 1, to_wreck ? children.end() - 1 : children.end());
+        }
         for (auto& c : children)
             if (!hide || !hide(lower(c.name))) object(c.name, world * translate(c.pos[0], c.pos[1], c.pos[2]) * rotation_ypr(c.rot[0], c.rot[1], c.rot[2]), depth + 1, 0, anim);
     }
@@ -126,7 +131,7 @@ struct Builder {
 
 std::vector<DrawItem> build_scene(const Con& con, const Vfs& vfs, std::map<std::string, int>& skipped,
                                   const std::function<bool(const std::string&)>& hide, std::vector<SpawnPoint>* spawns) {
-    Builder b{con, vfs, skipped, hide, {}, 0, nullptr, nullptr, true, {}};
+    Builder b{con, vfs, skipped, hide, {}, 0, nullptr, nullptr, true, false, {}};
     b.spawns = spawns;
     for (auto& inst : con.instances) {
         if (inst.deleted) continue;
@@ -150,9 +155,10 @@ std::vector<DrawItem> build_scene(const Con& con, const Vfs& vfs, std::map<std::
 
 std::vector<DrawItem> build_object(const Con& con, const Vfs& vfs, const std::string& name, const Mat4& world,
                                    std::map<std::string, int>& skipped, const JointFn& joint,
-                                   const std::function<bool(const std::string&)>& hide) {
-    Builder b{con, vfs, skipped, hide, {}, 0, nullptr, nullptr, true, {}};
+                                   const std::function<bool(const std::string&)>& hide, bool wreck) {
+    Builder b{con, vfs, skipped, hide, {}, 0, nullptr, nullptr, true, false, {}};
     b.joint = &joint;
+    b.wreck = wreck;
     b.follow_spawners = false;
     b.object(name, world, 0);
     return std::move(b.out);

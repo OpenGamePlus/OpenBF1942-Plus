@@ -29,6 +29,7 @@
 #include <mutex>
 #include <set>
 #include <stdexcept>
+#include <utility>
 
 namespace obf {
 
@@ -166,6 +167,7 @@ struct Walker {
             def.thrust += tq / 4.0f;
         }
         if (type == "wing") wing(*t, world);
+        if (type == "firearms" && def.weapon.name.empty()) def.weapon = weapon_def(con, name);
         if (type == "floatingbundle") {
             FloatDef f;
             xform(world, 0, 0, 0, f.pos);
@@ -180,6 +182,8 @@ struct Walker {
             if (depth == 0 && k == "mass") def.mass = num(a);
             if (depth == 0 && k == "drag") def.drag = num(a);
             if (depth == 0 && k == "setsoldierexitlocation") parse_vec3(a[0], def.exit);
+            if (depth == 0 && k == "hitpoints") def.hitpoints = num(a);
+            if (depth == 0 && k == "material") def.material = std::atoi(a[0].c_str());
             if (type == "engine" && !propeller && k == "settorque") def.torque = num(a);
             if (type == "engine" && !propeller && k == "setdifferential") def.differential = num(a);
             if ((type == "rotationalbundle" || type == "engine") && k == "setinputtoyaw" && lower(a[0]) == "c_piyaw") yaw_input = true;
@@ -270,6 +274,32 @@ void columns(const std::vector<CollisionMesh>& meshes, const Mat4& world, Vehicl
 
 }  // namespace
 
+WeaponDef weapon_def(const Con& con, const std::string& name) {
+    WeaponDef wd;
+    const ConObject* t = find(con, name);
+    if (!t) return wd;
+    std::string proj;
+    for (auto& [k, a] : t->props) {
+        if (a.empty()) continue;
+        if (k == "projectiletemplate") proj = a[0];
+        else if (k == "velocity") wd.velocity = num(a);
+        else if (k == "roundoffire" && num(a) > 0) wd.interval = 1.0f / std::min(num(a), 50.0f);  // rounds per second
+    }
+    const ConObject* p = proj.empty() ? nullptr : find(con, proj);
+    if (!p || !(wd.velocity > 0)) return WeaponDef{};
+    wd.name = lower(name);
+    for (auto& [k, a] : p->props) {
+        if (a.empty()) continue;
+        if (k == "material") wd.material = std::atoi(a[0].c_str());
+        else if (k == "material2") wd.material2 = std::atoi(a[0].c_str());
+        else if (k == "timetolive") {  // CRD_NONE/<seconds>/...
+            auto s = a[0].find('/');
+            if (s != std::string::npos) wd.ttl = std::clamp(static_cast<float>(std::atof(a[0].c_str() + s + 1)), 0.1f, 30.0f);
+        }
+    }
+    return wd;
+}
+
 VehicleDef vehicle_def(const Con& con, const Vfs& vfs, const std::string& name) {
     VehicleDef def;
     Walker w{con, def, {}, {}, 0, {}};
@@ -282,6 +312,22 @@ VehicleDef vehicle_def(const Con& con, const Vfs& vfs, const std::string& name) 
         auto it = cache.find(item.mesh);
         if (it == cache.end()) it = cache.emplace(item.mesh, sm_parse(vfs.read(item.mesh))).first;
         const SmMesh& m = it->second;
+        // Armour: the last collision block (meshes with two carry the per-face armour materials in the second; unverified),
+        // every part including wheels and tracks. shortcut: drawn at rest; turrets turning do not move their armour.
+        if (!m.collision.empty()) {
+            const CollisionMesh& cm = m.collision.back();
+            size_t nv = cm.vertices.size() / 3;
+            for (size_t f = 0; f + 2 < cm.faces.size(); f += 3) {
+                if (cm.faces[f] >= nv || cm.faces[f + 1] >= nv || cm.faces[f + 2] >= nv) continue;
+                float tri[9];
+                for (int k = 0; k < 3; ++k) {
+                    const float* v = &cm.vertices[static_cast<size_t>(cm.faces[f + static_cast<size_t>(k)]) * 3];
+                    xform(item.world, v[0], v[1], v[2], tri + 3 * k);
+                }
+                def.armor.insert(def.armor.end(), tri, tri + 9);
+                def.armor_material.push_back(f / 3 < cm.material.size() ? cm.material[f / 3] : def.material);
+            }
+        }
         if (std::find(w.owner.begin(), w.owner.end(), item.owner) != w.owner.end()) {  // wheel radius from mesh height
             float r = (m.bbox[4] - m.bbox[1]) / 2;
             if (std::isfinite(r) && r > 0.05f && r < 5)
@@ -350,6 +396,15 @@ struct Physics::Impl {
     };
     std::vector<Soldier> soldiers;
     void soldier(Soldier& s);
+    struct Shot {
+        Vec3 p, v;
+        int material, material2, ignore;
+        float ttl;
+    };
+    std::vector<Shot> shots;
+    std::vector<Physics::Hit> hits;
+    void projectiles();
+    int armor(const Vehicle& v, RVec3 from, Vec3 dir) const;
     float acc = 0, water = -1e9f;
 
     void forces(Vehicle& v);
@@ -709,6 +764,83 @@ Mat4 Physics::joint(int vehicle, const std::string& name, int occurrence) const 
     return m;
 }
 
+// Nearest armour triangle along a ray (vehicle space, Moller-Trumbore); its material, or -1.
+int Physics::Impl::armor(const Vehicle& v, RVec3 from, Vec3 dir) const {
+    RMat44 inv = sys.GetBodyInterface().GetWorldTransform(v.id).InversedRotationTranslation();
+    Vec3 o = Vec3(inv * from), d = inv.Multiply3x3(dir);
+    const std::vector<float>& a = v.def.armor;
+    float best = 1e30f;
+    int mat = -1;
+    for (size_t t = 0; t + 8 < a.size(); t += 9) {
+        Vec3 p0(a[t], a[t + 1], a[t + 2]), e1 = Vec3(a[t + 3], a[t + 4], a[t + 5]) - p0, e2 = Vec3(a[t + 6], a[t + 7], a[t + 8]) - p0;
+        Vec3 h = d.Cross(e2);
+        float det = e1.Dot(h);
+        if (std::fabs(det) < 1e-9f) continue;
+        Vec3 s = o - p0;
+        float u = s.Dot(h) / det;
+        if (u < 0 || u > 1) continue;
+        Vec3 q = s.Cross(e1);
+        float w = d.Dot(q) / det, dist = e2.Dot(q) / det;
+        if (w < 0 || u + w > 1 || dist < 0 || dist >= best) continue;
+        best = dist, mat = v.def.armor_material[t / 9];
+    }
+    return mat;
+}
+
+// shortcut: no drag, full gravity; direct hits only (no splash radius yet).
+void Physics::Impl::projectiles() {
+    Vec3 g = sys.GetGravity();
+    for (size_t i = 0; i < shots.size();) {
+        Shot& s = shots[i];
+        s.ttl -= kStep;
+        Vec3 v1 = s.v + g * kStep, step = (s.v + v1) * (0.5f * kStep);
+        bool done = s.ttl <= 0;
+        if (!done) {
+            BodyID ignore = s.ignore >= 0 && static_cast<size_t>(s.ignore) < vehicles.size() ? vehicles[static_cast<size_t>(s.ignore)].id : BodyID();
+            IgnoreSingleBodyFilter filter(ignore);
+            RRayCast ray{RVec3(s.p), step};
+            RayCastResult hit;
+            Physics::Hit h;
+            h.material = s.material, h.material2 = s.material2;
+            if (sys.GetNarrowPhaseQuery().CastRay(ray, hit, {}, {}, filter)) {
+                RVec3 at = ray.GetPointOnRay(hit.mFraction);
+                for (size_t k = 0; k < vehicles.size(); ++k)
+                    if (vehicles[k].id == hit.mBodyID) {
+                        h.vehicle = static_cast<int>(k);
+                        // From just outside the hull through it: the armour face the shell meets.
+                        Vec3 dir = step.Normalized();
+                        h.armor = armor(vehicles[k], at - dir * 1.0f, dir);
+                    }
+                for (int k = 0; k < 3; ++k) h.pos[k] = static_cast<float>(at[static_cast<uint>(k)]);
+                hits.push_back(h), done = true;
+            } else if (s.p.GetY() + step.GetY() < water) {
+                Vec3 at = s.p + step * ((s.p.GetY() - water) / std::max(1e-6f, -step.GetY()));
+                h.pos[0] = at.GetX(), h.pos[1] = water, h.pos[2] = at.GetZ();
+                hits.push_back(h), done = true;
+            }
+        }
+        if (done) {
+            shots[i] = shots.back(), shots.pop_back();
+            continue;
+        }
+        s.p += step, s.v = v1;
+        ++i;
+    }
+}
+
+void Physics::fire(const float pos[3], const float vel[3], int material, int material2, float ttl, int ignore_vehicle) {
+    for (int k = 0; k < 3; ++k)
+        if (!std::isfinite(pos[k]) || !std::isfinite(vel[k])) return;
+    p_->shots.push_back({Vec3(pos[0], pos[1], pos[2]), Vec3(vel[0], vel[1], vel[2]), material, material2, ignore_vehicle, std::clamp(ttl, 0.0f, 30.0f)});
+}
+
+std::vector<Physics::Hit> Physics::take_hits() { return std::exchange(p_->hits, {}); }
+
+void Physics::projectiles(std::vector<float>& out) const {
+    out.clear();
+    for (auto& s : p_->shots) out.insert(out.end(), {s.p.GetX(), s.p.GetY(), s.p.GetZ(), s.v.GetX(), s.v.GetY(), s.v.GetZ()});
+}
+
 // shortcut: jump speed and swimming depth are placeholders (no soldier speeds in the templates).
 void Physics::Impl::soldier(Soldier& s) {
     CharacterVirtual& ch = *s.ch;
@@ -765,6 +897,7 @@ void Physics::step(float dt) {
         for (auto& v : p_->vehicles) p_->forces(v), p_->animate(v);
         for (auto& s : p_->soldiers)
             if (s.active) p_->soldier(s);
+        p_->projectiles();
         p_->sys.Update(kStep, 1, &p_->temp, &p_->jobs);
         p_->acc -= kStep;
     }

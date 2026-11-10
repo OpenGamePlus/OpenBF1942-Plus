@@ -2,6 +2,12 @@
 
 Append-only. Newest first. At most 3 bullets per stage.
 
+## 2026-11-10 — weapons and damage
+
+- Damage = materialDamage × damageMod(attGroup, defGroup) from the MaterialManager files the engine runs; the target is the armour material of the collision face hit. Sherman shells need 3 front / 2 side / 1 rear hits on a Sherman and 13 on a Tiger's front: the retail armour design shows through.
+- `roundOfFire` is rounds per second (first read as seconds: a Garand fired every 3.2 s). Destroyed vehicles switch to their wreck detail level.
+- Open: explosion radius, effects, magazines, kits, soldiers as targets.
+
 ## 2026-11-10 — parked vehicles are drivable
 
 - Spawner placements that can move become physics vehicles; E gets into the nearest. `build_scene` returns spawn points; `build_object` no longer follows nested spawners.

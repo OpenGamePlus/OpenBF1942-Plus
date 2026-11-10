@@ -9,6 +9,7 @@
 
 #include "anim.h"
 #include "con.h"
+#include "damage.h"
 #include "dds.h"
 #include "math.h"
 #include "physics.h"
@@ -393,6 +394,57 @@ int main() {
         for (int i = 0; i < 300; ++i) sea.step(1.0f / 60);
         sea.character_position(sw, p);
         assert(std::fabs(p[1] - 8.6f) < 0.3f);
+    }
+
+    // Projectiles: hit the armour face they meet (front 52, rear 50), the ground, never the vehicle that fired.
+    {
+        Heightmap hm;
+        hm.n = 32, hm.y_scale = 1, hm.h.assign(32 * 32, 0);
+        Physics phys(hm, 128, -1);
+        VehicleDef box;
+        box.mass = 1000, box.material = 45;
+        for (int i = 0; i < 8; ++i) box.hull.insert(box.hull.end(), {i & 1 ? 1.0f : -1.0f, i & 2 ? 2.0f : 0.0f, i & 4 ? 1.5f : -1.5f});
+        for (float z : {1.4f, -1.4f}) {  // a quad across each end, just inside the hull
+            box.armor.insert(box.armor.end(), {-1, 0, z, 1, 0, z, 1, 2, z, -1, 0, z, 1, 2, z, -1, 2, z});
+            box.armor_material.insert(box.armor_material.end(), 2, z > 0 ? 52 : 50);
+        }
+        int v = phys.add_vehicle(box, translate(64, 0.1f, 64));
+        for (int i = 0; i < 30; ++i) phys.step(1.0f / 60);
+        float front[3] = {64, 1, 84}, back[3] = {64, 1, 44}, south[3] = {0, 0, -100}, north[3] = {0, 0, 100}, down[3] = {0, -100, 0};
+        phys.fire(front, south, 236, 206, 5);
+        phys.fire(back, north, 236, 206, 5);
+        float above[3] = {80, 5, 80};
+        phys.fire(above, down, 220, -1, 5);
+        float inside[3] = {64, 1, 64}, up[3] = {0, 50, -20};
+        phys.fire(inside, up, 236, -1, 5, v);  // fired from the vehicle itself: passes out of it, still rising after 1 s
+        for (int i = 0; i < 60; ++i) phys.step(1.0f / 60);
+        auto hits = phys.take_hits();
+        assert(hits.size() == 3 && phys.take_hits().empty());
+        int seen = 0;
+        for (auto& h : hits) {
+            if (h.vehicle == v && h.armor == 52 && h.pos[2] > 65) seen |= 1;
+            if (h.vehicle == v && h.armor == 50 && h.pos[2] < 63) seen |= 2;
+            if (h.vehicle == -1 && h.material == 220 && std::fabs(h.pos[1]) < 0.2f) seen |= 4;
+        }
+        assert(seen == 7);
+        std::vector<float> live;
+        phys.projectiles(live);
+        assert(live.size() == 6);  // the shot from inside is still flying
+    }
+
+    // Damage: materialDamage x damageMod(attGroup, defGroup), material groups default to the material number.
+    {
+        Vfs vfs;
+        std::string mm = "MaterialManager.material 236\nMaterialManager.materialDamage 10\n"
+                               "MaterialManager.material 52\nMaterialManager.materialDefGroup 52\nMaterialManager.materialDamage 1\n"
+                               "MaterialManager.material 7\nMaterialManager.materialAttGroup 236\nMaterialManager.materialDamage 0.1.0\n"
+                               "MaterialManager.attGroup 236\nMaterialManager.defGroup 52\nMaterialManager.damageMod 4\n";
+        vfs.add("game/mm.con", std::vector<uint8_t>(mm.begin(), mm.end()));
+        Con con(vfs);
+        con.run("game/mm.con");
+        DamageTable t = damage_table(con.settings["materialmanager"]);
+        assert(t.damage(236, 52) == 40 && t.damage(52, 236) == 0 && t.damage(999, 52) == 0);
+        assert(std::fabs(t.damage(7, 52) - 0.4f) < 1e-6f);  // shared attGroup; "0.1.0" reads as 0.1
     }
 
     std::puts("engine tests ok");
