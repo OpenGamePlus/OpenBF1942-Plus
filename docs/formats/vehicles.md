@@ -107,5 +107,5 @@ Sweep in 30 m of water: every `VCSea` vehicle with floats and both amphibians fl
 - Units of `setTorque`, `setDifferential`, `drag`, the 55000 engine speed; gear changes (`setGearUp/Down`).
 - `c_PGFRollGrip` vs `c_PGFEngineGrip`, combined with `materialFriction`.
 - Wings: `setPitchOffset`, `setWingToRegulatorRatio`, `rememberExcessInput`, `setNoPropellerEffectAtSpeed`, `inertiaModifier`; jets and rockets; landing gear retraction.
-- Boats: big ships turn far slower than in memory of the original (inertia from the full hull?); submarine diving (`FloatingBundle` with `setInputToPitch`); the unused float settings.
+- Boats: big ships turn very slowly (0.2–1.4 °/s; the original is unmeasured; inertia from the full hull?); submarine diving (`FloatingBundle` with `setInputToPitch`); the unused float settings.
 - Track and wheel animation, turret and gun rotation (`RotationalBundle` on mouse input).
