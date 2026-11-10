@@ -22,5 +22,6 @@
 | Python tools, C++ engine | [0002](../architecture/adr/0002-python-tools-cpp-engine.md) |
 | SDL2 + OpenGL 3.3 + epoxy, CPU texture decoding | [0003](../architecture/adr/0003-engine-stack.md) |
 | Jolt for rigid bodies; vehicle parts as our forces | [0004](../architecture/adr/0004-jolt-physics.md) |
+| Network compatibility with original clients and servers; fidelity required | [0005](../architecture/adr/0005-network-compatibility.md) |
 
 Module rules and allowed dependencies: [boundaries.md](../architecture/boundaries.md).

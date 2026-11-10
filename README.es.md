@@ -45,14 +45,16 @@ build/obf_mapview "<BF1942_DIR>" bf1942 El_Alamein --drive Willy   # WASD conduc
 
 ## Hoja de ruta
 
-1. **Archivos (RFA)** — leer todos los ficheros del juego.
-2. **Scripts (`.con`)** — intérprete + sistema de plantillas de objetos.
-3. **Mallas estáticas (`.sm`) + texturas (`.dds`/`.tga`)** — exportación a Blender.
-4. **Terreno** — visor de mapas: recorrer un mapa.
-5. **Mallas con esqueleto + animaciones (`.skn`/`.ske`/`.baf`)** — soldados.
-6. **Física + vehículos** — conducir un jeep.
-7. **Reglas de juego, armas, IA** — partida de un jugador.
-8. **Red** — protocolo original sin documentar.
+Objetivo: jugar con clientes y servidores originales de Battlefield 1942. Lo siguiente, en orden ([hoja de ruta completa, en inglés](docs/roadmap/roadmap.md)):
+
+1. **Consolidar** — separar el visor en una biblioteca de juego y un renderizador; integración continua.
+2. **Investigación del protocolo de red** — grabar y decodificar el tráfico entre cliente y servidor originales (en paralelo con lo siguiente).
+3. **Navegación de la IA**, **audio**, **HUD**.
+4. **Soldados y armas completos**, **tripulaciones de vehículos**, **efectos**.
+5. **Fidelidad** — medir el original y calibrar.
+6. **Modos de juego**, **menús**.
+7. **Red** — servidor y cliente propios, luego compatibilidad con el original.
+8. **Render**, **distribución** (Windows/Linux, pantalla panorámica, mods).
 
 ## Documentación
 

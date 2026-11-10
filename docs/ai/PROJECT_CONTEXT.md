@@ -8,6 +8,7 @@ Clean-room reimplementation of the Refractor 1 engine (Battlefield 1942, 2002). 
 
 - Run retail BF1942 content (base, XPack1, XPack2, mods) on a new engine.
 - Document every file format so others can build on it.
+- Play with original BF1942 clients and servers ([ADR 0005](../architecture/adr/0005-network-compatibility.md)); order in [roadmap.md](../roadmap/roadmap.md).
 
 ## Non-goals
 

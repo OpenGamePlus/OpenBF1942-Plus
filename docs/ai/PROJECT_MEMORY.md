@@ -2,6 +2,12 @@
 
 Append-only. Newest first. At most 3 bullets per stage.
 
+## 2026-11-10 — roadmap
+
+- Maintainer goal: play with original BF1942 clients and servers (ADR 0005); all phases in scope, order delegated to the agent.
+- Order: consolidate the code, start protocol research early (riskiest, shapes the game layer), then AI navigation, audio, HUD, gameplay completeness, fidelity measurements, modes, menus, networking, rendering, distribution.
+- Open: maintainer runs the original game for captures (E0) and measurements (D).
+
 ## 2026-11-10 — conquest
 
 - `engine/conquest.*`: flags neutralise and capture by who stands in their radius, tickets bleed and drop per death, a team at 0 loses; spawn points follow their flag. Bots on both teams target the nearest visible opponent; window title is the HUD.

@@ -45,14 +45,16 @@ build/obf_mapview "<BF1942_DIR>" bf1942 El_Alamein --drive Willy   # WASD drives
 
 ## Roadmap
 
-1. **Archives (RFA)** — read every game file.
-2. **Scripts (`.con`)** — interpreter + object template system.
-3. **Static meshes (`.sm`) + textures (`.dds`/`.tga`)** — export to Blender.
-4. **Terrain** — map viewer: walk around a map.
-5. **Skinned meshes + animations (`.skn`/`.ske`/`.baf`)** — soldiers.
-6. **Physics + vehicles** — drive a jeep.
-7. **Gameplay rules, weapons, AI** — single-player match.
-8. **Networking** — original protocol undocumented.
+Goal: play with original Battlefield 1942 clients and servers. Next, in order ([full roadmap](docs/roadmap/roadmap.md)):
+
+1. **Consolidate** — split the viewer into a game library and a renderer; CI.
+2. **Network protocol research** — record and decode original client/server traffic (alongside the steps below).
+3. **AI navigation**, **audio**, **HUD**.
+4. **Complete soldiers and weapons**, **vehicle crews**, **effects**.
+5. **Fidelity** — measure the original and calibrate.
+6. **Game modes**, **menus**.
+7. **Networking** — our server and client, then interoperability with the original.
+8. **Rendering**, **distribution** (Windows/Linux, widescreen, mods).
 
 ## Documentation
 
