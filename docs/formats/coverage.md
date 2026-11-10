@@ -14,8 +14,8 @@ Every file type in the retail archives (bf1942 + XPack1 + XPack2) and how far it
 | `.raw` | 643 | 53 MB | heightmap, material map, path-finding level 0 done | [terrain.md](terrain.md), [pathfinding.md](pathfinding.md); path-finding levels 1+ and `info` open |
 | `.tm` | 130 | 3 MB | done | [tm.md](tm.md) |
 | `.skn`, `.ske` | 120 / 86 | 1 MB | done | [anim.md](anim.md) |
-| `.wav` | 5,808 | 422 MB | standard | RIFF PCM (format 1) in every file sampled; no engine audio yet |
-| `.ssc` | 1,801 | 4 MB | not decoded | sound scripts, text with `#include` / `#templateLevel` |
+| `.wav` | 5,808 | 422 MB | standard | RIFF PCM 16-bit in every file; played, [sound.md](sound.md) |
+| `.ssc` | 1,801 | 4 MB | partly | [sound.md](sound.md): layers, distance / time / control curves; pitch randomisation, triggers open |
 | `.sfk` | 7 | — | not decoded | `SFPK` sound pack index |
 | `.lsb` | 36 | 23 MB | not decoded | `LightmapShadowBits.lsb`, per-level lightmap data |
 | `.pal` | 75 | — | not decoded | RIFF `PAL ` palettes next to terrain and object lightmaps; lightmap TGAs carry their own palette |

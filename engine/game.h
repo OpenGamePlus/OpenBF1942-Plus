@@ -62,6 +62,15 @@ public:
     bool hud(std::string& title);                        // true when the title changed
     void print_weapon() const;
 
+    // The vehicle under control: its template, position and engine load 0..1; "" on foot.
+    std::string driving(float pos[3], float& control) const;
+
+    struct SoundEvent {
+        std::string tmpl;  // FireArms template that fired
+        float pos[3];
+    };
+    std::vector<SoundEvent> sounds;  // since the frontend last cleared it
+
     Physics phys;
     Camera cam;
     std::vector<SoldierView> soldiers;

@@ -4,10 +4,13 @@
 #include <cstring>
 #include <cstdio>
 #include <stdexcept>
+#include <map>
+#include <memory>
 #include <string>
 #include <vector>
 
 #include "anim.h"
+#include "audio.h"
 #include "con.h"
 #include "conquest.h"
 #include "damage.h"
@@ -494,6 +497,10 @@ int main() {
         Con con(vfs);
         con.run("mode.con", {"host"});
         assert(con.instances.size() == 1 && con.instances[0].name == "CP");
+        std::string jeep = "ObjectTemplate.create Bundle Jeep\n";
+        vfs.add("objects/jeep/objects.con", std::vector<uint8_t>(jeep.begin(), jeep.end()));
+        con.run("objects/jeep/objects.con");
+        assert(con.templates["objecttemplate"]["jeep"].dir == "objects/jeep");  // relative paths (sound scripts) start here
     }
 
     // Conquest: neutralise then capture when alone; contested freezes; bases stay; fewer flags bleed tickets.
@@ -535,6 +542,58 @@ int main() {
         assert(std::fabs(t.damage(7, 52) - 0.4f) < 1e-6f);  // shared attGroup; "0.1.0" reads as 0.1
     }
 
+    {  // audio: wav, sound script, mixer
+        std::vector<uint8_t> w = {'R', 'I', 'F', 'F', 0, 0, 0, 0, 'W', 'A', 'V', 'E', 'f', 'm', 't', ' ', 16, 0, 0, 0, 1, 0, 1, 0,
+                                  0x44, 0xAC, 0, 0, 0x88, 0x58, 1, 0, 2, 0, 16, 0, 'L', 'I', 'S', 'T', 2, 0, 0, 0, 0, 0,
+                                  'd', 'a', 't', 'a', 4, 0, 0, 0, 0, 0x40, 0, 0xC0};
+        Wav wav = wav_parse(w);  // skips the LIST chunk
+        assert(wav.rate == 44100 && wav.channels == 1 && wav.frames() == 2 && wav.samples[0] == 16384 && wav.samples[1] == -16384);
+        bool threw = false;
+        try {
+            w[40] = 200;  // LIST chunk runs past the end
+            wav_parse(w);
+        } catch (const std::runtime_error&) {
+            threw = true;
+        }
+        assert(threw);
+
+        std::map<std::string, std::string> files = {
+            {"objects/gun/sounds/gun.ssc", "#templateLevel HIGH\r\n\t#include High/Gun.ssc\r\n#templateLevel LOW\r\n\t#include Low/Gun.ssc\r\n"},
+            {"objects/gun/sounds/high/gun.ssc",
+             "newPatch\nload @ROOT/Sound/@RTD/Shot.wav\nminDistance 4\nvolume .5\n*** Distance Volume ***\nbeginEffect\n"
+             "controlDestination Volume\ncontrolSource Distance\nenvelope Ramp\nparam 100\nparam 200\nparam 1\nparam -1\nendEffect\n"
+             "/*\nload @ROOT/Sound/@RTD/Unused.wav\n*/\nload @ROOT/Sound/@RTD/Loop.wav\nloop\nstereo\n"},
+            {"objects/gun/sounds/low/gun.ssc", "load @ROOT/Sound/@RTD/Low.wav\n"}};
+        auto read = [&](const std::string& f) { return files.count(f) ? files[f] : std::string(); };
+        SoundPatch sp = ssc_parse("Objects/Gun/Sounds/../Sounds/Gun.ssc", read);
+        assert(sp.layers.size() == 2 && sp.layers[0].wav == "sound/44khz/shot.wav" && sp.layers[0].min_distance == 4);
+        assert(sp.layers[0].volume == 0.5f && sp.layers[0].effects.size() == 1 && sp.layers[1].loop && sp.layers[1].stereo);
+        const SoundEffect& fx = sp.layers[0].effects[0];
+        assert(fx.source == SoundEffect::Distance && fx.eval(50) == 1 && fx.eval(150) == 0.5f && fx.eval(300) == 0);
+        assert(ssc_parse("objects/gun/sounds/gun.ssc", read, "LOW").layers.size() == 1);
+
+        auto tone = std::make_shared<Wav>();  // 0.1 s at 44.1 kHz, constant
+        tone->rate = 44100, tone->samples.assign(4410, 16384);
+        SoundPatch one;
+        one.layers.push_back(sp.layers[0]);
+        Mixer mixer(44100);
+        float right_of_listener[3] = {8, 0, 0};  // 8 m: half the level of minDistance 4
+        mixer.play(one, {tone}, right_of_listener);
+        std::vector<float> out(2 * 2048, 0.0f);
+        mixer.mix(out.data(), 2048, Listener{});
+        assert(out[1] > 0.17f && out[1] < 0.18f && std::fabs(out[0]) < 1e-6f);  // 0.5 sample * 0.5 volume * 0.5 distance * sqrt(2) pan, all right
+        mixer.mix(out.data(), 4096 - 2048, Listener{});
+        mixer.mix(out.data(), 2048, Listener{});
+        assert(mixer.voices() == 0);  // the one-shot ended
+        SoundPatch loop;
+        loop.layers.push_back(sp.layers[1]);
+        int h = mixer.play(loop, {tone}, right_of_listener);
+        for (int i = 0; i < 10; ++i) mixer.mix(out.data(), 2048, Listener{});
+        assert(mixer.voices() == 1);
+        mixer.release(h);  // no TimeRelease effect: stops at once
+        mixer.mix(out.data(), 2048, Listener{});
+        assert(mixer.voices() == 0);
+    }
     std::puts("engine tests ok");
     return 0;
 }

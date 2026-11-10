@@ -39,6 +39,7 @@
 | Physics scope | not implemented | no gears, jets, gear retraction, submarine diving, track animation; trees, animated meshes and stationary spawner objects have no collision; M3A1 and Sexton hulls touch the ground; C-47 does not lift off; big ships turn very slowly |
 | Weapons | shortcut | direct hits only (no explosion radius), no magazines, no drag, no effects or sound; armour does not turn with turrets; primary weapon only; body part by hit height |
 | Bots and AI | shortcut | sight, reaction, aim error, speed, respawn times guessed; routes on the 2 m infantry map, weak in cities (Berlin, Stalingrad); straight runs on the 13 levels without level-0 maps; no vehicles; none on ship spawn points |
+| Audio | shortcut | `.ssc` semantics inferred; volumes above 1 capped; six-param ramps use four; no Doppler, pitch randomisation, triggers; engine load from speed; only shots and the driven engine sound; files load inside the audio lock (a first shot may stutter) |
 | Collision blocks | open question | static collision uses the first block of each mesh; the last is more detailed (armour materials); which one the original uses for soldiers is unknown, see [pathfinding.md](../formats/pathfinding.md#use-in-the-engine) |
 | Conquest rules | unverified | capture, ticket bleed and win rules read from field names; conquest mode only; HUD is the window title |
 | Parked vehicles | shortcut | lifted onto the terrain; LCVPs on davits drop into the sea; two Salerno Willys fall 50–70 m (unexplained); column hulls approximate concave parts |

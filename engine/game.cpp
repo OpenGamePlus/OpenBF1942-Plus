@@ -266,13 +266,26 @@ void Game::fire(float t) {
         float pos[3], vel[3];
         for (int i = 0; i < 3; ++i) d[i] /= l, pos[i] = m.m[12 + i] + d[i] * (v.has_muzzle ? 1.0f : v.len), vel[i] = d[i] * v.weapon.velocity;
         phys.fire(pos, vel, v.weapon.material, v.weapon.material2, v.weapon.ttl, v.id, -1, team);
+        sounds.push_back({v.weapon.name, {pos[0], pos[1], pos[2]}});
     } else if (player >= 0 && !hand.name.empty() && t >= hand_next) {
         hand_next = t + hand.interval;
         float p[3], d[3] = {std::sin(cam.yaw) * std::cos(cam.pitch), std::sin(cam.pitch), std::cos(cam.yaw) * std::cos(cam.pitch)}, pos[3], vel[3];
         phys.character_position(player, p);
         for (int i = 0; i < 3; ++i) pos[i] = p[i] + (i == 1 ? 1.5f : 0.0f) + d[i] * 0.6f, vel[i] = d[i] * hand.velocity;
         phys.fire(pos, vel, hand.material, hand.material2, hand.ttl, -1, player, team);
+        sounds.push_back({hand.name, {pos[0], pos[1], pos[2]}});
     }
+}
+
+std::string Game::driving(float pos[3], float& control) const {
+    if (cur < 0) return "";
+    const Veh& v = vehicles[static_cast<size_t>(cur)];
+    if (v.wrecked) return "";
+    Mat4 m = phys.transform(v.id);
+    for (int i = 0; i < 3; ++i) pos[i] = m.m[12 + i];
+    // shortcut: engine load from speed (30 m/s = full; aircraft 80), until engines expose their rpm
+    control = std::clamp(std::fabs(phys.speed(v.id)) / (v.plane ? 80.0f : 30.0f), 0.0f, 1.0f);
+    return v.name;
 }
 
 void Game::player_dies() {
@@ -417,6 +430,7 @@ void Game::think(float t, float step) {
                 float l = std::sqrt(dir[0] * dir[0] + dir[1] * dir[1] + dir[2] * dir[2]), pos[3], vel[3];
                 for (int i = 0; i < 3; ++i) pos[i] = eye[i] + dir[i] / l * 0.6f, vel[i] = dir[i] / l * b.weapon.velocity;
                 phys.fire(pos, vel, b.weapon.material, b.weapon.material2, b.weapon.ttl, -1, b.ch, b.team);
+                sounds.push_back({b.weapon.name, {pos[0], pos[1], pos[2]}});
             }
             continue;
         }
@@ -488,6 +502,7 @@ void Game::think(float t, float step) {
 
 void Game::step(float t, float dt, const GameInput& in) {
     now = t;
+    sounds.clear();
     move_f = move_r = 0;
     if (in.use) get_in_out();
     if (in.fire && !player_dead) fire(t);
@@ -508,6 +523,7 @@ void Game::step(float t, float dt, const GameInput& in) {
 
 void Game::demo(float sim_seconds) {
     move_f = move_r = 0;
+    sounds.clear();
     if (player >= 0) demo_play(sim_seconds);
     else if (cur >= 0) demo_vehicle();
 }

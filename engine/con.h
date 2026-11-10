@@ -15,6 +15,7 @@ struct ConObject {
     std::string type, name;  // templates: create <type> <name>; instances: name = template
     std::vector<std::pair<std::string, std::vector<std::string>>> props;  // method lower-cased
     bool deleted = false;
+    std::string dir;  // folder of the script that created it (relative paths such as loadSoundScript)
 };
 
 class Con {
@@ -43,8 +44,9 @@ private:
     bool test(const std::vector<std::string>& tok, const Scope& scope);
     const Vfs& vfs_;
     std::unordered_map<std::string, ConObject*> active_;
-    int depth_ = 0;
-    std::vector<std::string> args_;  // arguments of the script running now  // run/include nesting; cycles in mod scripts would otherwise overflow the stack
+    int depth_ = 0;                  // run/include nesting; cycles in mod scripts would otherwise overflow the stack
+    std::vector<std::string> args_;  // arguments of the script running now
+    std::string dir_;                // folder of the script running now
 };
 
 std::string lower(std::string s);

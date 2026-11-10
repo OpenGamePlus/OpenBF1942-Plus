@@ -128,6 +128,7 @@ void Con::execute(const std::string& text, Scope& scope, const std::string& cur_
         } else if ((kw == "run" || kw == "include") && tok.size() > 1) {
             run(tok[1], {tok.begin() + 2, tok.end()}, cur_dir);
         } else if (kw.find('.') != std::string::npos) {
+            dir_ = cur_dir;
             command(kw, {tok.begin() + 1, tok.end()});
         } else {
             ++unknown[kw];
@@ -155,11 +156,11 @@ void Con::command(const std::string& name, const std::vector<std::string>& args)
     if (method == "create") {
         ConObject* obj;
         if (sub == "object") {
-            instances.push_back({"", args.empty() ? "" : args[0], {}});
+            instances.push_back({"", args.empty() ? "" : args[0], {}, false, ""});
             obj = &instances.back();
         } else {
             std::string type = args.size() >= 2 ? args[0] : "", nm = args.size() >= 2 ? args[1] : args.empty() ? "" : args[0];
-            obj = &(templates[sub][lower(nm)] = ConObject{type, nm, {}});
+            obj = &(templates[sub][lower(nm)] = ConObject{type, nm, {}, false, dir_});
         }
         active_[sub] = obj;
     } else if (method == "active") {

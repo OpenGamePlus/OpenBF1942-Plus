@@ -8,6 +8,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <map>
+#include <mutex>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -17,6 +18,7 @@
 #include "math.h"
 #include "render.h"
 #include "scene.h"
+#include "sound.h"
 #include "terrain.h"
 #include "vfs.h"
 
@@ -93,7 +95,7 @@ int run(int argc, char** argv) {
             int r = std::clamp(static_cast<int>(sz / cell), 0, hm.n - 1), c = std::clamp(static_cast<int>(sx / cell), 0, hm.n - 1);
             char pos[96];
             std::snprintf(pos, sizeof pos, "%g/%g/%g", sx, hm.height(r, c), sz);
-            con.instances.push_back({"", soldier, {{"absoluteposition", {pos}}, {"rotation", {std::to_string(yaw * 57.29578f + 180) + "/0/0"}}}});
+            con.instances.push_back({"", soldier, {{"absoluteposition", {pos}}, {"rotation", {std::to_string(yaw * 57.29578f + 180) + "/0/0"}}}, false, ""});
         }
         // Third-person view only: the engine swaps these parts by camera and state at runtime.
         scene = build_scene(con, vfs, skipped, [](const std::string& t) {
@@ -110,6 +112,36 @@ int run(int argc, char** argv) {
     for (auto& [why, n] : game.skipped) skipped[why] += n;
 
     if (SDL_Init(SDL_INIT_VIDEO) != 0) throw std::runtime_error(SDL_GetError());
+    // Sound: the game adds voices, SDL's audio thread mixes them; without a device the game runs silent.
+    Sounds sounds(vfs, con, 44100);
+    std::mutex sound_lock;
+    Listener listener;
+    struct AudioCtx {
+        Sounds* s;
+        std::mutex* m;
+        Listener* l;
+    } actx{&sounds, &sound_lock, &listener};
+    SDL_AudioSpec want{}, have{};
+    want.freq = 44100, want.format = AUDIO_F32SYS, want.channels = 2, want.samples = 1024, want.userdata = &actx;
+    want.callback = [](void* u, Uint8* buf, int len) {
+        auto* a = static_cast<AudioCtx*>(u);
+        auto* out = reinterpret_cast<float*>(buf);
+        int frames = len / static_cast<int>(2 * sizeof(float));
+        std::fill(out, out + 2 * frames, 0.0f);
+        std::lock_guard<std::mutex> g(*a->m);
+        a->s->mixer.mix(out, frames, *a->l);
+        for (int i = 0; i < 2 * frames; ++i) out[i] = std::clamp(out[i] * 0.5f, -1.0f, 1.0f);  // headroom for many voices
+    };
+    SDL_AudioDeviceID audio = 0;
+    if (shot.empty() && SDL_InitSubSystem(SDL_INIT_AUDIO) == 0) audio = SDL_OpenAudioDevice(nullptr, 0, &want, &have, 0);
+    struct CloseAudio {  // before `sounds` goes away, also when an exception leaves run()
+        SDL_AudioDeviceID id;
+        ~CloseAudio() {
+            if (id) SDL_CloseAudioDevice(id);
+        }
+    } close_audio{audio};
+    if (audio) SDL_PauseAudioDevice(audio, 0);
+    else if (shot.empty()) std::printf("no audio device (%s): silent\n", SDL_GetError());
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 3);
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
@@ -163,6 +195,14 @@ int run(int argc, char** argv) {
             game.demo(sim_seconds);
         }
         game.pose();
+        if (audio) {
+            std::lock_guard<std::mutex> g(sound_lock);
+            listener = Listener{{cam.x, cam.y, cam.z}, {std::cos(cam.yaw), 0, -std::sin(cam.yaw)}};
+            for (auto& e : game.sounds) sounds.shot(e.tmpl, e.pos);
+            float vp[3] = {}, control = 0;
+            std::string v = game.driving(vp, control);
+            sounds.engine(v, vp, control);
+        }
         std::string title;
         if (game.hud(title)) SDL_SetWindowTitle(win, title.c_str());
         float speed = (k[SDL_SCANCODE_LSHIFT] ? 400.f : 60.f) * dt * !game.controls_camera();  // free camera

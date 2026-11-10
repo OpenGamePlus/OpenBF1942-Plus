@@ -36,7 +36,7 @@ FetchContent_Declare(JoltPhysics
 FetchContent_MakeAvailable(JoltPhysics)
 target_compile_options(Jolt PRIVATE -w)  # third-party code; our -Wconversion is for our sources
 
-add_library(obf STATIC engine/rfa.cpp engine/vfs.cpp engine/dds.cpp engine/terrain.cpp engine/con.cpp engine/sm.cpp engine/scene.cpp engine/tm.cpp engine/anim.cpp engine/physics.cpp engine/damage.cpp engine/conquest.cpp engine/game.cpp engine/nav.cpp)
+add_library(obf STATIC engine/rfa.cpp engine/vfs.cpp engine/dds.cpp engine/terrain.cpp engine/con.cpp engine/sm.cpp engine/scene.cpp engine/tm.cpp engine/anim.cpp engine/physics.cpp engine/damage.cpp engine/conquest.cpp engine/game.cpp engine/nav.cpp engine/audio.cpp engine/sound.cpp)
 target_include_directories(obf PUBLIC engine)
 target_link_libraries(obf PRIVATE Jolt)
 

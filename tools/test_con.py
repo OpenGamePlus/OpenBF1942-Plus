@@ -28,6 +28,11 @@ class ConTest(unittest.TestCase):
         self.assertEqual([i["template"] for i in vm.instances], ["CP"])
         self.assertEqual(vm.args, [])
 
+    def test_template_records_its_folder(self):
+        vm = vm_with({"objects/jeep/objects.con": "ObjectTemplate.create Bundle Jeep\n"})
+        vm.run("objects/jeep/objects.con")
+        self.assertEqual(vm.templates["objecttemplate"]["jeep"]["dir"], "objects/jeep")
+
     def test_nested_if_inside_false_branch(self):
         vm = vm_with({})
         vm.execute("if a == b\nif c == c\nObject.create X\nelse\nObject.create Y\nendIf\nendIf\n", {})

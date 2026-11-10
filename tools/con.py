@@ -62,6 +62,7 @@ class Con:
         self.missing = collections.Counter()
         self.mod_paths = []
         self.args = []  # arguments of the script running now
+        self.dir = ""  # folder of the script running now: templates record it (relative paths such as loadSoundScript)
         self.level_dir = ""
 
     def resolve(self, target, cur_dir):
@@ -132,6 +133,7 @@ class Con:
             elif kw in ("run", "include") and len(tok) > 1:
                 self.run(tok[1], tok[2:], cur_dir)
             elif "." in kw:
+                self.dir = cur_dir
                 self.command(kw, tok[1:])
             else:
                 self.unknown[kw] += 1
@@ -155,7 +157,7 @@ class Con:
                 self.instances.append(obj)
             else:
                 typ, nm = (args[0], args[1]) if len(args) >= 2 else ("", args[0] if args else "")
-                obj = {"type": typ, "name": nm, "props": []}
+                obj = {"type": typ, "name": nm, "props": [], "dir": self.dir}
                 self.templates[sub][nm.lower()] = obj
             self.active[sub] = obj
         elif method == "active":

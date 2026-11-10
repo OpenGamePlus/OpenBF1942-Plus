@@ -48,9 +48,9 @@ build/obf_mapview "<BF1942_DIR>" bf1942 El_Alamein --drive Willy   # WASD drives
 
 Goal: play with original Battlefield 1942 clients and servers. Next, in order ([full roadmap](docs/roadmap/roadmap.md)):
 
-1. **Consolidate** — split the viewer into a game library and a renderer; CI.
+1. **Consolidate** (done) — split the viewer into a game library and a renderer; CI.
 2. **Network protocol research** — record and decode original client/server traffic (alongside the steps below).
-3. **AI navigation**, **audio**, **HUD**.
+3. **AI navigation** (first part done), **audio** (weapons and engines play), **HUD**.
 4. **Complete soldiers and weapons**, **vehicle crews**, **effects**.
 5. **Fidelity** — measure the original and calibrate.
 6. **Game modes**, **menus**.

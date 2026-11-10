@@ -2,6 +2,12 @@
 
 Append-only. Newest first. At most 3 bullets per stage.
 
+## 2026-11-10 — audio (roadmap C1, first part)
+
+- SDL2 device plus our own mixer ([ADR 0006](../architecture/adr/0006-audio.md)); `.ssc` layers with distance / time / control curves; every shot and the driven vehicle's engine play. Templates now record their script folder (relative `loadSoundScript` paths), in both CON interpreters.
+- Sweep: every template's script in the three mods parses, every referenced `.wav` decodes; HIGH level chosen because some scripts ship only `High/`.
+- Open: soldiers, impacts, explosions, ambient, radio; real engine rpm; not heard by a person yet (built remotely).
+
 ## 2026-11-10 — AI navigation (roadmap B1)
 
 - Level-0 path-finding maps decoded (tile markers 0 / 1 / bit tiles, 1 = blocked; all 207 parse, aligned with level objects). Bots route with A* on a 2 m grid: over 78 levels stuck sidesteps −32 %, bot deaths +36 %.
