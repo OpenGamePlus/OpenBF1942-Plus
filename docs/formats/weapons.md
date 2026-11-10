@@ -74,11 +74,13 @@ Crews:
 - **Stuck drivers:** a driver that is stuck (under 2 m in 3 s) backs up for 3 s. After four stuck checks in a row it gets out and does not board again for a minute.
 - **Guns:** every armed seat turns its gun with the seat's mouse-look inputs, leading the shell's drop, and fires once within 3°.
 - **Hits:** shots at the crew hit the vehicle, and a wreck kills its crew.
-- **Not done:** aircraft, boats, passengers and drawing seated soldiers.
+- **Landing craft:** troop boats (ships shorter than 16 m: LCVP, Higgins, Daihatsu) take passengers. The driver follows the landing-craft map (else the boat map; only 4 levels have either) to the flag. Everyone gets out once it is 40 m from the flag or aground.
+- **Ship spawns:** a spawner with `teamOnVehicle 1` gives its team the spawn points inside the template it places (`FletcherSoldierSpawn`), and they move with the ship. The Allies on Omaha Beach, Wake and Iwo Jima now start on their ships, with 1,936 bots over the 78 levels instead of 1,689. Only Battle of Britain, Santo Croce and Essen still leave a team empty.
+- **Not done:** aircraft, large ships, `setAIEnterOnSpawn`.
 
-Over 78 levels in 5 minutes there were 718 boardings and 15 vehicles destroyed. Flag captures rose from 57 to 78 and bot deaths fell from 368 to 173, since bots inside vehicles are nearly immune to rifles.
+Over 78 levels in 5 minutes there were 718 boardings and 15 vehicles destroyed. Flag captures rose from 57 to 78 and bot deaths fell from 368 to 173, since bots inside vehicles are nearly immune to rifles. With ship spawns and landing craft: 982 boardings, 101 captures, 285 bot deaths.
 
-El Alamein, simulated with `--sim`: outposts change hands from about 3 minutes in, flags go back and forth, and one team runs out of tickets after about 32 minutes. All 78 levels run a 2-minute game (1,689 bots; none on 7 levels whose soldiers start on ships).
+El Alamein, simulated with `--sim`: outposts change hands from about 3 minutes in, flags go back and forth, and one team runs out of tickets after about 32 minutes. All 78 levels run a 2-minute game.
 
 ## Open questions
 

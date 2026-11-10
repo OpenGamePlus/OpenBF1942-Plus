@@ -86,7 +86,10 @@ struct Builder {
             if (pick.empty()) return void(++skipped["empty spawner"]);
             Anim spawned;
             spawned.spawned = true;
-            if (spawns) spawned.spawn = static_cast<int>(spawns->size()), spawns->push_back({pick, world});
+            bool team_on_vehicle = false;
+            for (auto& [k, a] : t->props)
+                if (k == "teamonvehicle" && !a.empty()) team_on_vehicle = std::atoi(a[0].c_str()) != 0;
+            if (spawns) spawned.spawn = static_cast<int>(spawns->size()), spawns->push_back({pick, world, team_on_vehicle ? team : 0});
             return object(pick, world, depth + 1, 0, spawned);
         }
         for (auto& [k, a] : t->props) {

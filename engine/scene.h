@@ -27,6 +27,7 @@ struct DrawItem {
 struct SpawnPoint {
     std::string name;
     Mat4 world;
+    int team = 0;  // teamOnVehicle 1: the spawner's team (setTeam) owns what it places, its spawn points included
 };
 
 // skipped counts what could not be drawn, by reason ("treemesh", "missing template", ...).

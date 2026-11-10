@@ -35,7 +35,7 @@ Game::Game(const Vfs& vfs_, Con& con_, const Heightmap& hm_, const TerrainInfo& 
         scene.erase(std::remove_if(scene.begin(), scene.end(), [&](const DrawItem& d) { return d.spawn >= 0 && movable[static_cast<size_t>(d.spawn)]; }),
                     scene.end());
         for (size_t i = 0; i < spawns.size(); ++i)
-            if (movable[i]) add_vehicle(spawns[i].name, spawns[i].world);
+            if (movable[i]) add_vehicle(spawns[i].name, spawns[i].world, spawns[i].team);
         std::printf("vehicles: %zu of %zu spawners\n", vehicles.size(), spawns.size());
     }
     if (objects && !drive.empty()) {
@@ -109,16 +109,19 @@ Game::Game(const Vfs& vfs_, Con& con_, const Heightmap& hm_, const TerrainInfo& 
             }
             break;
         }
-        for (const std::string& p : vfs.paths(con.level_dir + "/pathfinding/")) {  // Tank0level0map.raw
-            if (p.find("tank") == std::string::npos || p.size() < 13 || p.compare(p.size() - 13, 13, "level0map.raw") != 0) continue;
-            try {
-                NavGrid g = nav_parse(vfs.read(p), info.world_size);
-                tank_nav = nav_coarse(g, std::max(1, static_cast<int>(4.0f / g.cell + 0.5f)));
-            } catch (const std::exception& e) {
-                std::printf("navigation %s: %s\n", p.c_str(), e.what());
+        // Vehicle maps: Tank0level0map.raw; LandingCraft3level0map.raw, else Boat2level0map.raw (4 levels of 78).
+        for (const char* kind : {"tank", "boat", "landingcraft"})
+            for (const std::string& p : vfs.paths(con.level_dir + "/pathfinding/")) {
+                std::string f = p.substr(p.rfind('/') + 1);
+                if (f.rfind(kind, 0) != 0 || f.size() < 13 || f.compare(f.size() - 13, 13, "level0map.raw") != 0) continue;
+                try {
+                    NavGrid g = nav_parse(vfs.read(p), info.world_size);
+                    (std::string(kind) == "tank" ? tank_nav : boat_nav) = nav_coarse(g, std::max(1, static_cast<int>(4.0f / g.cell + 0.5f)));
+                } catch (const std::exception& e) {
+                    std::printf("navigation %s: %s\n", p.c_str(), e.what());
+                }
+                break;
             }
-            break;
-        }
         // Supply depots under placed objects (Ammobox -> AmmoboxSupplyDepot); shortcut: at the root's position.
         std::function<const ConObject*(const std::string&, int)> depot_of = [&](const std::string& n, int depth) -> const ConObject* {
             const ConObject* t = object_template(n);
@@ -159,6 +162,7 @@ Game::Game(const Vfs& vfs_, Con& con_, const Heightmap& hm_, const TerrainInfo& 
             sp.yaw = rot[0];
             spawn_points.push_back(sp);
         }
+        move_spawns();
         bool skipped_one = false;  // the player takes one of its team's places
         for (const SpawnPt& sp : spawn_points) {
             int tm = spawn_team(sp);
@@ -235,7 +239,7 @@ float Game::ground(float x, float z) const {
     return (hm.height(r, c) * (1 - u) + hm.height(r, c + 1) * u) * (1 - w) + (hm.height(r + 1, c) * (1 - u) + hm.height(r + 1, c + 1) * u) * w;
 }
 
-void Game::add_vehicle(const std::string& name, Mat4 world) {
+void Game::add_vehicle(const std::string& name, Mat4 world, int team_on) {
     const VehicleDef* def = def_for(name);
     if (!def) return;
     // Some retail spawns sit a little under our terrain (M3A1, T95, Sexton fell through it): lift the vehicle until no
@@ -269,6 +273,34 @@ void Game::add_vehicle(const std::string& name, Mat4 world) {
         v.seats.push_back(st);
     }
     if (v.seats.empty()) v.seats.push_back(Seat{}), v.seats[0].weapon = def->weapon, std::copy(def->exit, def->exit + 3, v.seats[0].exit);
+    // Ships carry spawn points (FletcherSoldierSpawn): owned by the spawner's team when it has teamOnVehicle 1.
+    if (team_on > 0) {
+        std::function<void(const std::string&, Mat4, int)> find = [&](const std::string& n, Mat4 at, int depth) {
+            const ConObject* t = object_template(n);
+            if (!t || depth > 12) return;
+            if (lower(t->type) == "spawnpoint") {
+                SpawnPt sp;
+                sp.veh = static_cast<int>(vehicles.size()), sp.team = team_on;
+                sp.local[0] = at.m[12], sp.local[1] = at.m[13], sp.local[2] = at.m[14];
+                spawn_points.push_back(sp);
+                return;
+            }
+            std::string child;
+            float pos[3] = {}, rot[3] = {};
+            auto flush = [&] {
+                if (!child.empty()) find(child, at * translate(pos[0], pos[1], pos[2]) * rotation_ypr(rot[0], rot[1], rot[2]), depth + 1);
+                child.clear(), pos[0] = pos[1] = pos[2] = rot[0] = rot[1] = rot[2] = 0;
+            };
+            for (auto& [k, a] : t->props) {
+                if (a.empty()) continue;
+                if (k == "addtemplate") flush(), child = a[0];
+                else if (k == "setposition" && !child.empty()) parse_vec3(a[0], pos);
+                else if (k == "setrotation" && !child.empty()) parse_vec3(a[0], rot);
+            }
+            flush();
+        };
+        find(name, Mat4::identity(), 0);
+    }
     vehicles.push_back(v);
 }
 
@@ -321,7 +353,17 @@ void Game::refill_loadout() {
     if (slot < loadout.size()) hand_ammo = loadout[slot].second;
 }
 
+void Game::move_spawns() {
+    for (SpawnPt& sp : spawn_points) {
+        if (sp.veh < 0) continue;
+        Mat4 m = phys.transform(vehicles[static_cast<size_t>(sp.veh)].id);
+        for (int i = 0; i < 3; ++i) sp.pos[i] = m.m[i] * sp.local[0] + m.m[4 + i] * sp.local[1] + m.m[8 + i] * sp.local[2] + m.m[12 + i];
+        sp.yaw = std::atan2(m.m[8], m.m[10]) * 57.29578f;
+    }
+}
+
 int Game::spawn_team(const SpawnPt& sp) const {
+    if (sp.veh >= 0) return vehicles[static_cast<size_t>(sp.veh)].wrecked ? 0 : sp.team;
     for (auto& f : game.flags)
         if (f.group == sp.group) return f.team;
     return 0;
@@ -671,14 +713,15 @@ void Game::board(Bot& b, float t) {
     b.board_at = t + 3;
     for (size_t vi = 0; vi < vehicles.size(); ++vi) {
         Veh& v = vehicles[vi];
-        if (v.wrecked || v.plane || v.ship || (v.team && v.team != b.team)) continue;
+        bool boat = troop_boat(v);
+        if (v.wrecked || v.plane || (v.ship && !boat) || (v.team && v.team != b.team)) continue;
         Mat4 m = phys.transform(v.id);
         float dx = m.m[12] - b.pos[0], dz = m.m[14] - b.pos[2];
         if (dx * dx + dz * dz > (10 + v.len) * (10 + v.len)) continue;
         int s = -1;
         if (v.seats[0].who == -2 && !v.team) s = 0;
-        for (size_t k = 1; k < v.seats.size() && s < 0 && v.team; ++k)
-            if (v.seats[k].who == -2 && !v.seats[k].weapon.name.empty()) s = static_cast<int>(k);
+        for (size_t k = 1; k < v.seats.size() && s < 0 && v.team; ++k)  // landing craft also take passengers
+            if (v.seats[k].who == -2 && (boat || !v.seats[k].weapon.name.empty())) s = static_cast<int>(k);
         if (s < 0) continue;
         v.seats[static_cast<size_t>(s)].who = static_cast<int>(&b - bots.data()), v.team = b.team;
         b.veh = static_cast<int>(vi), b.vseat = s, b.path.clear(), b.path_goal = -1, ++boardings;
@@ -704,6 +747,17 @@ void Game::leave(Bot& b) {
     for (const Seat& s : v.seats) empty = empty && s.who == -2;
     if (empty) v.team = 0;
     b.veh = b.vseat = -1;
+}
+
+// Landing craft at the beach: everyone gets out (and keeps away from boats for a minute).
+void Game::disembark(Veh& v, float t) {
+    phys.drive(v.id, 0, 0);
+    for (Seat& st : v.seats)
+        if (st.who >= 0) {
+            Bot& cb = bots[static_cast<size_t>(st.who)];
+            leave(cb);
+            cb.board_at = t + 60;
+        }
 }
 
 // A crew member: the driver heads for the flag (tank map route), every armed seat turns its gun onto the target and fires.
@@ -751,7 +805,9 @@ void Game::crew(Bot& b, float t, float step, const float* target, int target_veh
         float g = (fl.pos[0] - b.pos[0]) * (fl.pos[0] - b.pos[0]) + (fl.pos[2] - b.pos[2]) * (fl.pos[2] - b.pos[2]);
         if (fl.team != b.team && !fl.locked && g < best) best = g, goal = &fl;
     }
-    if (!goal || best < 15 * 15 || target) {  // there, or fighting: hold
+    bool boat = troop_boat(v);
+    if (boat && goal && best < 40 * 40) return disembark(v, t);
+    if (!goal || (!boat && (best < 15 * 15 || target))) {  // there, or fighting: hold (landing craft keep going)
         phys.drive(v.id, 0, 0);
         return;
     }
@@ -763,13 +819,15 @@ void Game::crew(Bot& b, float t, float step, const float* target, int target_veh
         b.jams = stuck ? b.jams + 1 : 0;
         b.check_at = t + 3, b.check_pos[0] = b.pos[0], b.check_pos[1] = b.pos[2];
     }
+    if (boat && b.jams >= 2) return disembark(v, t);  // beached (or aground): everybody out
     if (b.jams >= 4) {  // hopeless (parked vehicles, rocks): on foot, and no boarding for a minute
         phys.drive(v.id, 0, 0), leave(b), b.board_at = t + 60, b.jams = 0;
         return;
     }
     if (stuck) b.reverse_until = t + 3, b.replan_at = 0;
-    if (tank_nav.n > 0 && (gi != b.path_goal || (stuck && t >= b.replan_at))) {
-        b.path = nav_path(tank_nav, b.pos[0], b.pos[2], goal->pos[0], goal->pos[2]);
+    const NavGrid& grid = boat ? boat_nav : tank_nav;
+    if (grid.n > 0 && (gi != b.path_goal || (stuck && t >= b.replan_at))) {
+        b.path = nav_path(grid, b.pos[0], b.pos[2], goal->pos[0], goal->pos[2]);
         b.waypoint = 0, b.path_goal = gi, b.replan_at = t + 5;
     }
     float tx = goal->pos[0], tz = goal->pos[2];
@@ -789,6 +847,7 @@ void Game::crew(Bot& b, float t, float step, const float* target, int target_veh
 }
 
 void Game::think(float t, float step) {
+    move_spawns();
     auto owned_spawn = [&](int tm) -> const SpawnPt* {
         std::vector<const SpawnPt*> c;
         for (const SpawnPt& sp : spawn_points)

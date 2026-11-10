@@ -2,6 +2,11 @@
 
 Append-only. Newest first. At most 3 bullets per stage.
 
+## 2026-11-10 — landing craft and ship spawns (roadmap B3)
+
+- Spawn points inside ships (`teamOnVehicle 1` spawners) belong to the spawner's team and move with the ship: 1,936 bots over 78 levels (was 1,689), 5 levels still one-sided (Battle of Britain ×3, Santo Croce, Essen).
+- Bots carry passengers in troop boats and land them at the beach (40 m from the flag or aground).
+
 ## 2026-11-10 — vehicle seats (roadmap B3)
 
 - Nested `PlayerControlObject`s read as seats: each has its own weapon, mouse-look parts, `SeatObject` position and exit. The player enters the first free seat and changes with F1–F8.

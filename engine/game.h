@@ -140,7 +140,10 @@ private:
     struct SpawnPt {
         float pos[3] = {}, yaw = 0;
         int group = -1;
+        int veh = -1, team = 0;  // on a ship (moves with vehicle `veh`, local offset `local`), owned by `team`
+        float local[3] = {};
     };
+    void move_spawns();  // spawn points on vehicles follow them
     struct Bot {
         int ch = -1, team = 0;
         std::string tmpl;
@@ -170,7 +173,7 @@ private:
 
     const VehicleDef* def_for(const std::string& name);
     float ground(float x, float z) const;
-    void add_vehicle(const std::string& name, Mat4 world);
+    void add_vehicle(const std::string& name, Mat4 world, int team = 0);
     const ConObject* object_template(const std::string& n) const;
     float hitpoints(const std::string& n) const;
     std::string primary(int tm, int kt) const;
@@ -211,6 +214,9 @@ private:
     std::vector<Bot> bots;
     NavGrid nav;  // infantry map of the level, 2 m cells; empty: bots run straight
     NavGrid tank_nav;  // tank map, 4 m cells; empty: bot drivers go straight
+    NavGrid boat_nav;  // landing craft (else boat) map, 4 m cells; empty: boats go straight
+    bool troop_boat(const Veh& v) const { return v.ship && !v.plane && v.len < 8; }  // LCVP, Higgins, Daihatsu
+    void disembark(Veh& v, float t);
     void board(Bot& b, float t);
     void crew(Bot& b, float t, float step, const float* target, int target_veh);
     void leave(Bot& b);
