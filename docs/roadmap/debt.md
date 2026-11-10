@@ -25,7 +25,7 @@
 | Animation frame rate and state machine | shortcut | 25 fps guessed; first animation of a state, looping; no transitions; weapon states by prefix |
 | `animations/animationstates.con` loading | unverified | the viewer runs it after the object folders |
 | Object lightmap blend | unverified | 2 × lightmap replaces the sun term on lightmapped meshes |
-| Fog start, light scale | shortcut | fog from half the view distance; mesh light ×2; terrain drawn unlit (baked lighting) |
+| Fog, sky, light scale | shortcut | fog uses `renderer.fogStart` / `fogEnd` where the level sets them (15 of 26 checked; otherwise half the view distance to the view distance). The sky is washed towards the fog colour by 1 − fogEnd / 1000, at most 0.9 (our rule). Mesh light ×2; terrain drawn unlit (baked lighting). First-person arms look larger than in the original (`set1pFov` reading) |
 | Look against the original | measured | side by side on Berlin with the original client (2026-11-10). The ground lacked the terrain detail texture; it is now applied, with anisotropic filtering. Terrain brightness is still open: colour tile means range from 54 (Berlin) to 166 (El Alamein), so the original's blend cannot be a fixed ×2, and the Berlin comparison was not at the same spot. Our buildings are grey-blue and darker, the original's warm and sepia. The original's haze starts much closer. Skinned meshes were lit per face (faceted, flickering); now smooth normals are recomputed from the posed mesh |
 | Skinned normals | shortcut | face normals from screen derivatives; posed normals need a bind pose |
 | Soldier parts | shortcut | viewer hides `Parachute` and `1p*` children; the engine switches parts by camera and state |

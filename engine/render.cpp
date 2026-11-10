@@ -70,6 +70,7 @@ uniform vec3 ambient;
 uniform vec3 diffuse;
 uniform vec3 fog_color;
 uniform vec2 fog_range;  // start, end (metres)
+uniform float sky_fog;   // how far the sky is washed towards the fog colour
 uniform vec3 cam_pos;
 out vec4 color;
 vec4 fogged(vec4 c) {
@@ -77,7 +78,7 @@ vec4 fogged(vec4 c) {
     return vec4(mix(c.rgb, fog_color, f), c.a);
 }
 void main() {
-    if (mode == 4) { color = vec4(texture(tex, tuv).rgb, 1.0); return; }
+    if (mode == 4) { color = vec4(mix(texture(tex, tuv).rgb, fog_color, sky_fog), 1.0); return; }
     if (mode == 5) { color = vec4(1.0, 0.15, 0.1, 1.0); return; }
     if (mode == 1) { color = fogged(vec4(0.12, 0.30, 0.45, 0.75)); return; }
     vec4 base;
@@ -469,6 +470,12 @@ Renderer::Impl::Impl(const Vfs& vfs_, Con& con, const Heightmap& hm, const Terra
     std::copy(fog.begin(), fog.end(), fogc);
     std::string vd = setting("game", "setviewdistance");
     float view_dist = vd.empty() ? 1500.0f : static_cast<float>(std::atof(vd.c_str()));
+    // renderer.fogStart / fogEnd when the level sets them (Berlin: 0 and 100 m, a sepia haze from the camera on);
+    // otherwise half the view distance to the view distance (a guess).
+    std::string fs = setting("renderer", "fogstart"), fe = setting("renderer", "fogend");
+    float fog_start = fs.empty() ? view_dist * 0.5f : static_cast<float>(std::atof(fs.c_str()));
+    float fog_end = fe.empty() ? view_dist : static_cast<float>(std::atof(fe.c_str()));
+    if (!std::isfinite(fog_start) || !std::isfinite(fog_end) || fog_end <= fog_start) fog_start = view_dist * 0.5f, fog_end = view_dist;
     sky_rot = setting("sky", "setrotangle");
     std::string sky_file;
     if (con.templates.count("geometrytemplate") && con.templates["geometrytemplate"].count("skybox"))
@@ -614,8 +621,10 @@ Renderer::Impl::Impl(const Vfs& vfs_, Con& con, const Heightmap& hm, const Terra
         glUniform3f(glGetUniformLocation(prog, "ambient"), amb[0] + amb2[0], amb[1] + amb2[1], amb[2] + amb2[2]);
         glUniform3f(glGetUniformLocation(prog, "diffuse"), dif[0], dif[1], dif[2]);
         glUniform3f(glGetUniformLocation(prog, "fog_color"), fogc[0], fogc[1], fogc[2]);
-        // shortcut: fog starts at half the view distance; the original start value is unknown.
-        glUniform2f(glGetUniformLocation(prog, "fog_range"), view_dist * 0.5f, view_dist);
+        glUniform2f(glGetUniformLocation(prog, "fog_range"), fog_start, fog_end);
+        // shortcut: the sky washed towards the fog colour by 1 - fogEnd / 1000, at most 0.9 (Berlin, fogEnd 100: a pale
+        // sepia sky as in the original client; desert levels at 500: half). The original's rule is unknown.
+        glUniform1f(glGetUniformLocation(prog, "sky_fog"), std::clamp(1.0f - fog_end / 1000.0f, 0.0f, 0.9f));
     }
     glEnable(GL_DEPTH_TEST);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
