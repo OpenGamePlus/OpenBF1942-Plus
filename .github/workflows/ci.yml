@@ -6,7 +6,7 @@ jobs:
   build-test:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Dependencies
         run: sudo apt-get update && sudo apt-get install -y cmake g++ git libsdl2-dev libepoxy-dev
       - name: Configure
