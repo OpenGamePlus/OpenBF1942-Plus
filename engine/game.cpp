@@ -115,6 +115,7 @@ Game::Game(const Vfs& vfs_, Con& con_, const Heightmap& hm_, const TerrainInfo& 
             Bot b;
             b.team = tm, b.tmpl = team_skins[tm], b.yaw = sp.yaw, b.hp = hitpoints(b.tmpl), b.first = scene.size();
             b.weapon = weapon_def(con, primary(tm, static_cast<int>(bots.size() % 5)));  // the five classes in turn
+            b.ammo = Ammo::full(b.weapon);
             std::copy(sp.pos, sp.pos + 3, b.pos);
             b.ch = phys.add_character(sp.pos[0], sp.pos[1] + 0.1f, sp.pos[2]);
             for (DrawItem& item : build_object(con, vfs, b.tmpl, Mat4::identity(), skipped, nullptr, hide_1p)) ++b.parts, scene.push_back(std::move(item));
@@ -127,6 +128,7 @@ Game::Game(const Vfs& vfs_, Con& con_, const Heightmap& hm_, const TerrainInfo& 
     // Combat: damage tables, the soldier's kit weapon.
     damage = damage_table(con.settings["materialmanager"]);
     hand = weapon_def(con, weapon_name);
+    hand_ammo = Ammo::full(hand);
     player_hp = hitpoints(soldier_tmpl);
     if (cam.x < 0) cam.x = info.world_size * 0.15f, cam.y = 300, cam.z = info.world_size * 0.15f;  // default: corner, looking across
 }
@@ -255,6 +257,33 @@ void Game::walk(float forward, float right, bool jump, bool slow) {
 }
 
 // Fire the controlled vehicle's weapon from its posed barrel, or the soldier's along the camera. t: game time.
+Ammo Ammo::full(const WeaponDef& w) {
+    Ammo a;
+    a.unlimited = w.mag_size <= 0;
+    a.rounds = w.mag_size, a.spare = std::max(0, w.mags - 1);
+    return a;
+}
+
+bool Ammo::take(float t) {
+    if (unlimited) return true;
+    if (reloading(t) || rounds <= 0) return false;
+    --rounds;
+    return true;
+}
+
+void Ammo::reload(float t, const WeaponDef& w) {
+    if (!unlimited && !reloading(t) && reload_until < 0 && spare > 0 && rounds < w.mag_size) reload_until = t + w.reload;
+}
+
+void Ammo::tick(float t, const WeaponDef& w) {
+    if (unlimited) return;
+    if (reload_until >= 0 && t >= reload_until) {
+        // shortcut: rounds left in the old magazine are lost, as with a clip; per-weapon rules (allowReloadOnEmptyClipOnly) unread
+        rounds = w.mag_size, --spare, reload_until = -1;
+    }
+    if (rounds <= 0) reload(t, w);  // autoReload is 0 on many weapons; reloading on empty spares a key press
+}
+
 void Game::fire(float t) {
     if (cur >= 0) {
         Veh& v = vehicles[static_cast<size_t>(cur)];
@@ -267,7 +296,7 @@ void Game::fire(float t) {
         for (int i = 0; i < 3; ++i) d[i] /= l, pos[i] = m.m[12 + i] + d[i] * (v.has_muzzle ? 1.0f : v.len), vel[i] = d[i] * v.weapon.velocity;
         phys.fire(pos, vel, v.weapon.material, v.weapon.material2, v.weapon.ttl, v.id, -1, team);
         sounds.push_back({v.weapon.name, {pos[0], pos[1], pos[2]}});
-    } else if (player >= 0 && !hand.name.empty() && t >= hand_next) {
+    } else if (player >= 0 && !hand.name.empty() && t >= hand_next && hand_ammo.take(t)) {
         hand_next = t + hand.interval;
         float p[3], d[3] = {std::sin(cam.yaw) * std::cos(cam.pitch), std::sin(cam.pitch), std::cos(cam.yaw) * std::cos(cam.pitch)}, pos[3], vel[3];
         phys.character_position(player, p);
@@ -361,6 +390,7 @@ void Game::think(float t, float step) {
             phys.place_character(player, sp->pos[0], sp->pos[1] + 0.2f, sp->pos[2]);
             phys.set_character_active(player, true);
             player_dead = false, player_hp = hitpoints(soldier_tmpl), cam.yaw = sp->yaw * 3.14159265f / 180.0f;
+            hand_ammo = Ammo::full(hand);
             std::printf("respawned\n");
         }
     for (Bot& b : bots) {
@@ -371,6 +401,7 @@ void Game::think(float t, float step) {
         phys.place_character(b.ch, sp->pos[0], sp->pos[1] + 0.2f, sp->pos[2]);
         phys.set_character_active(b.ch, true);
         b.dead = false, b.hp = hitpoints(b.tmpl), b.yaw = sp->yaw, b.target = -2, b.seen_at = -1;
+        b.ammo = Ammo::full(b.weapon);
         std::copy(sp->pos, sp->pos + 3, b.pos);
     }
     float ppos[3] = {};
@@ -427,7 +458,8 @@ void Game::think(float t, float step) {
             if (b.seen_at < 0) b.seen_at = t;
             b.yaw = std::atan2(d[0], d[2]) * 57.29578f, b.moving = false;
             phys.walk(b.ch, 0, 0, false);
-            if (dist > 0.5f && t - b.seen_at > 0.7f && t >= b.next_fire && !b.weapon.name.empty()) {
+            b.ammo.tick(t, b.weapon);
+            if (dist > 0.5f && t - b.seen_at > 0.7f && t >= b.next_fire && !b.weapon.name.empty() && b.ammo.take(t)) {
                 b.next_fire = t + 2 * b.weapon.interval;
                 float dir[3] = {d[0] / dist + err(rng), d[1] / dist + err(rng), d[2] / dist + err(rng)};
                 float l = std::sqrt(dir[0] * dir[0] + dir[1] * dir[1] + dir[2] * dir[2]), pos[3], vel[3];
@@ -508,7 +540,13 @@ void Game::step(float t, float dt, const GameInput& in) {
     sounds.clear();
     move_f = move_r = 0;
     if (in.use) get_in_out();
-    if (in.fire && !player_dead) fire(t);
+    if (player >= 0) {
+        hand_ammo.tick(t, hand);
+        if (in.reload) hand_ammo.reload(t, hand);
+    }
+    bool pull = in.fire && !(cur < 0 && hand.fire_once && fire_held);  // fireOnce: one round per click on foot
+    fire_held = in.fire;
+    if (pull && !player_dead) fire(t);
     if (cur >= 0 && !vehicles[static_cast<size_t>(cur)].wrecked) {
         Veh& v = vehicles[static_cast<size_t>(cur)];
         float th = in.throttle;
@@ -535,6 +573,7 @@ void Game::demo(float sim_seconds) {
 // then sim_seconds of conquest; prints the track, the game and how far the parked vehicles moved while settling.
 void Game::demo_play(float sim_seconds) {
     auto tick = [&] {
+        hand_ammo.tick(now, hand);
         think(now, 1.0f / 60);
         phys.step(1.0f / 60);
         apply_hits();
@@ -670,10 +709,11 @@ HudInfo Game::hud_info() const {
     h.winner = game.winner;
     for (int t = 0; t < 2; ++t) h.tickets[t] = static_cast<int>(game.tickets[t + 1]), h.flags[t] = game.owned(t + 1);
     h.weapon = hand.name;
+    if (!hand_ammo.unlimited) h.rounds = hand_ammo.rounds, h.spare = hand_ammo.spare, h.reloading = hand_ammo.reloading(now);
     if (cur >= 0) {
         const Veh& v = vehicles[static_cast<size_t>(cur)];
         h.vehicle = v.name, h.vehicle_hp = static_cast<int>(std::ceil(std::max(0.0f, v.hp)));
-        h.weapon = v.weapon.name;
+        h.weapon = v.weapon.name, h.rounds = -1, h.reloading = false;
     }
     for (const auto& [t, m] : feed)
         if (now - t < 6) h.feed.push_back(m);

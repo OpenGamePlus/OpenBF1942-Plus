@@ -11,7 +11,8 @@ Status: **damage formula checked against the retail tables' own comments and kno
 | `projectileTemplate` | the projectile | `ShermanProjectile` |
 | `velocity` | muzzle speed, m/s | Sherman 100, MG42 1000, M1 Garand 1000, Mustang guns 400 |
 | `roundOfFire` | rounds per second | Sherman 0.35 (one shell every 2.9 s), M1 Garand 3.2, Thompson 10, MG42 15 |
-| `magSize`, `numOfMag`, `reloadTime` | magazine | not used yet |
+| `magSize`, `numOfMag`, `reloadTime` | rounds per magazine, magazines (read as including the loaded one; unverified), reload seconds | M1 Garand 8, 4, 4.0 |
+| `fireOnce` | one round per trigger pull | M1 Garand 1 |
 
 `Projectile`: `material` (hit), `material2` (explosion; the damage file calls it splash damage), `timeToLive CRD_NONE/<s>/…`, `damageType`.
 

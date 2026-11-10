@@ -30,6 +30,8 @@ struct HudInfo {
     int tickets[2] = {}, flags[2] = {};
     std::string weapon, vehicle;
     int vehicle_hp = -1;            // -1: on foot
+    int rounds = -1, spare = 0;     // rounds -1: unlimited (not shown)
+    bool reloading = false;
     std::vector<std::string> feed;  // newest last
 };
 

@@ -103,7 +103,11 @@ std::vector<HudQuad> hud_layout(const Font& f, const HudInfo& in, int w, int h) 
     solid(10 * s, by, 104 * s, lh, shade);
     solid(12 * s, by + 2 * s, static_cast<float>(std::clamp(in.hp, 0, 100)) * s, lh - 4 * s, in.hp > 25 ? ally : axis);
     text(std::to_string(std::max(0, in.hp)), 120 * s, by + s, white);
-    if (!in.weapon.empty()) text(in.weapon, 10 * s, by - lh, white);
+    if (!in.weapon.empty()) {
+        std::string wl = in.weapon;
+        if (in.rounds >= 0) wl += "  " + std::to_string(in.rounds) + " / " + std::to_string(in.spare) + (in.reloading ? "  RELOADING" : "");
+        text(wl, 10 * s, by - lh, in.rounds == 0 && in.spare == 0 && !in.reloading ? axis : white);
+    }
     if (in.vehicle_hp >= 0) {
         std::string v = in.vehicle + "  " + std::to_string(in.vehicle_hp);
         text(v, W - 10 * s - text_width(f, v, s), by, white);

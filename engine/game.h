@@ -35,7 +35,7 @@ struct GameInput {
     float throttle = 0, yaw = 0, pitch = 0, roll = 0;  // vehicles, [-1, 1]
     float look_x = 0, look_y = 0;                      // turrets, mouse motion scaled
     float forward = 0, right = 0;                      // on foot
-    bool jump = false, slow = false, fire = false, use = false;
+    bool jump = false, slow = false, fire = false, use = false, reload = false;
 };
 
 // The lower / upper body animation states a soldier's skinned parts should play; empty: as loaded.
@@ -44,6 +44,18 @@ struct SoldierView {
     size_t first = 0, parts = 0;  // its items in the scene
     std::string lower, upper;
     float hold = -1;
+};
+
+// Rounds in the weapon and spare magazines. numOfMag read as all magazines, the loaded one included (unverified).
+struct Ammo {
+    int rounds = 0, spare = 0;
+    float reload_until = -1;  // reloading while game time < this
+    bool unlimited = true;
+    static Ammo full(const WeaponDef& w);
+    bool take(float t);    // one round; an empty magazine starts the reload
+    void reload(float t, const WeaponDef& w);  // starts one if a spare magazine is left and none is running
+    void tick(float t, const WeaponDef& w);    // a finished reload fills the magazine
+    bool reloading(float t) const { return t < reload_until; }
 };
 
 struct Camera {
@@ -105,6 +117,7 @@ private:
         bool dead = false, moving = false;
         float died_at = 0;
         WeaponDef weapon;
+        Ammo ammo;
         float next_fire = 0, seen_at = -1, next_look = 0;
         int target = -2;  // -2 nobody, -1 the player, else a bot
         float check_at = 0, check_pos[2] = {}, detour_until = 0, detour_side = 1;  // getting unstuck
@@ -157,6 +170,8 @@ private:
     int detours = 0;  // sidesteps taken by stuck bots
     DamageTable damage;
     WeaponDef hand;
+    Ammo hand_ammo;
+    bool fire_held = false;  // trigger held last step (fireOnce weapons)
     float hand_next = 0, player_hp = 30, respawn_at = -1, now = 0;
     bool player_dead = false;
     std::vector<std::pair<float, std::string>> feed;  // (game time, message): kills, captures, destroyed vehicles

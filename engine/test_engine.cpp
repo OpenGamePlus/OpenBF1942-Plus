@@ -15,6 +15,7 @@
 #include "con.h"
 #include "conquest.h"
 #include "damage.h"
+#include "game.h"
 #include "dds.h"
 #include "math.h"
 #include "nav.h"
@@ -619,6 +620,20 @@ int main() {
         std::vector<uint8_t> gray(18 + 4, 0);
         gray[2] = 3, gray[12] = 2, gray[14] = 2, gray[16] = 8, gray[17] = 0x20, gray[18] = 200;
         assert(tga_decode(gray).rgba[3] == 200 && tga_decode(gray).rgba[0] == 200);
+    }
+    {  // magazines and reload
+        WeaponDef w;
+        w.mag_size = 2, w.mags = 2, w.reload = 3;
+        Ammo a = Ammo::full(w);
+        assert(!a.unlimited && a.rounds == 2 && a.spare == 1);
+        assert(a.take(0) && a.take(0) && !a.take(0));  // empty
+        a.tick(0, w);                                  // starts the reload
+        assert(a.reloading(1) && !a.take(1));
+        a.tick(3, w);
+        assert(a.rounds == 2 && a.spare == 0 && a.take(3) && a.take(3));
+        a.tick(3, w);
+        assert(!a.reloading(3) && !a.take(4));  // no spare left
+        assert(Ammo::full(WeaponDef{}).take(0));  // magSize 0: unlimited
     }
     std::puts("engine tests ok");
     return 0;

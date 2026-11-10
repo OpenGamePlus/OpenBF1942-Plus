@@ -284,6 +284,10 @@ WeaponDef weapon_def(const Con& con, const std::string& name) {
         if (k == "projectiletemplate") proj = a[0];
         else if (k == "velocity") wd.velocity = num(a);
         else if (k == "roundoffire" && num(a) > 0) wd.interval = 1.0f / std::min(num(a), 50.0f);  // rounds per second
+        else if (k == "magsize") wd.mag_size = std::max(0, std::atoi(a[0].c_str()));
+        else if (k == "numofmag") wd.mags = std::max(0, std::atoi(a[0].c_str()));
+        else if (k == "reloadtime") wd.reload = std::clamp(num(a), 0.0f, 30.0f);
+        else if (k == "fireonce") wd.fire_once = std::atoi(a[0].c_str()) != 0;
     }
     const ConObject* p = proj.empty() ? nullptr : find(con, proj);
     if (!p || !(wd.velocity > 0)) return WeaponDef{};

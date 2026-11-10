@@ -54,6 +54,9 @@ struct WeaponDef {
     float velocity = 0, interval = 0.1f;  // velocity (m/s); 1 / roundOfFire (rounds per second: Sherman 0.35, MG42 15)
     float ttl = 10;                     // projectile timeToLive
     int material = 0, material2 = -1;   // projectile hit and explosion materials (damage table)
+    int mag_size = 0, mags = 0;         // magSize, numOfMag (0: unlimited)
+    float reload = 0;                   // reloadTime (s)
+    bool fire_once = false;             // fireOnce: one round per trigger pull
 };
 
 struct VehicleDef {

@@ -39,4 +39,4 @@ A screen-space overlay drawn after the 3D scene:
 - a 6-second feed of kills, captures and destroyed vehicles, top right;
 - VICTORY / DEFEAT.
 
-The pixel scale is height / 480, rounded. There is no ammo, minimap or radio text yet, because those systems do not exist.
+The pixel scale is height / 480, rounded. The weapon line shows rounds / spare magazines and RELOADING. There is no minimap or radio text yet, because those systems do not exist.
