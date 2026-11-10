@@ -1,0 +1,21 @@
+name: ci
+on:
+  push:
+  pull_request:
+jobs:
+  build-test:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Dependencies
+        run: sudo apt-get update && sudo apt-get install -y cmake g++ git libsdl2-dev libepoxy-dev
+      - name: Configure
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=RelWithDebInfo
+      - name: Build
+        run: cmake --build build -j
+      - name: Engine tests
+        run: ctest --test-dir build --output-on-failure
+      - name: Tool tests
+        run: python3 -m unittest discover tools
+      - name: Documentation checks
+        run: python3 tools/check_docs.py

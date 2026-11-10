@@ -18,7 +18,7 @@ Network compatibility makes fidelity a requirement, not a polish step: an origin
 
 | # | Phase | Steps | Exit check |
 |---|---|---|---|
-| 1 | **A. Consolidate** | A1 split `mapview.cpp` (~1,500 lines: rendering, game, AI, demos) into a game library (world: soldiers, vehicles, projectiles, rules, AI) with no SDL/GL, a renderer, and thin executables; A2 CI on GitHub (build + all tests); A3 headless game runner (the `--sim` checks as a tool) | same outputs as today on the 78-level sweeps; CI green |
+| 1 | **A. Consolidate** (done 2026-11-10) | A1 split `mapview.cpp` (~1,500 lines: rendering, game, AI, demos) into a game library (world: soldiers, vehicles, projectiles, rules, AI) with no SDL/GL, a renderer, and thin executables; A2 CI on GitHub (build + all tests); A3 headless game runner (the `--sim` checks as a tool) | same outputs as today on the 78-level sweeps; CI green |
 | 2 | **E0. Protocol research** (runs alongside 3–5) | capture traffic between an original client and server on the maintainer's machine; transport, connection handshake, packet framing, compression; map the `NetworkableInfo` templates (`setNetworkableInfo WillyBodyInfo`, `ControlPointInfo`, …) to replicated fields; game-server query protocol | a network format spec (docs/formats, new) with a parser that decodes recorded sessions (tool + tests on synthetic packets) |
 | 3 | **B1. AI navigation** | read `<Map>/Pathfinding/` maps; bots route around obstacles | bots reach their flag on all levels; firefights per minute up sharply |
 | 4 | **C1. Audio** | `.wav` playback, `.ssc` sound scripts on templates (engines, weapons, impacts, radio) | every vehicle and weapon of bf1942 makes its sound |

@@ -7,7 +7,9 @@ if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE RelWithDebInfo)
 endif()
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
-  add_compile_options(-Wall -Wextra -Wconversion)
+  # No fused multiply-add contraction: the same arithmetic gives the same bits in every file and build (Jolt's
+  # -mfma reaches our sources through its usage requirements); simulations must replay exactly (ADR 0005).
+  add_compile_options(-Wall -Wextra -Wconversion -ffp-contract=off)
 endif()
 
 find_package(PkgConfig REQUIRED)
@@ -34,12 +36,18 @@ FetchContent_Declare(JoltPhysics
 FetchContent_MakeAvailable(JoltPhysics)
 target_compile_options(Jolt PRIVATE -w)  # third-party code; our -Wconversion is for our sources
 
-add_library(obf STATIC engine/rfa.cpp engine/vfs.cpp engine/dds.cpp engine/terrain.cpp engine/con.cpp engine/sm.cpp engine/scene.cpp engine/tm.cpp engine/anim.cpp engine/physics.cpp engine/damage.cpp engine/conquest.cpp)
+add_library(obf STATIC engine/rfa.cpp engine/vfs.cpp engine/dds.cpp engine/terrain.cpp engine/con.cpp engine/sm.cpp engine/scene.cpp engine/tm.cpp engine/anim.cpp engine/physics.cpp engine/damage.cpp engine/conquest.cpp engine/game.cpp)
 target_include_directories(obf PUBLIC engine)
 target_link_libraries(obf PRIVATE Jolt)
 
+add_library(obf_render STATIC engine/render.cpp)
+target_link_libraries(obf_render PUBLIC obf PRIVATE PkgConfig::EPOXY)
+
 add_executable(obf_mapview engine/mapview.cpp)
-target_link_libraries(obf_mapview PRIVATE obf PkgConfig::SDL2 PkgConfig::EPOXY)
+target_link_libraries(obf_mapview PRIVATE obf_render PkgConfig::SDL2)
+
+add_executable(obf_sim engine/sim.cpp)
+target_link_libraries(obf_sim PRIVATE obf)
 
 enable_testing()
 add_executable(test_engine engine/test_engine.cpp)

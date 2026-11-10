@@ -11,7 +11,8 @@
 
 ## Quality bar
 
-- Tests, engine build without warnings, engine tests and doc checks from the [SYSTEM_SUMMARY commands](SYSTEM_SUMMARY.md#commands) pass.
+- Tests, engine build without warnings, engine tests and doc checks from the [SYSTEM_SUMMARY commands](SYSTEM_SUMMARY.md#commands) pass; CI (`.github/workflows/ci.yml`) runs the same on every push.
+- Game changes: the level sweep still runs clean — `obf_sim` on every level of the three mods (`--play 2 --sim 120`), no errors. A refactor must reproduce `--shot` logs and images exactly (same build flags).
 
 ## Commits
 

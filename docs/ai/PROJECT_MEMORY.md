@@ -2,6 +2,12 @@
 
 Append-only. Newest first. At most 3 bullets per stage.
 
+## 2026-11-10 — consolidate (roadmap A)
+
+- `mapview.cpp` (~1,400 lines) split into `engine/game.*` (headless game layer), `engine/render.*` (GL) and thin `mapview.cpp`; new `obf_sim` runs the demos without a window; CI on GitHub.
+- Proven equivalent: old and new builds give identical `--shot` logs and images on five scenarios — after finding that moving code changed results by 1 ulp: Jolt's `-mfma` reaches our sources, so the compiler fused multiply-adds differently per file. Our code now builds with `-ffp-contract=off` (needed for replays and network sync).
+- Open: obf_render still includes game.h for its view types.
+
 ## 2026-11-10 — first network session attempt (E0)
 
 - Ran the original server and client on the maintainer's machine (allowed, maintainer remote): Berlin loads, but no packets captured — the client discovers LAN servers and connects to the reported address, bypassing a relay on `+joinServer`'s address.

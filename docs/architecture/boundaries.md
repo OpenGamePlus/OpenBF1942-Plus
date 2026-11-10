@@ -17,12 +17,16 @@
 | `engine/damage.*` | MaterialManager damage table | std only |
 | `engine/conquest.*` | flags and tickets | `con` |
 | `engine/physics.*` | Jolt world, vehicle parts as forces ([ADR 0004](adr/0004-jolt-physics.md)) | `scene`, `sm`, `terrain`, `con`, `math`, Jolt |
-| `engine/mapview.cpp` | executable: window, GL, camera | all of the above, SDL2, epoxy |
+| `engine/game.*` | game layer: vehicles, soldiers, bots, weapons, damage, conquest, AI, demos, camera | `physics`, `scene`, `damage`, `conquest`, `con`, `terrain` |
+| `engine/render.*` (library `obf_render`) | OpenGL renderer: terrain, meshes, skinning, sky, tracers | `game` (views), `scene`, `sm`, `tm`, `anim`, `dds`, epoxy |
+| `engine/mapview.cpp` | executable: arguments, window, input, loop | `game`, `render`, SDL2 |
+| `engine/sim.cpp` | executable `obf_sim`: the game without window or GL | `game` |
 | `tools/*.py` | Python reference implementations | `rfa` ← `con` ← `sm`, `tm`, `anim` |
 
 ## Rules
 
-- Library modules (everything except `mapview.cpp` and `test_engine.cpp`) do not include SDL or GL headers; only executables do.
+- No module includes SDL except `mapview.cpp`; only `render.cpp` and `mapview.cpp`'s window code touch GL. The game layer (`obf`) runs headless (`obf_sim`, tests).
+- Our sources build with `-ffp-contract=off`: no fused multiply-add, so a simulation gives the same bits in every file and build (needed for replays and networking, [ADR 0005](adr/0005-network-compatibility.md)).
 - Only `physics.cpp` includes Jolt headers; the rest of the engine sees `physics.h` only.
 - No cycles between modules.
 - The C++ engine never depends on `tools/`; the tools are a reference, not a build input.
