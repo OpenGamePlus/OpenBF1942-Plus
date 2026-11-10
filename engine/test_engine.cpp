@@ -388,6 +388,27 @@ int main() {
         assert(std::count_if(hits.begin(), hits.end(), [&](const Physics::Hit& h) { return h.character == ch; }) == 1);
     }
 
+    // Parachute: falls freely, then settles near sqrt(g / k) = 6.4 m/s for k = 24 / 100; landing speed reported once.
+    {
+        Heightmap hm;
+        hm.n = 32, hm.y_scale = 1, hm.h.assign(32 * 32, 0);
+        Physics phys(hm, 128, -1);
+        int ch = phys.add_character(64, 300, 64);
+        float p0[3], p1[3];
+        for (int i = 0; i < 120; ++i) phys.step(1.0f / 60);
+        phys.open_parachute(ch, 0.24f);
+        assert(phys.parachute_open(ch));
+        for (int i = 0; i < 600; ++i) phys.step(1.0f / 60);
+        phys.character_position(ch, p0);
+        phys.step(1.0f / 60);
+        phys.character_position(ch, p1);
+        assert(std::fabs((p0[1] - p1[1]) * 60 - 6.39f) < 0.2f);
+        for (int i = 0; i < 60 * 40 && !phys.character_on_ground(ch); ++i) phys.step(1.0f / 60);
+        phys.step(1.0f / 60);
+        float land = phys.take_landing(ch);
+        assert(phys.character_on_ground(ch) && !phys.parachute_open(ch) && land > 5.5f && land < 7 && phys.take_landing(ch) == 0);
+    }
+
     // Soldier: lands on the ground, walks 5 m in 1 s, jumps, and swims with the head above water.
     {
         Heightmap hm;

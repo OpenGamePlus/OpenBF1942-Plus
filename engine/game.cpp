@@ -75,6 +75,15 @@ Game::Game(const Vfs& vfs_, Con& con_, const Heightmap& hm_, const TerrainInfo& 
             ++sol_parts;
             scene.push_back(std::move(item));
         }
+        chute_first = scene.size();
+        for (DrawItem& item : build_object(con, vfs, "Parachute", translate(0, -10000, 0), skipped)) ++chute_parts, scene.push_back(std::move(item));
+        if (const ConObject* st = object_template(soldier_tmpl)) {
+            float drag = 0, mass = 100;
+            for (auto& [k, a] : st->props)
+                if (k == "setparachutedrag" && !a.empty()) drag = static_cast<float>(std::atof(a[0].c_str()));
+                else if (k == "mass" && !a.empty()) mass = std::max(1.0f, static_cast<float>(std::atof(a[0].c_str())));
+            chute_k = std::isfinite(drag) ? std::max(0.0f, drag) / mass : 0.0f;
+        }
         std::printf("play %s (team %d, kit %s): %zu parts\n", soldier_tmpl.c_str(), team,
                     kits.count({team, opt.kit}) ? kits[{team, opt.kit}].c_str() : "-", sol_parts);
     }
@@ -448,6 +457,12 @@ std::string Game::driving(float pos[3], float& control) const {
     return v.name;
 }
 
+// shortcut: guessed; no damage landing under 10 m/s (a 5 m drop), a full soldier's hit points at 20 m/s (20 m)
+float Game::fall_damage(int character, float full) {
+    float v = phys.take_landing(character);
+    return v > 10 ? full * (v - 10) / 10 : 0.0f;
+}
+
 void Game::player_dies() {
     player_dead = true, respawn_at = game_time() + 3;
     note("You were killed");
@@ -734,6 +749,13 @@ void Game::step(float t, float dt, const GameInput& in) {
     if (player >= 0) {
         if (in.select >= 0 && cur < 0) select(static_cast<size_t>(in.select));
         if (in.prone) lying = !lying;
+        // Space while falling opens the parachute (shortcut: the original's key and opening rules unread).
+        if (in.jump && cur < 0 && !player_dead && !phys.character_on_ground(player) && chute_k > 0) phys.open_parachute(player, chute_k);
+        if (float d = fall_damage(player, hitpoints(soldier_tmpl)); d > 0 && !player_dead) {
+            player_hp -= d;
+            std::printf("fall: %.1f damage\n", d);
+            if (player_hp <= 0) player_dies();
+        }
         if (int want = lying ? 2 : in.crouch ? 1 : 0; cur < 0 && !player_dead && want != posture && phys.set_posture(player, want)) posture = want;
         placed_charges(in.detonate);
         hand_ammo.tick(t, hand);
@@ -887,6 +909,12 @@ void Game::pose() {
                             : move_r > 0.1f ? "lb_straferight" : move_r < -0.1f ? "lb_strafeleft" : "lb_stand";
         }
         soldiers.push_back({sol_first, sol_parts, lower_state, posture == 2 ? "ub_lie" : posture == 1 ? "ub_crouch" : "", -1});
+        if (chute_parts) {
+            bool open = cur < 0 && phys.parachute_open(player);
+            Mat4 cw = open ? translate(p[0], p[1], p[2]) * rotation_ypr(cam.yaw * 57.29578f, 0, 0) : translate(0, -10000, 0);
+            std::vector<DrawItem> cp = build_object(con, vfs, "Parachute", cw, skipped);
+            for (size_t i = 0; i < cp.size() && i < chute_parts; ++i) scene[chute_first + i].world = cp[i].world;
+        }
         if (cur < 0) {  // third-person camera over the shoulder
             float dx = std::sin(cam.yaw) * std::cos(cam.pitch), dy = std::sin(cam.pitch), dz = std::cos(cam.yaw) * std::cos(cam.pitch);
             cam.x = p[0] - dx * 4.5f, cam.y = p[1] + eye_height() + 0.2f - dy * 4.5f, cam.z = p[2] - dz * 4.5f;

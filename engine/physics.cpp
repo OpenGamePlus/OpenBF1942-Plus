@@ -402,6 +402,9 @@ struct Physics::Impl {
         Vec3 want = Vec3::sZero();
         bool jump = false, active = true;
         int posture = 0;
+        float chute = 0;    // parachute drag per mass; 0 closed
+        float fall = 0;     // downward speed last step in the air
+        float landing = 0;  // downward speed at the last touch-down
     };
     std::vector<Soldier> soldiers;
     void soldier(Soldier& s);
@@ -936,13 +939,17 @@ void Physics::Impl::soldier(Soldier& s) {
     Vec3 g = sys.GetGravity(), vel = ch.GetLinearVelocity();
     Vec3 v = Vec3(0, vel.GetY(), 0);
     if (ch.GetGroundState() == CharacterBase::EGroundState::OnGround && vel.GetY() - ch.GetGroundVelocity().GetY() < 0.1f) {
+        if (s.fall > 0) s.landing = s.fall, s.fall = 0;
+        s.chute = 0;
         v = ch.GetGroundVelocity();
         if (s.jump) v += Vec3(0, 4.5f, 0);
     } else {
         v += g * kStep;
+        if (s.chute > 0 && v.GetY() < 0) v.SetY(v.GetY() + s.chute * v.GetY() * v.GetY() * kStep);  // drag up, against the fall
+        s.fall = std::max(0.0f, -v.GetY());
     }
     float feet = static_cast<float>(ch.GetPosition().GetY());
-    if (feet < water - 1.4f) v.SetY(std::max(v.GetY(), (water - 1.4f - feet) * 2.0f));  // swim: head above the surface
+    if (feet < water - 1.4f) v.SetY(std::max(v.GetY(), (water - 1.4f - feet) * 2.0f)), s.fall = 0, s.chute = 0;  // swim: head above the surface
     s.jump = false;
     ch.SetLinearVelocity(v + s.want);
     CharacterVirtual::ExtendedUpdateSettings es;
@@ -955,6 +962,10 @@ Ref<Shape> soldier_shape(int posture) {  // a capsule of radius 0.3 standing on 
     return new RotatedTranslatedShape(Vec3(0, h / 2, 0), Quat::sIdentity(), new CapsuleShape(h / 2 - 0.3f, 0.3f));
 }
 }  // namespace
+
+void Physics::open_parachute(int character, float k) { p_->soldiers.at(static_cast<size_t>(character)).chute = std::max(0.0f, k); }
+bool Physics::parachute_open(int character) const { return p_->soldiers.at(static_cast<size_t>(character)).chute > 0; }
+float Physics::take_landing(int character) { return std::exchange(p_->soldiers.at(static_cast<size_t>(character)).landing, 0.0f); }
 
 bool Physics::set_posture(int character, int posture) {
     auto& s = p_->soldiers.at(static_cast<size_t>(character));

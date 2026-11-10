@@ -126,6 +126,12 @@ Postures (left ctrl held crouches, Z toggles prone):
 - Animations: `Lb_Crouch*` / `Ub_Crouch` and `Lb_Lie*` / `Ub_Lie` (from `animationStatesCrouching.con` and `animationStatesLie.con`). The transitions (`Lb_StandToCrouch`, …) are not played.
 - Hits on a crouching or prone player are mapped to head, chest or limbs as if standing.
 
+Parachute and falls:
+- `setParachuteDrag 24` is used as a quadratic drag over `mass 100`, so the soldier sinks at about 6.4 m/s. `setParachuteSpeed 30` is not read.
+- Space while falling opens it, and it closes on landing. The `Parachute` model is drawn above the soldier while it is open.
+- Landing faster than 10 m/s costs hit points, all of them at 20 m/s; both values are guessed.
+- Bots take no fall damage.
+
 Getting in: the nearest vehicle within 5 m + half its length (not yet the `EntryPoint` radius). Getting out: at the vehicle's `setSoldierExitLocation` (Willys: −1.5/0/−0.8, left rear).
 
 ## Parked vehicles

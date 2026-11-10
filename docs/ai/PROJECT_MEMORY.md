@@ -2,6 +2,11 @@
 
 Append-only. Newest first. At most 3 bullets per stage.
 
+## 2026-11-10 — parachutes and fall damage (roadmap B2)
+
+- `setParachuteDrag` read as quadratic drag (24 / 100 kg: 6.4 m/s descent). Space while falling opens it, and the model is drawn above the soldier. Landings above 10 m/s hurt; guessed.
+- Open: bots take no fall damage; the original's opening rules are unread.
+
 ## 2026-11-10 — crouch and prone (roadmap B2)
 
 - The player crouches (ctrl) and lies down (Z). The capsule shrinks, so shots pass over a prone soldier. Speeds are guessed, standing up needs room, and the crouch / lie animation states play.

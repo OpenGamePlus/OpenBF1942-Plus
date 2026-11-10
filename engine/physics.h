@@ -146,6 +146,10 @@ public:
     // 0 stand (1.8 m), 1 crouch (1.2 m), 2 prone (0.7 m capsule; shortcut: upright, not lying along the body).
     // False, posture kept, when there is no room (standing up under a low roof).
     bool set_posture(int character, int posture);
+    // Parachute: quadratic drag on the fall, k = setParachuteDrag / mass (24 / 100: about 6.4 m/s); closes on landing.
+    void open_parachute(int character, float k);
+    bool parachute_open(int character) const;
+    float take_landing(int character);  // downward speed of the last landing (m/s), then 0
     bool character_on_ground(int character) const;
 
 private:

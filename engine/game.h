@@ -197,6 +197,9 @@ private:
     void refill_loadout();
     bool fire_held = false;  // trigger held last step (fireOnce weapons)
     int posture = 0;         // the player's: 0 stand, 1 crouch, 2 prone
+    size_t chute_first = 0, chute_parts = 0;  // the parachute's draw items (far below while closed)
+    float chute_k = 0;                         // setParachuteDrag / mass of the player's soldier
+    float fall_damage(int character, float full);  // hit points lost on the last landing
     bool lying = false;      // prone toggled on
     float eye_height() const { return posture == 2 ? 0.35f : posture == 1 ? 1.0f : 1.5f; }
     static float body_height(int p) { return p == 2 ? 0.7f : p == 1 ? 1.2f : 1.8f; }  // as the physics capsules
