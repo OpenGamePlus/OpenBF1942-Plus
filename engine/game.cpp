@@ -572,7 +572,7 @@ float Game::fall_damage(int character, float full) {
 void Game::arm_states(SoldierView& v, const std::string& w, const WeaponDef& def, const Ammo& ammo, float shot, int pose) const {
     if (ammo.reloading(now)) {
         v.upper = (pose == 2 ? "ub_liereload" : "ub_standreload") + w, v.upper_hold = ammo.reload_until - def.reload;
-        v.weapon = "weaponreload" + w, v.weapon_hold = v.upper_hold;
+        v.weapon = "weaponreload" + w, v.weapon_hold = v.upper_hold, v.span = def.reload;
     } else if (now - shot < std::max(0.25f, def.interval * 1.5f)) {  // looping fire states while shots keep coming
         v.upper = (pose == 2 ? "ub_liefire" : "ub_fire") + w;
         v.weapon = "weaponfire" + w;

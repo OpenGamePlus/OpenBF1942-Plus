@@ -54,6 +54,7 @@ struct SoldierView {
     bool first_person = false;               // play the states' first-person animations
     float fov = 0;                           // first person: field of view of the arms (set1pFov), radians
     float upper_hold = -1;                   // >= 0: the upper state plays once from this time (reloads)
+    float span = 0;                          // > 0: those play-once states (upper and weapon) last this long (s)
     std::string weapon;                      // state animating the held weapon's skeleton (WeaponReloadThompson)
     float weapon_hold = -1;                  // as upper_hold, for the weapon state
 };

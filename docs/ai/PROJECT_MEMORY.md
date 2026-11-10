@@ -5,7 +5,7 @@ Append-only. Newest first. At most 3 bullets per stage.
 ## 2026-11-10 — first live test by the maintainer
 
 - They saw the map and heard the shots; the reload animation was almost complete. Two bugs fixed: a shot left a sound looping, because the patches were merged; mouse look needed the right button.
-- Patches are now used by role (0 shot, 1 reload, 2 distant, 5 automatic loop with `stop FinishSample`). Playing captures the mouse (F10 frees it).
+- Patches are now used by role (0 shot, 1 reload, 2 distant, 5 automatic loop with `stop FinishSample`). Playing captures the mouse (F10 frees it). Second test: loops gone, third person fine; the mouse feels inverted (axis unknown; the code turns right with the mouse and looks down with it), the player model flickers, textures look incomplete. Reload animations were cut halfway and are now fitted to `reloadTime`.
 
 ## 2026-11-10 — first network recording (E0)
 

@@ -79,7 +79,7 @@ Per weapon, from the Thompson states through `copyState2`:
 | `Ub_StandReload<w>` / `Ub_LieReload<w>` | once (`c_AsmPlayOnce`) | from the start of a reload |
 | `WeaponFire<w>`, `WeaponReload<w>` | on the weapon's own skeleton (bolt, magazine) | the same moments |
 
-The upper body runs at its own speed and start time while the legs keep theirs; `pose()` takes one frame per animation. The state machine's own transitions (`addTransitionOne c_PIFire …`) are not interpreted.
+Reloads (the arms and the weapon's own animation) are stretched to the weapon's `reloadTime`. The 3p reload animations (35–37 frames at speed 0.4) match it at 25 fps, but the 1p ones have 99–231 frames: at a fixed rate they were cut off halfway through the new magazine, as the maintainer saw. The upper body runs at its own speed and start time while the legs keep theirs; `pose()` takes one frame per animation. The state machine's own transitions (`addTransitionOne c_PIFire …`) are not interpreted.
 
 ## First person
 

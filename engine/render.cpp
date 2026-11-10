@@ -253,6 +253,7 @@ struct Animated {
     std::vector<std::shared_ptr<Animation>> anims0;  // as loaded from the item's states
     std::vector<Mat4> bones;  // last pose (model space)
     float upper_speed = 0, upper_hold = -1;  // the upper-body layer's own speed (0: the item's) and play-once start
+    float span = 0;                          // > 0: the play-once upper layer is stretched to this many seconds
 };
 
 // Tree mesh: all three groups share one buffer; group 3 sprites carry corner offsets.
@@ -585,7 +586,7 @@ void Renderer::Impl::draw(const std::vector<DrawItem>& scene, const Camera& cam,
                 if (anim_of_item[i] < 0) continue;
                 Animated& a = animated[static_cast<size_t>(anim_of_item[i])];
                 if (a.anims0.empty()) continue;
-                a.anims = a.anims0, a.hold = sv.hold, a.upper_speed = 0, a.upper_hold = sv.upper_hold;
+                a.anims = a.anims0, a.hold = sv.hold, a.upper_speed = 0, a.upper_hold = sv.upper_hold, a.span = sv.span;
                 if (auto an = sv.lower.empty() ? nullptr : state_anim(sv.lower, sv.first_person)) a.anims[0] = an;
                 float us = 0;
                 if (auto an = sv.upper.empty() || a.anims.size() < 2 ? nullptr : state_anim(sv.upper, sv.first_person, &us))
@@ -609,7 +610,11 @@ void Renderer::Impl::draw(const std::vector<DrawItem>& scene, const Camera& cam,
             std::vector<float> frames(list.size(), frame);
             if (list.size() >= 2 && a.hold == -1 && a.upper_speed > 0) {  // the upper body at its own speed / start
                 float s = a.upper_speed;
-                frames[1] = a.upper_hold >= 0 ? std::clamp((seconds - a.upper_hold) * 25.0f * s, 0.0f, static_cast<float>(list[1]->frames) - 1.01f)
+                // Reloads fill the weapon's reloadTime: 3p reloads (about 36 frames at speed 0.4) match it at 25 fps,
+                // 1p ones have 4-6 times the frames, so a fixed rate cut them off before the new magazine went in.
+                float last = static_cast<float>(list[1]->frames) - 1.01f;
+                frames[1] = a.upper_hold >= 0 ? (a.span > 0 ? std::clamp((seconds - a.upper_hold) / a.span, 0.0f, 1.0f) * last
+                                                             : std::clamp((seconds - a.upper_hold) * 25.0f * s, 0.0f, last))
                                               : (seconds * 25.0f + a.phase) * s;
             }
             auto world = pose(*a.skeleton, list, frames, a.biped);
@@ -648,8 +653,9 @@ void Renderer::Impl::draw(const std::vector<DrawItem>& scene, const Camera& cam,
                 std::vector<const Animation*> wl;
                 std::vector<float> wf;
                 if (wanim)
-                    wl.push_back(wanim.get()), wf.push_back(sv.weapon_hold >= 0 ? std::clamp((seconds - sv.weapon_hold) * 25.0f * wspeed, 0.0f, static_cast<float>(wanim->frames) - 1.01f)
-                                                                                 : seconds * 25.0f * wspeed);
+                    wl.push_back(wanim.get()), wf.push_back(sv.weapon_hold < 0 ? seconds * 25.0f * wspeed
+                                                            : sv.span > 0 ? std::clamp((seconds - sv.weapon_hold) / sv.span, 0.0f, 1.0f) * (static_cast<float>(wanim->frames) - 1.01f)
+                                                                          : std::clamp((seconds - sv.weapon_hold) * 25.0f * wspeed, 0.0f, static_cast<float>(wanim->frames) - 1.01f));
                 std::vector<Mat4> wp = pose(*ws, wl, wf);
                 size_t bi = 1;
                 for (size_t b = 0; b < ws->size(); ++b)
