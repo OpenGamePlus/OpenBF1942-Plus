@@ -40,8 +40,16 @@ Where no face is found the `PlayerControlObject`'s `material` is used. An M1 Gar
 
 At 0 `hitpoints` a vehicle is destroyed: it shows the last child of its `LodObject` when that is a wreck (`WillyWreck`), cannot be driven, and its driver is put out.
 
+## Teams, kits and soldiers
+
+A level's `Init.con` names each team's soldier (`game.setTeamSkin <team> <BFSoldier>`, El Alamein: 1 `GermanDesertSoldier`, 2 `BritishSoldier`) and five kits per team (`game.setKit <team> <0 scout | 1 assault | 2 anti-tank | 3 medic | 4 engineer> <Kit>`). A `Kit` adds `KitPart`s (helmet, packs) and `HandFireArms`; the first one with a projectile is taken as the primary (`GB_Assault`: `Bar1918`, then `Colt`, knife, grenades).
+
+Soldier spawn points: a `SpawnPoint`'s `setGroup` matches a `ControlPoint` template's `spawnGroupId`; that control point's `team` (0 = nobody yet) owns it. The engine stands one enemy soldier on each spawn point of the other team (911 on the 78 levels; none on the Pacific maps, whose soldiers start on carriers).
+
+Soldiers are hit through a body that follows their capsule. Body part by hit height (shortcut for `setSkeletonCollisionBone`): head above 1.45 m → material 40, chest above 0.85 m → 41, legs → 42. A BAR bullet does 14.4 to a chest: three hits kill (30 hit points). Dead soldiers play `Lb/Ub_DieChestStand` once and stay down.
+
 ## Open questions
 
 - Explosion radius (`material2` applies to the target hit only), effects (`e_*` templates), sounds.
 - Magazines and reloading; projectile drag; `fireingForce`, `recoil*`.
-- Kits: which weapon each soldier carries (everyone has an M1 Garand for now); soldiers as targets.
+- Secondary weapons and switching; held weapon drawing; soldiers spawning on vehicles (carriers); real skeleton hit boxes.

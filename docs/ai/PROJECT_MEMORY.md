@@ -2,6 +2,12 @@
 
 Append-only. Newest first. At most 3 bullets per stage.
 
+## 2026-11-10 — teams, kits, enemy soldiers
+
+- `--play 1|2` takes the team's soldier (`game.setTeamSkin`) and kit primary (`game.setKit`, `--kit`); enemies stand on the other team's spawn points (SpawnPoint group → ControlPoint team) and can be shot dead.
+- Soldiers are hittable through a Jolt inner body on their character; killed ones are parked under the world so shots pass.
+- Open: AI, spawning on carriers, secondary weapons.
+
 ## 2026-11-10 — weapons and damage
 
 - Damage = materialDamage × damageMod(attGroup, defGroup) from the MaterialManager files the engine runs; the target is the armour material of the collision face hit. Sherman shells need 3 front / 2 side / 1 rear hits on a Sherman and 13 on a Tiger's front: the retail armour design shows through.

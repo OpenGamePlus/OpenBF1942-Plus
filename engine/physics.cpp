@@ -398,7 +398,7 @@ struct Physics::Impl {
     void soldier(Soldier& s);
     struct Shot {
         Vec3 p, v;
-        int material, material2, ignore;
+        int material, material2, ignore, ignore_character;
         float ttl;
     };
     std::vector<Shot> shots;
@@ -797,13 +797,25 @@ void Physics::Impl::projectiles() {
         bool done = s.ttl <= 0;
         if (!done) {
             BodyID ignore = s.ignore >= 0 && static_cast<size_t>(s.ignore) < vehicles.size() ? vehicles[static_cast<size_t>(s.ignore)].id : BodyID();
-            IgnoreSingleBodyFilter filter(ignore);
+            BodyID ignore_c = s.ignore_character >= 0 && static_cast<size_t>(s.ignore_character) < soldiers.size()
+                                  ? soldiers[static_cast<size_t>(s.ignore_character)].ch->GetInnerBodyID() : BodyID();
+            struct Two final : BodyFilter {
+                BodyID a, b;
+                bool ShouldCollide(const BodyID& id) const override { return id != a && id != b; }
+                bool ShouldCollideLocked(const Body& body) const override { return ShouldCollide(body.GetID()); }
+            } filter;
+            filter.a = ignore, filter.b = ignore_c;
             RRayCast ray{RVec3(s.p), step};
             RayCastResult hit;
             Physics::Hit h;
             h.material = s.material, h.material2 = s.material2;
             if (sys.GetNarrowPhaseQuery().CastRay(ray, hit, {}, {}, filter)) {
                 RVec3 at = ray.GetPointOnRay(hit.mFraction);
+                for (size_t k = 0; k < soldiers.size(); ++k)
+                    if (soldiers[k].ch->GetInnerBodyID() == hit.mBodyID) {
+                        h.character = static_cast<int>(k);
+                        h.height = static_cast<float>(at.GetY() - soldiers[k].ch->GetPosition().GetY());
+                    }
                 for (size_t k = 0; k < vehicles.size(); ++k)
                     if (vehicles[k].id == hit.mBodyID) {
                         h.vehicle = static_cast<int>(k);
@@ -828,10 +840,12 @@ void Physics::Impl::projectiles() {
     }
 }
 
-void Physics::fire(const float pos[3], const float vel[3], int material, int material2, float ttl, int ignore_vehicle) {
+void Physics::fire(const float pos[3], const float vel[3], int material, int material2, float ttl, int ignore_vehicle,
+                   int ignore_character) {
     for (int k = 0; k < 3; ++k)
         if (!std::isfinite(pos[k]) || !std::isfinite(vel[k])) return;
-    p_->shots.push_back({Vec3(pos[0], pos[1], pos[2]), Vec3(vel[0], vel[1], vel[2]), material, material2, ignore_vehicle, std::clamp(ttl, 0.0f, 30.0f)});
+    p_->shots.push_back({Vec3(pos[0], pos[1], pos[2]), Vec3(vel[0], vel[1], vel[2]), material, material2, ignore_vehicle,
+                         ignore_character, std::clamp(ttl, 0.0f, 30.0f)});
 }
 
 std::vector<Physics::Hit> Physics::take_hits() { return std::exchange(p_->hits, {}); }
@@ -864,6 +878,8 @@ int Physics::add_character(float x, float y, float z) {
     Ref<CharacterVirtualSettings> cs = new CharacterVirtualSettings();
     cs->mShape = new RotatedTranslatedShape(Vec3(0, 0.9f, 0), Quat::sIdentity(), new CapsuleShape(0.6f, 0.3f));
     cs->mMaxSlopeAngle = DegreesToRadians(50.0f);
+    cs->mInnerBodyShape = cs->mShape;  // a body in the broad phase, so projectiles can hit soldiers
+    cs->mInnerBodyLayer = kMoving;
     Impl::Soldier s;
     s.ch = new CharacterVirtual(cs, RVec3(x, y, z), Quat::sIdentity(), &p_->sys);
     p_->soldiers.push_back(s);
@@ -882,7 +898,14 @@ void Physics::place_character(int character, float x, float y, float z) {
     s.ch->SetLinearVelocity(Vec3::sZero());
 }
 
-void Physics::set_character_active(int character, bool active) { p_->soldiers.at(static_cast<size_t>(character)).active = active; }
+void Physics::set_character_active(int character, bool active) {
+    auto& s = p_->soldiers.at(static_cast<size_t>(character));
+    s.active = active;
+    // Its inner body would still stop shots and vehicles: park it with the character far below the world.
+    if (!active) s.ch->SetPosition(RVec3(s.ch->GetPosition().GetX(), -10000, s.ch->GetPosition().GetZ()));
+}
+
+void Physics::kill_character(int character) { set_character_active(character, false); }
 
 void Physics::character_position(int character, float out[3]) const {
     RVec3 p = p_->soldiers.at(static_cast<size_t>(character)).ch->GetPosition();

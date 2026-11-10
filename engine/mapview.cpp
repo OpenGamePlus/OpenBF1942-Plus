@@ -266,6 +266,7 @@ struct Animated {
     std::vector<std::shared_ptr<Animation>> anims;
     float speed = 1, phase = 0;
     bool biped = false;
+    float hold = -1;  // >= 0: play once from this time and stay on the last frame (deaths)
 };
 
 // Tree mesh: all three groups share one buffer; group 3 sprites carry corner offsets.
@@ -285,7 +286,7 @@ std::unique_ptr<GpuMesh> upload_tm(const TmMesh& m, Textures& tex) {
 int run(int argc, char** argv) {
     if (argc < 4) {
         std::fprintf(stderr,
-                     "usage: obf_mapview <BF1942_DIR> <mod> <level> [--shot out.ppm] [--cam x y z yaw pitch] [--mode conquest|ctf|tdm|coop] [--soldier <template>] [--drive <vehicle>] [--play <soldier>] [--fire-ahead] [--collision] [--no-objects]\n"
+                     "usage: obf_mapview <BF1942_DIR> <mod> <level> [--shot out.ppm] [--cam x y z yaw pitch] [--mode conquest|ctf|tdm|coop] [--soldier <template>] [--drive <vehicle>] [--play <team 1|2 or soldier>] [--kit 0-4] [--fire-ahead] [--collision] [--no-objects]\n"
                      "  right mouse: look, WASD/QE: move (or drive), shift: fast, C: collision meshes, esc: quit\n"
                      "  aircraft: W/S throttle (held), arrows pitch (up = nose down) and roll, A/D rudder; right mouse aims turrets\n"
                      "  --shot with --drive: settles 2 s, drives 4 s (last 2 s steering right), prints the track;\n"
@@ -301,6 +302,7 @@ int run(int argc, char** argv) {
     bool objects = true, show_collision = false;
     std::string mode = "conquest", soldier, drive, play;
     bool look_demo = false;  // --shot vehicle demo: keep the gun straight ahead (--fire-ahead)
+    int kit = 1;             // --kit: 0 scout, 1 assault, 2 anti-tank, 3 medic, 4 engineer
     for (int i = 4; i < argc; ++i) {
         if (!std::strcmp(argv[i], "--shot") && i + 1 < argc) shot = argv[++i];
         else if (!std::strcmp(argv[i], "--no-objects")) objects = false;
@@ -310,6 +312,7 @@ int run(int argc, char** argv) {
         else if (!std::strcmp(argv[i], "--drive") && i + 1 < argc) drive = argv[++i];
         else if (!std::strcmp(argv[i], "--play") && i + 1 < argc) play = argv[++i];
         else if (!std::strcmp(argv[i], "--fire-ahead")) look_demo = true;
+        else if (!std::strcmp(argv[i], "--kit") && i + 1 < argc) kit = std::clamp(std::atoi(argv[++i]), 0, 4);
         else if (!std::strcmp(argv[i], "--cam") && i + 5 < argc) {
             cx = std::stof(argv[i + 1]), cy = std::stof(argv[i + 2]), cz = std::stof(argv[i + 3]);
             yaw = std::stof(argv[i + 4]), pitch = std::stof(argv[i + 5]);
@@ -450,16 +453,93 @@ int run(int argc, char** argv) {
     auto hide_1p = [](const std::string& t) { return t == "parachute" || t.rfind("1p", 0) == 0 || t.find("1pbody") != std::string::npos; };
     int player = -1;
     size_t sol_first = scene.size(), sol_parts = 0;
+    // Teams (level Init.con): soldier template per team (game.setTeamSkin), kit per team and class (game.setKit).
+    // --play 1 / 2 picks a team; --play <template> a soldier, team by its skin (else 2).
+    std::map<int, std::string> team_skins;
+    std::map<std::pair<int, int>, std::string> kits;
+    for (auto& [m, a] : con.settings["game"]) {
+        if (m == "setteamskin" && a.size() >= 2) team_skins[std::atoi(a[0].c_str())] = a[1];
+        if (m == "setkit" && a.size() >= 3) kits[{std::atoi(a[0].c_str()), std::atoi(a[1].c_str())}] = a[2];
+    }
+    auto object_template = [&](const std::string& n) -> const ConObject* {
+        auto& ot = con.templates["objecttemplate"];
+        auto it = ot.find(lower(n));
+        return it == ot.end() ? nullptr : &it->second;
+    };
+    auto hitpoints = [&](const std::string& n) {
+        const ConObject* t = object_template(n);
+        float hp = 30;
+        if (t)
+            for (auto& [k, a] : t->props)
+                if (k == "hitpoints" && !a.empty()) hp = static_cast<float>(std::atof(a[0].c_str()));
+        return std::isfinite(hp) && hp > 0 ? hp : 30.0f;
+    };
+    int team = 2;
+    std::string soldier_tmpl = play, weapon_name = "M1Garand";
+    if (play == "1" || play == "2") team = std::atoi(play.c_str()), soldier_tmpl = team_skins.count(team) ? team_skins[team] : "";
+    else
+        for (auto& [t, sk] : team_skins)
+            if (lower(sk) == lower(play)) team = t;
+    if (!play.empty() && soldier_tmpl.empty()) throw std::runtime_error("--play " + play + ": the level sets no soldier for that team");
+    if (const ConObject* k = kits.count({team, kit}) ? object_template(kits[{team, kit}]) : nullptr)
+        for (auto& [m, a] : k->props)  // the kit's first weapon with a projectile is its primary
+            if (m == "addtemplate" && !a.empty() && !weapon_def(con, a[0]).name.empty()) {
+                weapon_name = a[0];
+                break;
+            }
     if (objects && !play.empty()) {
         float sx = cx < 0 ? info.world_size * 0.15f : cx, sz = cx < 0 ? info.world_size * 0.15f : cz;
         float cell = info.world_size / static_cast<float>(hm.n);
         int r = std::clamp(static_cast<int>(sz / cell), 0, hm.n - 1), c = std::clamp(static_cast<int>(sx / cell), 0, hm.n - 1);
         player = phys.add_character(sx, std::max(hm.height(r, c), info.water_level - 1.4f) + 0.5f, sz);
-        for (DrawItem& item : build_object(con, vfs, play, Mat4::identity(), skipped, nullptr, hide_1p)) {
+        for (DrawItem& item : build_object(con, vfs, soldier_tmpl, Mat4::identity(), skipped, nullptr, hide_1p)) {
             ++sol_parts;
             scene.push_back(std::move(item));
         }
-        std::printf("play %s: %zu parts\n", play.c_str(), sol_parts);
+        std::printf("play %s (team %d, kit %s): %zu parts\n", soldier_tmpl.c_str(), team,
+                    kits.count({team, kit}) ? kits[{team, kit}].c_str() : "-", sol_parts);
+    }
+    // Enemies: one soldier of the other team standing at each of its spawn points. A SpawnPoint's setGroup is a
+    // ControlPoint's spawnGroupId; that control point's team owns it (team 0: nobody yet).
+    struct Enemy {
+        int ch = -1;
+        std::string tmpl;
+        size_t first = 0, parts = 0;
+        float hp = 30, yaw = 0, pos[3] = {};
+        bool dead = false;
+        std::vector<size_t> anims;
+    };
+    std::vector<Enemy> enemies;
+    if (player >= 0) {
+        std::map<int, int> group_team;
+        for (auto& [n, t] : con.templates["objecttemplate"]) {
+            if (lower(t.type) != "controlpoint") continue;
+            int g = -1, tm = 0;
+            for (auto& [k, a] : t.props)
+                if (!a.empty() && k == "spawngroupid") g = std::atoi(a[0].c_str());
+                else if (!a.empty() && k == "team") tm = std::atoi(a[0].c_str());
+            if (g >= 0) group_team[g] = tm;
+        }
+        for (auto& inst : con.instances) {
+            const ConObject* t = inst.deleted ? nullptr : object_template(inst.name);
+            if (!t || lower(t->type) != "spawnpoint") continue;
+            int g = -1;
+            for (auto& [k, a] : t->props)
+                if (k == "setgroup" && !a.empty()) g = std::atoi(a[0].c_str());
+            auto gt = group_team.find(g);
+            if (gt == group_team.end() || gt->second == 0 || gt->second == team || !team_skins.count(gt->second)) continue;
+            float pos[3] = {}, rot[3] = {};
+            for (auto& [k, a] : inst.props)
+                if (k == "absoluteposition" && !a.empty()) parse_vec3(a[0], pos);
+                else if (k == "rotation" && !a.empty()) parse_vec3(a[0], rot);
+            Enemy e;
+            e.tmpl = team_skins[gt->second], e.yaw = rot[0], e.hp = hitpoints(e.tmpl), e.first = scene.size();
+            std::copy(pos, pos + 3, e.pos);
+            e.ch = phys.add_character(pos[0], pos[1] + 0.1f, pos[2]);
+            for (DrawItem& item : build_object(con, vfs, e.tmpl, Mat4::identity(), skipped, nullptr, hide_1p)) ++e.parts, scene.push_back(std::move(item));
+            enemies.push_back(std::move(e));
+        }
+        std::printf("enemies: %zu soldiers at the other team's spawn points\n", enemies.size());
     }
 
     if (SDL_Init(SDL_INIT_VIDEO) != 0) throw std::runtime_error(SDL_GetError());
@@ -632,6 +712,9 @@ int run(int argc, char** argv) {
     std::vector<size_t> player_anims;
     for (size_t ai = 0; ai < animated.size(); ++ai)
         if (animated[ai].item >= sol_first && animated[ai].item < sol_first + sol_parts) player_anims.push_back(ai);
+    for (Enemy& e : enemies)
+        for (size_t ai = 0; ai < animated.size(); ++ai)
+            if (animated[ai].item >= e.first && animated[ai].item < e.first + e.parts) e.anims.push_back(ai);
     auto state_anim = [&](const std::string& name) -> std::shared_ptr<Animation> {
         auto st = states.find(name);
         if (st == states.end() || !vfs.has(st->second.baf)) return nullptr;
@@ -642,7 +725,7 @@ int run(int argc, char** argv) {
     std::string lower_state = "lb_stand";
     // Combat: damage tables, the soldier's weapon (shortcut: an M1 Garand for everyone, no kits yet), tracers.
     DamageTable damage = damage_table(con.settings["materialmanager"]);
-    WeaponDef hand = weapon_def(con, "M1Garand");
+    WeaponDef hand = weapon_def(con, weapon_name);
     if (player >= 0)
         std::printf("weapon %s: %.0f m/s every %.2f s, material %d; damage table: %zu materials, %zu modifiers\n", hand.name.c_str(),
                     hand.velocity, hand.interval, hand.material, damage.materials.size(), damage.mods.size());
@@ -791,12 +874,37 @@ int run(int argc, char** argv) {
                 float p[3], d[3] = {std::sin(yaw) * std::cos(pitch), std::sin(pitch), std::cos(yaw) * std::cos(pitch)}, pos[3], vel[3];
                 phys.character_position(player, p);
                 for (int i = 0; i < 3; ++i) pos[i] = p[i] + (i == 1 ? 1.5f : 0.0f) + d[i] * 0.6f, vel[i] = d[i] * hand.velocity;
-                phys.fire(pos, vel, hand.material, hand.material2, hand.ttl);
+                phys.fire(pos, vel, hand.material, hand.material2, hand.ttl, -1, player);
             }
         };
         // Hits: damage = hit material vs the armour face met (else the vehicle's material), plus the explosion material.
         auto apply_hits = [&] {
             for (const Physics::Hit& h : phys.take_hits()) {
+                if (h.character >= 0) {
+                    for (Enemy& e : enemies) {
+                        if (e.ch != h.character || e.dead) continue;
+                        // Body part by hit height: head 40, chest 41, limbs 42 (setSkeletonCollisionBone materials).
+                        // shortcut: heights stand in for the bones; arms count as chest.
+                        int part = h.height > 1.45f ? 40 : h.height > 0.85f ? 41 : 42;
+                        float d = damage.damage(h.material, part) + (h.material2 >= 0 ? damage.damage(h.material2, part) : 0.0f);
+                        e.hp -= d;
+                        std::printf("hit %s (%s): %.1f damage, %.1f hp left\n", e.tmpl.c_str(), part == 40 ? "head" : part == 41 ? "chest" : "legs", d,
+                                    std::max(0.0f, e.hp));
+                        if (e.hp > 0) continue;
+                        e.dead = true;
+                        phys.character_position(e.ch, e.pos);
+                        phys.kill_character(e.ch);
+                        auto lo = state_anim("lb_diecheststand"), up = state_anim("ub_diecheststand");
+                        for (size_t ai : e.anims) {
+                            Animated& a = animated[ai];
+                            if (lo && !a.anims.empty()) a.anims[0] = lo;
+                            if (up && a.anims.size() > 1) a.anims[1] = up;
+                            a.hold = shot.empty() ? static_cast<float>(SDL_GetTicks()) / 1000.0f : -1000.0f;  // --shot: the end of the fall
+                        }
+                        std::printf("%s killed\n", e.tmpl.c_str());
+                    }
+                    continue;
+                }
                 if (h.vehicle < 0) continue;
                 for (size_t i = 0; i < vehicles.size(); ++i) {
                     Veh& v = vehicles[i];
@@ -839,6 +947,22 @@ int run(int argc, char** argv) {
             };
             for (int i = 0; i < 60; ++i) walk(0, 0, false, false), phys.step(1.0f / 60);
             track("start");
+            for (int i = 0; i < 120; ++i) {  // aim at the nearest living enemy within 150 m and fire
+                float p[3], best = 150 * 150;
+                phys.character_position(player, p);
+                const Enemy* tgt = nullptr;
+                for (const Enemy& e : enemies) {
+                    float d = (e.pos[0] - p[0]) * (e.pos[0] - p[0]) + (e.pos[2] - p[2]) * (e.pos[2] - p[2]);
+                    if (!e.dead && d < best) best = d, tgt = &e;
+                }
+                if (!tgt) break;
+                float dx = tgt->pos[0] - p[0], dy = tgt->pos[1] + 1.2f - (p[1] + 1.5f), dz = tgt->pos[2] - p[2];
+                yaw = std::atan2(dx, dz), pitch = std::atan2(dy, std::sqrt(dx * dx + dz * dz));
+                walk(0, 0, false, false);
+                fire(static_cast<float>(i) / 60.0f);
+                phys.step(1.0f / 60);
+                apply_hits();
+            }
             for (int i = 0; i < 120; ++i) walk(1, 0, false, false), phys.step(1.0f / 60);
             walk(0, 0, false, false);
             track("ran 2 s");
@@ -904,7 +1028,7 @@ int run(int argc, char** argv) {
             phys.character_position(player, p);
             // The soldier faces the camera direction; hidden far below while in a vehicle.
             Mat4 w = cur >= 0 ? translate(0, -10000, 0) : translate(p[0], p[1], p[2]) * rotation_ypr(yaw * 57.29578f, 0, 0);
-            std::vector<DrawItem> parts = build_object(con, vfs, play, w, skipped, nullptr, hide_1p);
+            std::vector<DrawItem> parts = build_object(con, vfs, soldier_tmpl, w, skipped, nullptr, hide_1p);
             for (size_t i = 0; i < parts.size() && i < sol_parts; ++i) scene[sol_first + i].world = parts[i].world;
             std::string want = !phys.character_on_ground(player) && cur < 0 ? lower_state
                              : move_f > 0.1f ? "lb_runforward" : move_f < -0.1f ? "lb_runbackward"
@@ -920,6 +1044,14 @@ int run(int argc, char** argv) {
                 float dx = std::sin(yaw) * std::cos(pitch), dy = std::sin(pitch), dz = std::cos(yaw) * std::cos(pitch);
                 cx = p[0] - dx * 4.5f, cy = p[1] + 1.7f - dy * 4.5f, cz = p[2] - dz * 4.5f;
             }
+        }
+        for (Enemy& e : enemies) {  // standing (or fallen) where they are, facing their spawn direction
+            if (!e.dead) phys.character_position(e.ch, e.pos);
+            std::vector<DrawItem> parts = build_object(con, vfs, e.tmpl, translate(e.pos[0], e.pos[1], e.pos[2]) * rotation_ypr(e.yaw, 0, 0),
+                                                       skipped, nullptr, hide_1p);
+            for (size_t i = 0; i < parts.size() && i < e.parts; ++i) scene[e.first + i].world = parts[i].world;
+            for (size_t ai : e.anims)
+                if (animated[ai].biped) scene[animated[ai].item].world = scene[animated[ai].item].world * rotation_ypr(180, 0, 0);
         }
         float speed = (k[SDL_SCANCODE_LSHIFT] ? 400.f : 60.f) * dt * (cur < 0 && player < 0);
         float fx = std::sin(yaw), fz = std::cos(yaw);
@@ -966,7 +1098,13 @@ int run(int argc, char** argv) {
             if (dx * dx + dz * dz > 300.f * 300.f) continue;
             std::vector<const Animation*> list;
             for (auto& an : a.anims) list.push_back(an.get());
-            auto world = pose(*a.skeleton, list, (seconds * 25.0f + a.phase) * a.speed, a.biped);
+            float frame = (seconds * 25.0f + a.phase) * a.speed;
+            if (a.hold != -1) {
+                uint32_t frames = UINT32_MAX;
+                for (auto* an : list) frames = std::min(frames, an->frames);
+                frame = std::clamp((seconds - a.hold) * 25.0f * a.speed, 0.0f, static_cast<float>(frames) - 1.01f);
+            }
+            auto world = pose(*a.skeleton, list, frame, a.biped);
             skin_apply(*a.skin, a.map, a.to_ske, world, a.base, 10, skinned);
             verts10 = a.base;
             for (size_t v = 0; v < skinned.size() / 3; ++v) std::memcpy(&verts10[v * 10], &skinned[v * 3], 12);

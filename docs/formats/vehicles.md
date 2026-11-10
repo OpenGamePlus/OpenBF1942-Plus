@@ -117,7 +117,7 @@ Not moved: `Engine` rotation (a car's wheels hang under it), `AnimatedBundle` (t
 
 ## Soldiers on foot (implemented, unverified)
 
-`BFSoldier` templates (e.g. `USSoldier`: `mass 100`, `speedmod 0.5`, `setAnimationState 0 Lb_Stand`) carry no walking speeds. The engine uses a 1.8 × 0.3 m capsule (Jolt `CharacterVirtual`): runs at 5 m/s, walks at 2.5 m/s, jumps at 4.5 m/s, climbs 0.4 m steps and 50° slopes, and swims with the feet 1.4 m under the surface; all guessed. The lower-body state follows the movement (`Lb_Stand`, `Lb_RunForward/Backward`, `Lb_StrafeLeft/Right`).
+`--play 1|2` plays a team (soldier and kit from the level, see [weapons.md](weapons.md#teams-kits-and-soldiers)). `BFSoldier` templates (e.g. `USSoldier`: `mass 100`, `speedmod 0.5`, `setAnimationState 0 Lb_Stand`) carry no walking speeds. The engine uses a 1.8 × 0.3 m capsule (Jolt `CharacterVirtual`): runs at 5 m/s, walks at 2.5 m/s, jumps at 4.5 m/s, climbs 0.4 m steps and 50° slopes, and swims with the feet 1.4 m under the surface; all guessed. The lower-body state follows the movement (`Lb_Stand`, `Lb_RunForward/Backward`, `Lb_StrafeLeft/Right`).
 
 Getting in: the nearest vehicle within 5 m + half its length (not yet the `EntryPoint` radius). Getting out: at the vehicle's `setSoldierExitLocation` (Willys: −1.5/0/−0.8, left rear).
 

@@ -389,6 +389,23 @@ int main() {
         for (int i = 0; i < 120; ++i) phys.step(1.0f / 60);
         phys.character_position(on_deck, p);
         assert(std::fabs(p[1] - 1.1f) < 0.15f);
+        // Shots hit a soldier's body at the right height, not the one firing, and pass a dead one.
+        int target = phys.add_character(80, 0.1f, 80);
+        for (int i = 0; i < 30; ++i) phys.step(1.0f / 60);
+        phys.take_hits();
+        float from[3] = {80, 1.2f, 60}, at[3] = {0, 0, 400}, own[3] = {80, 1.2f, 80.5f};
+        phys.fire(from, at, 220, -1, 2);
+        phys.fire(own, at, 220, -1, 2, -1, target);  // its own shot, from inside its capsule
+        for (int i = 0; i < 20; ++i) phys.step(1.0f / 60);
+        auto hits = phys.take_hits();
+        int on_target = 0;
+        for (auto& h : hits)
+            if (h.character == target) ++on_target, assert(std::fabs(h.height - 1.2f) < 0.3f && h.vehicle < 0);
+        assert(on_target == 1);
+        phys.kill_character(target);
+        phys.fire(from, at, 220, -1, 2);
+        for (int i = 0; i < 20; ++i) phys.step(1.0f / 60);
+        for (auto& h : phys.take_hits()) assert(h.character < 0);
         Physics sea(hm, 128, 10);  // ground 10 m under the surface
         int sw = sea.add_character(64, 12, 64);
         for (int i = 0; i < 300; ++i) sea.step(1.0f / 60);

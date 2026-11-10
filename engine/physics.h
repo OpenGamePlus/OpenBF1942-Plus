@@ -109,11 +109,14 @@ public:
     // Projectiles: ballistic points (gravity), tested against the world each step; never hit `ignore_vehicle`.
     struct Hit {
         int vehicle = -1;     // or -1: terrain, water, static objects
+        int character = -1;   // a soldier hit; height: above its feet (head, chest or limbs)
+        float height = 0;
         int armor = -1;       // material of the armour face hit (vehicles), else -1
         int material = 0, material2 = -1;
         float pos[3] = {};
     };
-    void fire(const float pos[3], const float vel[3], int material, int material2, float ttl, int ignore_vehicle = -1);
+    void fire(const float pos[3], const float vel[3], int material, int material2, float ttl, int ignore_vehicle = -1,
+              int ignore_character = -1);
     std::vector<Hit> take_hits();                       // since the last call
     void projectiles(std::vector<float>& out) const;    // position and velocity (6 floats) per live projectile
 
@@ -123,6 +126,7 @@ public:
     void walk(int character, float vx, float vz, bool jump);  // wanted horizontal velocity, m/s
     void place_character(int character, float x, float y, float z);
     void set_character_active(int character, bool active);    // inactive: not simulated (in a vehicle)
+    void kill_character(int character);                       // out of the world for good (shots pass)
     void character_position(int character, float out[3]) const;
     bool character_on_ground(int character) const;
 
