@@ -12,6 +12,7 @@
 #include <Jolt/Physics/Collision/Shape/ConvexHullShape.h>
 #include <Jolt/Physics/Collision/Shape/HeightFieldShape.h>
 #include <Jolt/Physics/Collision/Shape/MeshShape.h>
+#include <Jolt/Physics/Collision/Shape/OffsetCenterOfMassShape.h>
 #include <Jolt/Physics/Collision/Shape/ScaledShape.h>
 #include <Jolt/Physics/PhysicsSystem.h>
 #include <Jolt/RegisterTypes.h>
@@ -21,6 +22,7 @@
 #include <cstdlib>
 #include <map>
 #include <mutex>
+#include <set>
 #include <stdexcept>
 
 namespace obf {
@@ -72,9 +74,10 @@ struct Walker {
     const Con& con;
     VehicleDef& def;
     std::vector<std::string> owner;  // spring template of each wheel
+    std::set<std::string> gear;      // running gear: a moving bundle holding springs, and everything below it
     int visits = 0;
 
-    void walk(const std::string& name, const Mat4& world, int depth, WheelDef ctx) {
+    void walk(const std::string& name, const Mat4& world, int depth, WheelDef ctx, bool in_gear = false) {
         const ConObject* t = find(con, name);
         if (!t || depth > 16 || ++visits > 10000) return;
         std::string type = lower(t->type);
@@ -87,7 +90,8 @@ struct Walker {
             if (depth == 0 && k == "drag") def.drag = num(a);
             if (type == "engine" && k == "settorque") def.torque = num(a);
             if (type == "engine" && k == "setdifferential") def.differential = num(a);
-            if (type == "rotationalbundle" && k == "setinputtoyaw" && lower(a[0]) == "c_piyaw") yaw_input = true;
+            if ((type == "rotationalbundle" || type == "engine") && k == "setinputtoyaw" && lower(a[0]) == "c_piyaw") yaw_input = true;
+            if (type == "engine" && k == "setenginetype" && lower(a[0]) == "c_ettank") def.tracked = true;
             if (k == "setmaxrotation" || k == "setmaxspeed") {
                 float v[3];
                 parse_vec3(a[0], v);
@@ -96,7 +100,9 @@ struct Walker {
             if (type == "spring" && k == "setstrength") ctx.strength = num(a);
             if (type == "spring" && k == "setdamping") ctx.damping = num(a);
         }
-        if (yaw_input) ctx.steer_deg = max_yaw, ctx.steer_rate = rate;
+        // shortcut: tank turn rate = engine yaw setMaxSpeed x 8 deg/s (4 -> 32 deg/s, artillery 1 -> 8); unverified.
+        if (yaw_input && type == "engine") def.turn_rate = rate * 8;
+        else if (yaw_input) ctx.steer_deg = max_yaw, ctx.steer_rate = rate;
         if (type == "spring") {
             WheelDef w = ctx;
             xform(world, 0, 0, 0, w.pos);
@@ -115,8 +121,14 @@ struct Walker {
             else if (k == "setrotation" && !children.empty()) parse_vec3(a[0], children.back().rot);
         }
         if (type == "lodobject" && children.size() > 1) children.resize(1);  // as scene.cpp: first detail level
+        for (auto& c : children) {
+            const ConObject* ct = find(con, c.name);
+            // Only moving bundles (tracks, wheel hubs, engine); aircraft hang gear springs off the main body.
+            if (ct && lower(ct->type) == "spring" && (type == "animatedbundle" || type == "rotationalbundle" || type == "engine")) in_gear = true;
+        }
+        if (in_gear) gear.insert(lower(name));
         for (auto& c : children)
-            walk(c.name, world * translate(c.pos[0], c.pos[1], c.pos[2]) * rotation_ypr(c.rot[0], c.rot[1], c.rot[2]), depth + 1, ctx);
+            walk(c.name, world * translate(c.pos[0], c.pos[1], c.pos[2]) * rotation_ypr(c.rot[0], c.rot[1], c.rot[2]), depth + 1, ctx, in_gear);
     }
 };
 
@@ -124,10 +136,11 @@ struct Walker {
 
 VehicleDef vehicle_def(const Con& con, const Vfs& vfs, const std::string& name) {
     VehicleDef def;
-    Walker w{con, def, {}, 0};
+    Walker w{con, def, {}, {}, 0};
     w.walk(name, Mat4::identity(), 0, WheelDef{});
     std::map<std::string, int> skipped;
     std::map<std::string, SmMesh> cache;
+    std::vector<float> boxes;
     for (const DrawItem& item : build_object(con, vfs, name, Mat4::identity(), skipped)) {
         if (item.mesh.size() < 3 || item.mesh.compare(item.mesh.size() - 3, 3, ".sm") != 0) continue;
         auto it = cache.find(item.mesh);
@@ -140,19 +153,21 @@ VehicleDef vehicle_def(const Con& con, const Vfs& vfs, const std::string& name) 
                     if (w.owner[i] == item.owner) def.wheels[i].radius = r;
             continue;
         }
+        // Tracks and rollers are drawn but not part of the hull: the springs carry the vehicle.
+        // (Tank track meshes reach the wheel bottoms; in the hull they scrape the ground.)
+        if (w.gear.count(item.owner)) continue;
         float p[3];
-        bool any = false;
         for (auto& c : m.collision)
             for (size_t v = 0; v + 2 < c.vertices.size(); v += 3) {
                 xform(item.world, c.vertices[v], c.vertices[v + 1], c.vertices[v + 2], p);
-                def.hull.insert(def.hull.end(), p, p + 3), any = true;
-            }
-        if (!any)  // no collision block: bounding box corners
-            for (int i = 0; i < 8; ++i) {
-                xform(item.world, m.bbox[i & 1 ? 3 : 0], m.bbox[i & 2 ? 4 : 1], m.bbox[i & 4 ? 5 : 2], p);
                 def.hull.insert(def.hull.end(), p, p + 3);
             }
+        for (int i = 0; i < 8; ++i) {  // fallback if no part has a collision block (cockpits, guns often have none)
+            xform(item.world, m.bbox[i & 1 ? 3 : 0], m.bbox[i & 2 ? 4 : 1], m.bbox[i & 4 ? 5 : 2], p);
+            boxes.insert(boxes.end(), p, p + 3);
+        }
     }
+    if (def.hull.empty()) def.hull = boxes;
     def.hull.erase(std::remove_if(def.hull.begin(), def.hull.end(), [](float f) { return !std::isfinite(f); }), def.hull.end());
     def.hull.resize(def.hull.size() / 3 * 3);
     if (def.hull.size() < 12) throw std::runtime_error("vehicle " + name + ": no hull geometry");
@@ -266,9 +281,21 @@ int Physics::add_vehicle(const VehicleDef& def, const Mat4& world) {
     ConvexHullShapeSettings hs(pts, 0.05f);
     auto res = hs.Create();
     if (res.HasError()) throw std::runtime_error(std::string("vehicle hull: ") + res.GetError().c_str());
+    RefConst<Shape> shape = res.Get();
+    // shortcut: centre of mass lowered to wheel-centre height (arcade stability; the hull's volume centre rolls a
+    // Willys in ordinary turns). Revisit when the original's rollover behaviour is measured.
+    float wy = 0;
+    int carrying = 0;
+    for (auto& w : def.wheels)
+        if (w.strength > 0) wy += w.pos[1], ++carrying;
+    if (carrying > 0) {
+        OffsetCenterOfMassShapeSettings off(Vec3(0, wy / static_cast<float>(carrying) - shape->GetCenterOfMass().GetY(), 0), shape);
+        auto r2 = off.Create();
+        if (!r2.HasError()) shape = r2.Get();
+    }
     Vec3 c0(world.m[0], world.m[1], world.m[2]), c1(world.m[4], world.m[5], world.m[6]), c2(world.m[8], world.m[9], world.m[10]);
     Quat rot = Mat44(Vec4(c0.Normalized(), 0), Vec4(c1.Normalized(), 0), Vec4(c2.Normalized(), 0), Vec4(0, 0, 0, 1)).GetQuaternion().Normalized();
-    BodyCreationSettings bs(res.Get(), RVec3(world.m[12], world.m[13], world.m[14]), rot, EMotionType::Dynamic, kMoving);
+    BodyCreationSettings bs(shape, RVec3(world.m[12], world.m[13], world.m[14]), rot, EMotionType::Dynamic, kMoving);
     bs.mOverrideMassProperties = EOverrideMassProperties::CalculateInertia;
     bs.mMassPropertiesOverride.mMass = def.mass;
     bs.mLinearDamping = 0;  // drag is ours
@@ -295,8 +322,13 @@ void Physics::Impl::forces(Vehicle& v) {
     RMat44 T = bi.GetWorldTransform(v.id);
     Vec3 up = T.GetAxisY(), lin = bi.GetLinearVelocity(v.id), ang = bi.GetAngularVelocity(v.id);
     RVec3 com = bi.GetCenterOfMassPosition(v.id);
-    float mw = d.mass / static_cast<float>(d.wheels.size());
-    int driven = static_cast<int>(std::count_if(d.wheels.begin(), d.wheels.end(), [](const WheelDef& w) { return w.driven; }));
+    // Springs with strength 0 (tank "dummy" rollers) carry nothing; the weight is shared by the others.
+    int carrying = static_cast<int>(std::count_if(d.wheels.begin(), d.wheels.end(), [](const WheelDef& w) { return w.strength > 0; }));
+    int driven = static_cast<int>(std::count_if(d.wheels.begin(), d.wheels.end(), [](const WheelDef& w) { return w.strength > 0 && w.driven; }));
+    if (carrying == 0) return;
+    float mw = d.mass / static_cast<float>(carrying);
+    float yaw_rate = ang.Dot(up);
+    int contacts = 0;
     // shortcut: drive and drag scales are placeholders (Willys: 3.7 m/s^2, ~70 km/h); calibrate against the original.
     float a_drive = d.torque * d.differential / 20.0f;
     const float mu = 1.0f;  // shortcut: c_PGF* grip models and materialFriction not applied yet
@@ -305,6 +337,7 @@ void Physics::Impl::forces(Vehicle& v) {
     rs.SetBackFaceMode(EBackFaceMode::CollideWithBackFaces);  // collision mesh winding is unverified
     for (size_t i = 0; i < d.wheels.size(); ++i) {
         const WheelDef& w = d.wheels[i];
+        if (w.strength <= 0) continue;
         float target = v.steer * w.steer_deg, step = w.steer_rate > 0 ? w.steer_rate * kStep : 1e9f;
         v.wheel_steer[i] += std::clamp(target - v.wheel_steer[i], -step, step);
         float rest = std::clamp(w.strength > 0 ? kGravity / w.strength : 0.3f, 0.05f, 1.0f);
@@ -322,7 +355,9 @@ void Physics::Impl::forces(Vehicle& v) {
             BodyLockRead lock(sys.GetBodyLockInterface(), hit.mHit.mBodyID);
             if (lock.Succeeded()) n = lock.GetBody().GetWorldSpaceSurfaceNormal(hit.mHit.mSubShapeID2, p);
         }
-        Vec3 vp = lin + ang.Cross(Vec3(p - com));
+        ++contacts;
+        // Tracked: grip resists sliding, not the commanded turn, so the yaw part of the spin is left out of the slip.
+        Vec3 vp = lin + (d.tracked ? ang - up * yaw_rate : ang).Cross(Vec3(p - com));
         float N = std::max(0.0f, mw * (w.strength * x - w.damping * vp.Dot(up)));
         float ang_rad = v.wheel_steer[i] * 3.14159265f / 180.0f;
         Vec3 f = T.Multiply3x3(Vec3(std::sin(ang_rad), 0, std::cos(ang_rad)));
@@ -339,9 +374,14 @@ void Physics::Impl::forces(Vehicle& v) {
         if (v.throttle == 0) Ff = std::fabs(vf) < 0.5f ? -0.5f * vf * mw / kStep : -2.0f * vf * mw;
         float lim = mu * N, tot = std::sqrt(Fs * Fs + Ff * Ff);
         if (tot > lim && tot > 0) Fs *= lim / tot, Ff *= lim / tot;
-        bi.AddForce(v.id, up * N, p);
+        // Along the ground normal: along the tilted body axis a pitched vehicle would push itself backwards.
+        bi.AddForce(v.id, n * N, p);
         // shortcut: grip acts near centre-of-mass height (arcade roll resistance); tune once the original is measured.
         bi.AddForce(v.id, side * Fs + f * Ff, p + up * (0.8f * Vec3(com - p).Dot(up)));
+    }
+    if (d.tracked && contacts > 0) {  // turn on the spot: blend the yaw rate towards the command
+        float want = v.steer * d.turn_rate * 3.14159265f / 180.0f;
+        bi.SetAngularVelocity(v.id, ang + up * (0.2f * (want - yaw_rate)));
     }
     float sp = lin.Length();
     bi.AddForce(v.id, -lin * (d.drag * d.mass * sp / 150.0f));

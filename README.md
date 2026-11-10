@@ -15,7 +15,7 @@ Clean-room reimplementation of the Refractor 1 engine so Battlefield 1942 runs o
 | 3. Static meshes (`.sm`) | done — every mesh parses; OBJ export opens in Blender |
 | 4. Terrain + map objects | done — C++ viewer renders every map with buildings and trees |
 | 5. Skinned meshes + animations | in progress — soldiers and flags animate in the viewer (`--soldier USSoldier`) |
-| 6. Physics + vehicles | in progress — drive a jeep in the viewer (`--drive Willy`); handling not yet calibrated |
+| 6. Physics + vehicles | in progress — drive cars and tanks in the viewer (`--drive Willy`, `--drive Sherman`); handling not yet calibrated |
 | 7–8 | not started (see [roadmap](#roadmap)) |
 
 ## Tools

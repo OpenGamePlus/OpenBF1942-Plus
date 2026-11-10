@@ -48,16 +48,18 @@ All physical parts carry `hasMobilePhysics`, `hasCollisionPhysics`, `hasResponse
 | Part | Reading |
 |---|---|
 | Root `PlayerControlObject` | `mass` in kg; `drag`: force = drag · mass · v² / 150 (placeholder: Willys tops out near 70 km/h) |
-| Hull | convex hull of the collision vertices of every non-wheel mesh (bounding box if a mesh has none) |
-| `Spring` | a ray-cast wheel at the spring's position; radius = half the wheel mesh height; `setStrength` / `setDamping` per unit of the mass each wheel carries (s⁻², s⁻¹). A Willys (25, 5) then rests with its wheels at the model position, at 0.8 Hz and damping ratio 0.5, which is why this reading was chosen |
+| Hull | convex hull of the collision vertices of every mesh except running gear (bounding boxes only if no part has a collision block). Running gear = an `AnimatedBundle` / `RotationalBundle` / `Engine` with `Spring` children, and everything below it: tank track meshes reach the wheel bottoms and would scrape. Centre of mass lowered to wheel-centre height (arcade stability) |
+| `Spring` | a ray-cast wheel at the spring's position; radius = half the wheel mesh height; `setStrength` / `setDamping` per unit of the mass each wheel carries (s⁻², s⁻¹), pushing along the ground normal. A Willys (25, 5) then rests with its wheels at the model position, at 0.8 Hz and damping ratio 0.5, which is why this reading was chosen. Springs with strength 0 (tank "dummy" rollers, grip `c_PGFEngineDummyGrip`) carry nothing |
 | Under `Engine` | driven wheel; drive acceleration = torque · differential / 20 m/s² split over driven wheels (placeholder); gears, `setMaxSpeed` 55000 not used |
 | `RotationalBundle` with `setInputToYaw c_PIYaw` | steering: ± `setMaxRotation` yaw at `setMaxSpeed` °/s |
+| `Engine` `c_ETTank` with `setInputToYaw c_PIYaw` | tracked: turns the hull on the spot at yaw `setMaxSpeed` × 8 °/s (placeholder; 4 for tanks, 1 for Priest and Sexton); side grip ignores the commanded turn |
 | Grip | friction coefficient 1 for every wheel, sideways slip cancelled within the friction circle, applied at 80 % of the centre-of-mass height so cornering rarely rolls a vehicle; idle wheels brake and hold |
 
-All 122 / 142 / 172 `PlayerControlObject`s of bf1942 / XPack1 / XPack2 build and simulate without error, except passenger seats and `Destroyable_Bridge`, which have no geometry of their own.
+All 122 / 142 / 172 `PlayerControlObject`s of bf1942 / XPack1 / XPack2 build and simulate without error, except passenger seats and `Destroyable_Bridge`, which have no geometry of their own. On flat ground every land vehicle with wheels (7 cars, 14 tracked) settles upright and drives; the M3A1 half-track and the Sexton still touch the ground with their hull and accelerate at about two thirds of the others.
 
 ## Open questions
 
 - Units of `setTorque`, `setDifferential`, `drag`, the 55000 engine speed; gear changes (`setGearUp/Down`).
 - `c_PGFRollGrip` vs `c_PGFEngineGrip`, combined with `materialFriction`.
-- Tanks (track rollers as springs), aircraft (`Wing`), boats (`FloatingBundle`): not modelled. A Sherman loads (12 rollers, 8 of them `setStrength` 0) but its hull collision, tracks included, reaches below the rollers, so it rests on the hull and does not move.
+- Aircraft (`Wing`, `LandingGear`), boats (`FloatingBundle`): not modelled.
+- Track and wheel animation, turret and gun rotation (`RotationalBundle` on mouse input).

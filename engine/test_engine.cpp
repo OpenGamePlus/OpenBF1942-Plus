@@ -258,6 +258,21 @@ int main() {
         phys.drive(v, 1, 1);
         for (int i = 0; i < 120; ++i) phys.step(1.0f / 60);
         assert(phys.transform(v).m[12] > 65);
+        // Tracked: zero-strength rollers carry nothing; full steer with no throttle turns on the spot.
+        VehicleDef tank = car;
+        tank.tracked = true, tank.turn_rate = 32, tank.mass = 20000;
+        for (auto& w : tank.wheels) w.steer_deg = 0;
+        WheelDef dummy = tank.wheels[0];
+        dummy.strength = dummy.damping = 0, dummy.pos[2] = 0;
+        tank.wheels.push_back(dummy);
+        int k = phys.add_vehicle(tank, translate(30, 2, 90));
+        for (int i = 0; i < 180; ++i) phys.step(1.0f / 60);
+        assert(std::fabs(phys.transform(k).m[13] - 0.8f) < 0.05f);
+        phys.drive(k, 0, 1);
+        for (int i = 0; i < 120; ++i) phys.step(1.0f / 60);
+        t = phys.transform(k);
+        float heading = std::atan2(t.m[8], t.m[10]) * 57.29578f;  // +z forward, positive = turned right
+        assert(heading > 45 && heading < 75 && std::fabs(t.m[12] - 30) < 0.5f && std::fabs(t.m[14] - 90) < 0.5f);
     }
 
     std::puts("engine tests ok");

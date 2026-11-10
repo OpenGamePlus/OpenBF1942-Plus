@@ -2,6 +2,12 @@
 
 Append-only. Newest first. At most 3 bullets per stage.
 
+## 2026-11-10 — tracked vehicles
+
+- Maintainer confirmed the fidelity target: approximate first, calibrate later. Tanks drive: zero-strength rollers carry nothing, the engine's yaw input turns the hull on the spot, running gear is left out of the hull.
+- A whole-fleet sweep found the real causes: springs along the tilted body axis cost half the acceleration (now along the ground normal); centre of mass at hull height rolled jeeps in ordinary turns (lowered to wheel height).
+- Open: M3A1 and Sexton hulls still touch the ground; turret, track and wheel animation; aircraft and boats.
+
 ## 2026-11-10 — physics: Jolt + Refractor wheels
 
 - Maintainer chose the hybrid: Jolt (ADR 0004) for bodies and collision, our ray-cast `Spring` wheels, engine and grip as forces; `--drive Willy` drives a jeep on any map.

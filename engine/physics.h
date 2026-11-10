@@ -23,6 +23,8 @@ struct WheelDef {
 struct VehicleDef {
     float mass = 1000, drag = 0;
     float torque = 0, differential = 1;  // Engine setTorque / setDifferential
+    bool tracked = false;       // c_ETTank: the engine turns the hull (setInputToYaw) instead of steering wheels
+    float turn_rate = 0;        // deg/s at full steer, tracked only
     std::vector<WheelDef> wheels;
     std::vector<float> hull;    // xyz points, vehicle space; the chassis is their convex hull
 };

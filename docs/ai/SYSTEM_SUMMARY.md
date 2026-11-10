@@ -31,7 +31,7 @@ tools/test_*.py      unit tests (synthetic data only)
 | Terrain | C++ viewer: heightmap, colour tiles, water plane, sky box, fog, sun light; all 78 levels open | [terrain.md](../formats/terrain.md) |
 | Map objects in the viewer | static and tree meshes, child templates, spawned vehicles, animated meshes, object lightmaps; first LOD only, no effects | [con.md](../formats/con.md#object-placement) |
 | Skeletons, skins, animations | Python + C++; viewer skins flags and soldiers on the CPU and plays their state animations | [anim.md](../formats/anim.md) |
-| Physics + vehicles | Jolt world: terrain height field, static `.sm` collision; drivable wheeled vehicles (`--drive`), handling uncalibrated | [vehicles.md](../formats/vehicles.md), [ADR 0004](../architecture/adr/0004-jolt-physics.md) |
+| Physics + vehicles | Jolt world: terrain height field, static `.sm` collision; drivable cars and tanks (`--drive`), handling uncalibrated | [vehicles.md](../formats/vehicles.md), [ADR 0004](../architecture/adr/0004-jolt-physics.md) |
 | Engine (C++) | `obf` library + `obf_mapview` | [boundaries.md](../architecture/boundaries.md) |
 
 ## Commands
