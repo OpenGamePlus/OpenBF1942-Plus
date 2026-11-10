@@ -2,6 +2,11 @@
 
 Append-only. Newest first. At most 3 bullets per stage.
 
+## 2026-11-10 — compared with the original client
+
+- Berlin, with the maintainer spawning in the original and screenshots taken; we rendered from the same base's spawn points. Gaps by size: no terrain detail texture, colour and lighting too cold and dark, haze too far, faceted lighting on soldiers.
+- The vertical mouse axis is flipped, at the maintainer's request.
+
 ## 2026-11-10 — first live test by the maintainer
 
 - They saw the map and heard the shots; the reload animation was almost complete. Two bugs fixed: a shot left a sound looping, because the patches were merged; mouse look needed the right button.

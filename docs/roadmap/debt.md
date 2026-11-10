@@ -26,6 +26,7 @@
 | `animations/animationstates.con` loading | unverified | the viewer runs it after the object folders |
 | Object lightmap blend | unverified | 2 × lightmap replaces the sun term on lightmapped meshes |
 | Fog start, light scale | shortcut | fog from half the view distance; mesh light ×2; terrain drawn unlit (baked lighting) |
+| Look against the original | measured | side by side on Berlin with the original client (2026-11-10). The ground lacks the terrain detail texture (the original shows fine gravel, ours the blurred colour map). Our buildings are grey-blue and darker, the original's warm and sepia. The original's haze starts much closer. Skinned meshes are lit per face, which looks faceted and probably causes the player model's flicker |
 | Skinned normals | shortcut | face normals from screen derivatives; posed normals need a bind pose |
 | Soldier parts | shortcut | viewer hides `Parachute` and `1p*` children; the engine switches parts by camera and state |
 | C++ vs Python edge differences | accepted | C++ `pose` loops and interpolates (Python: whole frames, clamped); C++ splits CON tokens and lower-cases ASCII only (Python also splits on `\xa0`, `\x85`); `init.con` mod paths are a line scan without `if` |
