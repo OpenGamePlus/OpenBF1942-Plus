@@ -69,6 +69,18 @@ Without the 180° turn the barrel points back through the body and the left hand
 
 Upper-body states are per weapon: `copyState2 <new> <from> [<3p> <speed> <1p> <speed>]` copies the state just created, replacing `<from>` in its name and animation paths (e.g. `Ub_StandAimThompson` → `Ub_StandAimBar1918`, with the `bar1918` animations when they exist). There are 1,217 calls.
 
+## Fire and reload
+
+Per weapon, from the Thompson states through `copyState2`:
+
+| State | Plays | When |
+|---|---|---|
+| `Ub_Fire<w>` / `Ub_LieFire<w>` | looping (`c_AsmLooping`) | while shots come within 1.5 rounds' interval (at least 0.25 s; ours) |
+| `Ub_StandReload<w>` / `Ub_LieReload<w>` | once (`c_AsmPlayOnce`) | from the start of a reload |
+| `WeaponFire<w>`, `WeaponReload<w>` | on the weapon's own skeleton (bolt, magazine) | the same moments |
+
+The upper body runs at its own speed and start time while the legs keep theirs; `pose()` takes one frame per animation. The state machine's own transitions (`addTransitionOne c_PIFire …`) are not interpreted.
+
 ## First person
 
 - **Parts drawn:** the soldier template's `1p*` children (hands) and `*1PBody` (sleeves). The third-person body is hidden.

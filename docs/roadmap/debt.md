@@ -21,7 +21,7 @@
 | Viewer draws LOD 0 / first `LodObject` child only, distance cull 1.5 km | shortcut | per-mesh `setLodDistance` exists in geometry templates |
 | Effects not drawn | not implemented | later steps |
 | Spawner team in the viewer | shortcut | instance `setTeam`, else first `setObjectTemplate`; no game state |
-| Animation rotations and held weapons | unverified | `.baf` quaternions read conjugated and biped roots turned from Max space, chosen from pose checks; held weapons turned 180° on their main bone, fitted; first-person `set1pFov` read as vertical radians, no fire / reload / sway animation; see [anim.md](../formats/anim.md#held-weapons-unverified) |
+| Animation rotations and held weapons | unverified | `.baf` quaternions read conjugated and biped roots turned from Max space, chosen from pose checks; held weapons turned 180° on their main bone, fitted; first-person `set1pFov` read as vertical radians, fire / reload states chosen by the game, not the state machine's transitions; no switch, sway or recoil animation; see [anim.md](../formats/anim.md#held-weapons-unverified) |
 | Animation frame rate and state machine | shortcut | 25 fps guessed; first animation of a state, looping; no transitions; weapon states by prefix |
 | `animations/animationstates.con` loading | unverified | the viewer runs it after the object folders |
 | Object lightmap blend | unverified | 2 × lightmap replaces the sun term on lightmapped meshes |

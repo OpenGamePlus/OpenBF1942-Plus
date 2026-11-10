@@ -52,6 +52,9 @@ struct SoldierView {
     size_t held_first = 0, held_parts = 0;  // the weapon in its right hand (items with a bone); the renderer places them
     bool first_person = false;               // play the states' first-person animations
     float fov = 0;                           // first person: field of view of the arms (set1pFov), radians
+    float upper_hold = -1;                   // >= 0: the upper state plays once from this time (reloads)
+    std::string weapon;                      // state animating the held weapon's skeleton (WeaponReloadThompson)
+    float weapon_hold = -1;                  // as upper_hold, for the weapon state
 };
 
 // Rounds in the weapon and spare magazines. numOfMag read as all magazines, the loaded one included (unverified).
@@ -141,7 +144,7 @@ private:
         WeaponDef grenade;         // the kit's hand grenade, if any
         Ammo grenades;
         float next_grenade = 0;
-        float next_fire = 0, seen_at = -1, next_look = 0;
+        float next_fire = 0, seen_at = -1, next_look = 0, last_shot = -10;
         int target = -2;  // -2 nobody, -1 the player, else a bot
         float check_at = 0, check_pos[2] = {}, detour_until = 0, detour_side = 1;  // getting unstuck
         std::vector<float> path;  // waypoints (x, z) to the flag it runs for
@@ -203,6 +206,9 @@ private:
     void select(size_t i);
     void refill_loadout();
     bool fire_held = false;  // trigger held last step (fireOnce weapons)
+    float last_shot = -10;   // the player's, game time
+    // Upper-body and weapon states for a soldier holding `w`: firing (shot within the last moment), reloading.
+    void arm_states(SoldierView& v, const std::string& w, const WeaponDef& def, const Ammo& ammo, float shot, int pose) const;
     int posture = 0;         // the player's: 0 stand, 1 crouch, 2 prone
     size_t chute_first = 0, chute_parts = 0;  // the parachute's draw items (far below while closed)
     size_t fp_first = 0, fp_parts = 0;        // first-person arms and body (far below in third person)

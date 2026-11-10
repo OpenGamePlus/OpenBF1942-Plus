@@ -459,6 +459,7 @@ void Game::fire(float t) {
         phys.character_position(player, p);
         for (int i = 0; i < 3; ++i) pos[i] = p[i] + (i == 1 ? eye_height() : 0.0f) + d[i] * 0.6f, vel[i] = d[i] * hand.velocity;
         int id = phys.fire(pos, vel, hand.material, hand.material2, hand.ttl, -1, player, team, hand.radius, hand.bounce);
+        last_shot = t;
         if (id >= 0 && hand.bounce && hand.ttl > 60) placed.push_back({id, hand.near});  // not a grenade: waits for a trigger
         sounds.push_back({hand.name, {pos[0], pos[1], pos[2]}});
     }
@@ -479,6 +480,16 @@ std::string Game::driving(float pos[3], float& control) const {
 float Game::fall_damage(int character, float full) {
     float v = phys.take_landing(character);
     return v > 10 ? full * (v - 10) / 10 : 0.0f;
+}
+
+void Game::arm_states(SoldierView& v, const std::string& w, const WeaponDef& def, const Ammo& ammo, float shot, int pose) const {
+    if (ammo.reloading(now)) {
+        v.upper = (pose == 2 ? "ub_liereload" : "ub_standreload") + w, v.upper_hold = ammo.reload_until - def.reload;
+        v.weapon = "weaponreload" + w, v.weapon_hold = v.upper_hold;
+    } else if (now - shot < std::max(0.25f, def.interval * 1.5f)) {  // looping fire states while shots keep coming
+        v.upper = (pose == 2 ? "ub_liefire" : "ub_fire") + w;
+        v.weapon = "weaponfire" + w;
+    }
 }
 
 void Game::player_dies() {
@@ -678,6 +689,7 @@ void Game::think(float t, float step) {
                 float l = std::sqrt(dir[0] * dir[0] + dir[1] * dir[1] + dir[2] * dir[2]), pos[3], vel[3];
                 for (int i = 0; i < 3; ++i) pos[i] = eye[i] + dir[i] / l * 0.6f, vel[i] = dir[i] / l * b.weapon.velocity;
                 phys.fire(pos, vel, b.weapon.material, b.weapon.material2, b.weapon.ttl, -1, b.ch, b.team, b.weapon.radius, b.weapon.bounce);
+                b.last_shot = t;
                 sounds.push_back({b.weapon.name, {pos[0], pos[1], pos[2]}});
             }
             continue;
@@ -932,7 +944,9 @@ void Game::pose() {
         std::string held = cur < 0 ? hand.name : "";
         std::string upper = posture == 2 ? "ub_lie" + held : posture == 1 ? "ub_crouch" + held
                           : std::fabs(move_f) > 0.1f || std::fabs(move_r) > 0.1f ? "ub_runforward" + held : "ub_standaim" + held;
-        SoldierView me{sol_first, sol_parts, lower_state, held.empty() ? "" : upper, -1};
+        SoldierView me;
+        me.first = sol_first, me.parts = sol_parts, me.lower = lower_state, me.upper = held.empty() ? "" : upper;
+        if (!held.empty()) arm_states(me, held, hand, hand_ammo, last_shot, posture);
         if (cur < 0 && slot < loadout_items.size()) me.held_first = loadout_items[slot].first, me.held_parts = loadout_items[slot].second;
         // First person: the 1p arms and body hang from the camera at the eye (center1pHands), with the states'
         // first-person animations; the held weapon follows their right hand.
@@ -966,12 +980,16 @@ void Game::pose() {
         std::vector<DrawItem> parts = build_object(con, vfs, b.tmpl, translate(b.pos[0], b.pos[1], b.pos[2]) * rotation_ypr(b.yaw, 0, 0),
                                                    skipped, nullptr, hide_1p);
         for (size_t i = 0; i < parts.size() && i < b.parts; ++i) scene[b.first + i].world = parts[i].world;
-        if (b.dead) soldiers.push_back({b.first, b.parts, "lb_diecheststand", "ub_diecheststand", opt.shot ? -1000.0f : b.died_at, b.held_first, b.held_parts});
+        SoldierView v;
+        v.first = b.first, v.parts = b.parts, v.held_first = b.held_first, v.held_parts = b.held_parts;
+        if (b.dead) v.lower = "lb_diecheststand", v.upper = "ub_diecheststand", v.hold = opt.shot ? -1000.0f : b.died_at, soldiers.push_back(v);
         else {
             const std::string& w = b.weapon.name;
             const char* lower_b = b.posture == 2 ? "lb_lie" : b.posture == 1 ? "lb_crouch" : b.moving ? "lb_runforward" : "lb_stand";
             std::string upper = b.posture == 2 ? "ub_lie" + w : b.posture == 1 ? "ub_crouch" + w : b.moving ? "ub_runforward" + w : "ub_standaim" + w;
-            soldiers.push_back({b.first, b.parts, lower_b, w.empty() ? "" : upper, -1, b.held_first, b.held_parts});
+            v.lower = lower_b, v.upper = w.empty() ? "" : upper;
+            if (!w.empty()) arm_states(v, w, b.weapon, b.ammo, b.last_shot, b.posture);
+            soldiers.push_back(v);
         }
     }
 }

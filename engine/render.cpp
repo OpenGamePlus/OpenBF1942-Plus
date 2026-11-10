@@ -252,6 +252,7 @@ struct Animated {
     float hold = -1;  // >= 0: play once from this time and stay on the last frame (deaths)
     std::vector<std::shared_ptr<Animation>> anims0;  // as loaded from the item's states
     std::vector<Mat4> bones;  // last pose (model space)
+    float upper_speed = 0, upper_hold = -1;  // the upper-body layer's own speed (0: the item's) and play-once start
 };
 
 // Tree mesh: all three groups share one buffer; group 3 sprites carry corner offsets.
@@ -268,10 +269,19 @@ std::unique_ptr<GpuMesh> upload_tm(const TmMesh& m, Textures& tex) {
     return g;
 }
 
+Mat4 rigid_inverse(const Mat4& m) {  // rotation and translation only
+    Mat4 r = Mat4::identity();
+    for (int a = 0; a < 3; ++a)
+        for (int b = 0; b < 3; ++b) r.m[a * 4 + b] = m.m[b * 4 + a];
+    for (int a = 0; a < 3; ++a) r.m[12 + a] = -(r.m[a] * m.m[12] + r.m[4 + a] * m.m[13] + r.m[8 + a] * m.m[14]);
+    return r;
+}
+
 struct State {
     std::string baf;
     float speed = 1;
     std::string baf1p;  // the state's second animation: first person
+    float speed1p = 1;
 };
 
 }  // namespace
@@ -298,10 +308,12 @@ struct Renderer::Impl {
     const Vfs& vfs;
 
     Impl(const Vfs& vfs, Con& con, const Heightmap& hm, const TerrainInfo& info, const std::vector<DrawItem>& scene, bool objects);
-    std::shared_ptr<Animation> state_anim(const std::string& name, bool first_person = false) {
+    std::shared_ptr<Animation> state_anim(const std::string& name, bool first_person = false, float* speed = nullptr) {
         auto st = states.find(name);
         if (st == states.end()) return nullptr;
-        const std::string& baf = first_person && !st->second.baf1p.empty() ? st->second.baf1p : st->second.baf;
+        bool one = first_person && !st->second.baf1p.empty();
+        const std::string& baf = one ? st->second.baf1p : st->second.baf;
+        if (speed) *speed = one ? st->second.speed1p : st->second.speed;
         if (!vfs.has(baf)) return nullptr;
         auto& an = anims[baf];
         if (!an) an = std::make_shared<Animation>(baf_parse(vfs.read(baf)));
@@ -433,8 +445,8 @@ Renderer::Impl::Impl(const Vfs& vfs_, Con& con, const Heightmap& hm, const Terra
             }
             if (method == "addanimation" && !args.empty() && !cur.empty()) {
                 float sp = args.size() > 1 ? static_cast<float>(std::atof(args[1].c_str())) : 1.0f;
-                if (!states.count(cur)) states[cur] = {Vfs::key(args[0]), std::isfinite(sp) ? sp : 1.0f, ""};
-                else if (states[cur].baf1p.empty()) states[cur].baf1p = Vfs::key(args[0]);
+                if (!states.count(cur)) states[cur] = {Vfs::key(args[0]), std::isfinite(sp) ? sp : 1.0f, "", 1};
+                else if (states[cur].baf1p.empty()) states[cur].baf1p = Vfs::key(args[0]), states[cur].speed1p = std::isfinite(sp) ? sp : 1.0f;
             }
         }
     }
@@ -573,9 +585,11 @@ void Renderer::Impl::draw(const std::vector<DrawItem>& scene, const Camera& cam,
                 if (anim_of_item[i] < 0) continue;
                 Animated& a = animated[static_cast<size_t>(anim_of_item[i])];
                 if (a.anims0.empty()) continue;
-                a.anims = a.anims0, a.hold = sv.hold;
+                a.anims = a.anims0, a.hold = sv.hold, a.upper_speed = 0, a.upper_hold = sv.upper_hold;
                 if (auto an = sv.lower.empty() ? nullptr : state_anim(sv.lower, sv.first_person)) a.anims[0] = an;
-                if (auto an = sv.upper.empty() || a.anims.size() < 2 ? nullptr : state_anim(sv.upper, sv.first_person)) a.anims[1] = an;
+                float us = 0;
+                if (auto an = sv.upper.empty() || a.anims.size() < 2 ? nullptr : state_anim(sv.upper, sv.first_person, &us))
+                    a.anims[1] = an, a.upper_speed = us;
             }
         // Skinning on the CPU; 25 frames per second times the state speed.
         // shortcut: the .baf frame rate is a guess; --shot renders at t = 1 s so captures are repeatable.
@@ -592,7 +606,13 @@ void Renderer::Impl::draw(const std::vector<DrawItem>& scene, const Camera& cam,
                 for (auto* an : list) frames = std::min(frames, an->frames);
                 frame = std::clamp((seconds - a.hold) * 25.0f * a.speed, 0.0f, static_cast<float>(frames) - 1.01f);
             }
-            auto world = pose(*a.skeleton, list, frame, a.biped);
+            std::vector<float> frames(list.size(), frame);
+            if (list.size() >= 2 && a.hold == -1 && a.upper_speed > 0) {  // the upper body at its own speed / start
+                float s = a.upper_speed;
+                frames[1] = a.upper_hold >= 0 ? std::clamp((seconds - a.upper_hold) * 25.0f * s, 0.0f, static_cast<float>(list[1]->frames) - 1.01f)
+                                              : (seconds * 25.0f + a.phase) * s;
+            }
+            auto world = pose(*a.skeleton, list, frames, a.biped);
             a.bones = world;
             skin_apply(*a.skin, a.map, a.to_ske, world, a.base, 10, skinned);
             verts10 = a.base;
@@ -616,19 +636,25 @@ void Renderer::Impl::draw(const std::vector<DrawItem>& scene, const Camera& cam,
             }
             if (!body) continue;
             Mat4 at_hand = scene[body->item].world * body->bones[static_cast<size_t>(rh)];
+            float wspeed = 1;
+            std::shared_ptr<Animation> wanim = sv.weapon.empty() ? nullptr : state_anim(sv.weapon, false, &wspeed);
             for (size_t i = sv.held_first; i < sv.held_first + sv.held_parts && i < scene.size(); ++i) {
                 const DrawItem& it = scene[i];
                 auto& ws = skeletons[it.skeleton];
                 if (!ws && vfs.has(it.skeleton)) ws = std::make_shared<Skeleton>(ske_parse(vfs.read(it.skeleton)));
                 if (!ws || ws->size() < 2) continue;
-                Mat4 sub = Mat4::identity();  // locals below the main bone down to the part's bone
-                for (size_t b = 0; b < ws->size(); ++b) {
-                    if (lower((*ws)[b].name) != it.bone) continue;
-                    for (int k = static_cast<int>(b); k > 0 && (*ws)[static_cast<size_t>(k)].parent > 0; k = (*ws)[static_cast<size_t>(k)].parent)
-                        sub = (*ws)[static_cast<size_t>(k)].local * sub;
-                    break;
-                }
-                held[i] = at_hand * (*ws)[1].local * rotation_ypr(180, 0, 0) * sub;
+                // The weapon's own state (bolt, magazine) poses its skeleton; parts sit at their bone relative to
+                // the main bone, which stays on the hand.
+                std::vector<const Animation*> wl;
+                std::vector<float> wf;
+                if (wanim)
+                    wl.push_back(wanim.get()), wf.push_back(sv.weapon_hold >= 0 ? std::clamp((seconds - sv.weapon_hold) * 25.0f * wspeed, 0.0f, static_cast<float>(wanim->frames) - 1.01f)
+                                                                                 : seconds * 25.0f * wspeed);
+                std::vector<Mat4> wp = pose(*ws, wl, wf);
+                size_t bi = 1;
+                for (size_t b = 0; b < ws->size(); ++b)
+                    if (lower((*ws)[b].name) == it.bone) bi = b;
+                held[i] = at_hand * (*ws)[1].local * rotation_ypr(180, 0, 0) * rigid_inverse(wp[1]) * wp[bi];
             }
         }
 

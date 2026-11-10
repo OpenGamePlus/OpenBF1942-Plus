@@ -2,6 +2,11 @@
 
 Append-only. Newest first. At most 3 bullets per stage.
 
+## 2026-11-10 — fire and reload animations (roadmap B2)
+
+- Fire (looping) and reload (play once) upper-body states and the weapon's own `WeaponFire` / `WeaponReload` skeleton animations play for the player (both views) and bots. The upper body has its own speed and start time.
+- Open: the state machine's transitions, weapon switch / deploy, recoil and sway.
+
 ## 2026-11-10 — first person (roadmap B2)
 
 - Live play starts in first person (V toggles). It uses the original 1p arms and the states' second (1p) animation, hung from the camera by `center1pHands`, and drawn in a last pass with `set1pFov`.

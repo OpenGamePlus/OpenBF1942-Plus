@@ -43,6 +43,8 @@ Animation baf_parse(const std::vector<uint8_t>& data);
 
 // World matrix per skeleton bone. biped_root: turn 3ds Max space (up -z, facing +y) to Y-up facing +z (soldiers).
 std::vector<Mat4> pose(const Skeleton& s, const std::vector<const Animation*>& anims, float frame, bool biped_root = false);
+// The same with one frame per animation (an upper-body layer playing at its own time).
+std::vector<Mat4> pose(const Skeleton& s, const std::vector<const Animation*>& anims, const std::vector<float>& frames, bool biped_root = false);
 
 // Mesh vertex -> skin record (by position; exact, then within 1 mm), -1 = rigid.
 std::vector<int> skin_map(const Skin& skin, const std::vector<float>& vertices, size_t floats_per_vertex);

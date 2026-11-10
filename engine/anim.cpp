@@ -141,9 +141,16 @@ Animation baf_parse(const std::vector<uint8_t>& d) {
 }
 
 std::vector<Mat4> pose(const Skeleton& s, const std::vector<const Animation*>& anims, float frame, bool biped_root) {
+    return pose(s, anims, std::vector<float>(anims.size(), frame), biped_root);
+}
+
+std::vector<Mat4> pose(const Skeleton& s, const std::vector<const Animation*>& anims, const std::vector<float>& frames, bool biped_root) {
     std::vector<Mat4> local(s.size());
     for (size_t i = 0; i < s.size(); ++i) local[i] = s[i].local;
-    for (const Animation* a : anims) {
+    for (size_t k = 0; k < anims.size(); ++k) {
+        const Animation* a = anims[k];
+        float frame = k < frames.size() ? frames[k] : 0.0f;
+        if (!a || !a->frames) continue;
         float f = std::isfinite(frame) ? std::fmod(std::max(frame, 0.0f), static_cast<float>(a->frames)) : 0.0f;
         uint32_t f0 = static_cast<uint32_t>(f), f1 = (f0 + 1) % a->frames;
         float t = f - static_cast<float>(f0);
