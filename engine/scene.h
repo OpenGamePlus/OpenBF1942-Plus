@@ -17,6 +17,7 @@ struct DrawItem {
     std::string skin, skeleton;
     std::vector<std::string> states;  // by setAnimationState index (soldiers: 0 lower body, 1 upper body)
     std::string lightmap;  // static .sm only: <level>/objectlightmaps/<file>_<x>-<y>-<z>.tga, if present
+    std::string owner;     // lower-case name of the object template that holds the geometry
 };
 
 // skipped counts what could not be drawn, by reason ("treemesh", "missing template", ...).
@@ -24,6 +25,9 @@ struct DrawItem {
 std::vector<DrawItem> build_scene(const Con& con, const Vfs& vfs, std::map<std::string, int>& skipped,
                                   const std::function<bool(const std::string&)>& hide = nullptr);
 
+// One template tree (e.g. a vehicle) placed at world, without a level instance.
+std::vector<DrawItem> build_object(const Con& con, const Vfs& vfs, const std::string& name, const Mat4& world,
+                                   std::map<std::string, int>& skipped);
 // "x/y/z" -> 3 floats; atof semantics, missing parts are 0.
 void parse_vec3(const std::string& s, float out[3]);
 

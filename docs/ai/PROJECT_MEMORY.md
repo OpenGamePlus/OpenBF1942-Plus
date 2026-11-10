@@ -2,6 +2,12 @@
 
 Append-only. Newest first. At most 3 bullets per stage.
 
+## 2026-11-10 — physics: Jolt + Refractor wheels
+
+- Maintainer chose the hybrid: Jolt (ADR 0004) for bodies and collision, our ray-cast `Spring` wheels, engine and grip as forces; `--drive Willy` drives a jeep on any map.
+- Reading strength/damping per wheel mass makes a Willys rest exactly at its model wheel positions; first run rolled over (grip at ground level, 2 m spawn drop) and crept on slopes — fixed with grip near COM height and an idle hold.
+- Open: units of torque/drag (placeholders), tanks/aircraft/boats, wheel animation, calibration against the original.
+
 ## 2026-11-10 — object lightmaps
 
 - Per-instance lightmaps decoded: name = mesh file + truncated instance position (67/67 on Wake), 8-bit colour-mapped TGA, second UV of `.sm`.

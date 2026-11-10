@@ -41,8 +41,23 @@ Reading of the tree (unverified): driven wheels hang under the `Engine`; front w
 
 All physical parts carry `hasMobilePhysics`, `hasCollisionPhysics`, `hasResponsePhysics` flags. Collision shapes come from the meshes' collision blocks ([sm.md](sm.md#collision-block)); surface behaviour from `MaterialManager` ids ([terrain.md](terrain.md#material-map-materialmapraw)).
 
-## Open questions for step 6
+## Engine model (implemented, unverified)
 
-- Units and meaning of `setTorque`, `setDifferential`, `setStrength`, `setDamping`, `drag`, the 55000 engine speed.
-- How `c_PGF*` grip models translate into friction, combined with `materialFriction`.
-- Whether to reproduce the original handling numerically or approximate it (design decision).
+`engine/physics.cpp` reads a vehicle tree into wheels + hull ([ADR 0004](../architecture/adr/0004-jolt-physics.md)). Every interpretation below is a working assumption; none is measured against the original yet.
+
+| Part | Reading |
+|---|---|
+| Root `PlayerControlObject` | `mass` in kg; `drag`: force = drag · mass · v² / 150 (placeholder: Willys tops out near 70 km/h) |
+| Hull | convex hull of the collision vertices of every non-wheel mesh (bounding box if a mesh has none) |
+| `Spring` | a ray-cast wheel at the spring's position; radius = half the wheel mesh height; `setStrength` / `setDamping` per unit of the mass each wheel carries (s⁻², s⁻¹). A Willys (25, 5) then rests with its wheels at the model position, at 0.8 Hz and damping ratio 0.5, which is why this reading was chosen |
+| Under `Engine` | driven wheel; drive acceleration = torque · differential / 20 m/s² split over driven wheels (placeholder); gears, `setMaxSpeed` 55000 not used |
+| `RotationalBundle` with `setInputToYaw c_PIYaw` | steering: ± `setMaxRotation` yaw at `setMaxSpeed` °/s |
+| Grip | friction coefficient 1 for every wheel, sideways slip cancelled within the friction circle, applied at 80 % of the centre-of-mass height so cornering rarely rolls a vehicle; idle wheels brake and hold |
+
+All 122 / 142 / 172 `PlayerControlObject`s of bf1942 / XPack1 / XPack2 build and simulate without error, except passenger seats and `Destroyable_Bridge`, which have no geometry of their own.
+
+## Open questions
+
+- Units of `setTorque`, `setDifferential`, `drag`, the 55000 engine speed; gear changes (`setGearUp/Down`).
+- `c_PGFRollGrip` vs `c_PGFEngineGrip`, combined with `materialFriction`.
+- Tanks (track rollers as springs), aircraft (`Wing`), boats (`FloatingBundle`): not modelled. A Sherman loads (12 rollers, 8 of them `setStrength` 0) but its hull collision, tracks included, reaches below the rollers, so it rests on the hull and does not move.

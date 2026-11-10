@@ -11,6 +11,7 @@
 #include "con.h"
 #include "dds.h"
 #include "math.h"
+#include "physics.h"
 #include "scene.h"
 #include "sm.h"
 #include "rfa.h"
@@ -230,6 +231,33 @@ int main() {
         assert(tga_decode(tga).rgba[0] == 0);
         tga.pop_back();
         assert(throws([&] { tga_decode(tga); }));
+    }
+
+    // Physics: a 4-wheel car settles on its springs (Willys values 25 / 5), drives forward, steers right (+x).
+    {
+        Heightmap hm;
+        hm.n = 32, hm.y_scale = 1, hm.h.assign(32 * 32, 0);
+        Physics phys(hm, 128);
+        VehicleDef car;
+        car.mass = 1000, car.drag = 1.5f, car.torque = 10, car.differential = 7;
+        for (int i = 0; i < 4; ++i) {
+            WheelDef w;
+            w.pos[0] = i & 1 ? 0.6f : -0.6f, w.pos[1] = -0.5f, w.pos[2] = i & 2 ? 1.0f : -1.0f;
+            w.radius = 0.3f, w.driven = !(i & 2), w.steer_deg = i & 2 ? 30.0f : 0.0f, w.steer_rate = 200;
+            car.wheels.push_back(w);
+        }
+        for (int i = 0; i < 8; ++i) car.hull.insert(car.hull.end(), {i & 1 ? 0.7f : -0.7f, i & 2 ? 0.4f : -0.3f, i & 4 ? 1.4f : -1.4f});
+        int v = phys.add_vehicle(car, translate(64, 2, 30));
+        for (int i = 0; i < 180; ++i) phys.step(1.0f / 60);
+        Mat4 t = phys.transform(v);
+        assert(std::fabs(t.m[13] - 0.8f) < 0.05f && phys.speed(v) < 0.1f);  // wheel centres where the model puts them
+        phys.drive(v, 1, 0);
+        for (int i = 0; i < 120; ++i) phys.step(1.0f / 60);
+        t = phys.transform(v);
+        assert(t.m[14] > 33 && std::fabs(t.m[12] - 64) < 0.5f && phys.speed(v) > 3);
+        phys.drive(v, 1, 1);
+        for (int i = 0; i < 120; ++i) phys.step(1.0f / 60);
+        assert(phys.transform(v).m[12] > 65);
     }
 
     std::puts("engine tests ok");

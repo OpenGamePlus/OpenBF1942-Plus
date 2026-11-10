@@ -16,6 +16,7 @@
 #include "con.h"
 #include "dds.h"
 #include "math.h"
+#include "physics.h"
 #include "scene.h"
 #include "sm.h"
 #include "terrain.h"
@@ -283,20 +284,22 @@ std::unique_ptr<GpuMesh> upload_tm(const TmMesh& m, Textures& tex) {
 int run(int argc, char** argv) {
     if (argc < 4) {
         std::fprintf(stderr,
-                     "usage: obf_mapview <BF1942_DIR> <mod> <level> [--shot out.ppm] [--cam x y z yaw pitch] [--mode conquest|ctf|tdm|coop] [--soldier <template>] [--collision] [--no-objects]\n"
-                     "  right mouse: look, WASD/QE: move, shift: fast, C: collision meshes, esc: quit\n");
+                     "usage: obf_mapview <BF1942_DIR> <mod> <level> [--shot out.ppm] [--cam x y z yaw pitch] [--mode conquest|ctf|tdm|coop] [--soldier <template>] [--drive <vehicle>] [--collision] [--no-objects]\n"
+                     "  right mouse: look, WASD/QE: move (or drive), shift: fast, C: collision meshes, esc: quit\n"
+                     "  --shot with --drive: settles 2 s, drives 4 s (last 2 s steering right), prints the track\n");
         return 2;
     }
     std::string shot;
     float cx = -1, cy = 0, cz = 0, yaw = 0.6f, pitch = -0.5f;
     bool objects = true, show_collision = false;
-    std::string mode = "conquest", soldier;
+    std::string mode = "conquest", soldier, drive;
     for (int i = 4; i < argc; ++i) {
         if (!std::strcmp(argv[i], "--shot") && i + 1 < argc) shot = argv[++i];
         else if (!std::strcmp(argv[i], "--no-objects")) objects = false;
         else if (!std::strcmp(argv[i], "--collision")) show_collision = true;
         else if (!std::strcmp(argv[i], "--mode") && i + 1 < argc) mode = argv[++i];
         else if (!std::strcmp(argv[i], "--soldier") && i + 1 < argc) soldier = argv[++i];
+        else if (!std::strcmp(argv[i], "--drive") && i + 1 < argc) drive = argv[++i];
         else if (!std::strcmp(argv[i], "--cam") && i + 5 < argc) {
             cx = std::stof(argv[i + 1]), cy = std::stof(argv[i + 2]), cz = std::stof(argv[i + 3]);
             yaw = std::stof(argv[i + 4]), pitch = std::stof(argv[i + 5]);
@@ -335,6 +338,31 @@ int run(int argc, char** argv) {
         std::printf("objects: %zu instances -> %zu meshes drawn; skipped:", con.instances.size(), scene.size());
         for (auto& [why, n] : skipped) std::printf(" %s %d,", why.c_str(), n);
         std::printf("\n");
+    }
+
+    // Physics: terrain + static meshes; an optional driven vehicle drawn by appending its parts to the scene.
+    Physics phys(hm, info.world_size);
+    if (objects) std::printf("physics: %zu static bodies\n", phys.add_scene(scene, vfs));
+    int vehicle = -1;
+    size_t veh_first = scene.size();
+    std::vector<Mat4> veh_local;
+    if (objects && !drive.empty()) {
+        float sx = cx < 0 ? info.world_size * 0.15f : cx, sz = cx < 0 ? info.world_size * 0.15f : cz;
+        sx += std::sin(yaw) * 10, sz += std::cos(yaw) * 10;
+        float cell = info.world_size / static_cast<float>(hm.n);
+        int r = std::clamp(static_cast<int>(sz / cell), 0, hm.n - 1), c = std::clamp(static_cast<int>(sx / cell), 0, hm.n - 1);
+        VehicleDef def = vehicle_def(con, vfs, drive);
+        vehicle = phys.add_vehicle(def, translate(sx, hm.height(r, c) + 1, sz) * rotation_ypr(yaw * 57.29578f, 0, 0));
+        for (DrawItem& item : build_object(con, vfs, drive, Mat4::identity(), skipped)) {
+            veh_local.push_back(item.world);
+            scene.push_back(std::move(item));
+        }
+        std::printf("drive %s: mass %.0f, %zu wheels, %zu hull points, %zu parts\n", drive.c_str(), def.mass, def.wheels.size(),
+                    def.hull.size() / 3, veh_local.size());
+        for (auto& w : def.wheels) std::printf("  wheel %.2f %.2f %.2f r %.2f k %.0f c %.0f steer %.0f driven %d\n", w.pos[0], w.pos[1], w.pos[2], w.radius, w.strength, w.damping, w.steer_deg, w.driven);
+        float lo[3] = {1e9f, 1e9f, 1e9f}, hi[3] = {-1e9f, -1e9f, -1e9f};
+        for (size_t i = 0; i < def.hull.size(); ++i) lo[i % 3] = std::min(lo[i % 3], def.hull[i]), hi[i % 3] = std::max(hi[i % 3], def.hull[i]);
+        std::printf("  hull %.2f %.2f %.2f .. %.2f %.2f %.2f\n", lo[0], lo[1], lo[2], hi[0], hi[1], hi[2]);
     }
 
     if (SDL_Init(SDL_INIT_VIDEO) != 0) throw std::runtime_error(SDL_GetError());
@@ -577,7 +605,27 @@ int run(int argc, char** argv) {
         float dt = static_cast<float>(now - last) / static_cast<float>(SDL_GetPerformanceFrequency());
         last = now;
         const Uint8* k = SDL_GetKeyboardState(nullptr);
-        float speed = (k[SDL_SCANCODE_LSHIFT] ? 400.f : 60.f) * dt;
+        if (vehicle >= 0) {
+            if (shot.empty()) {
+                phys.drive(vehicle, static_cast<float>(k[SDL_SCANCODE_W] - k[SDL_SCANCODE_S]), static_cast<float>(k[SDL_SCANCODE_D] - k[SDL_SCANCODE_A]));
+                phys.step(dt);
+            } else {  // repeatable demo run for --shot
+                for (int i = 0; i < 360; ++i) {
+                    phys.drive(vehicle, i < 120 ? 0.0f : 1.0f, i < 240 ? 0.0f : 1.0f);
+                    phys.step(1.0f / 60);
+                    Mat4 t = phys.transform(vehicle);
+                    if (i % 30 == 29) std::printf("t %.1f s: pos %.1f %.1f %.1f, up %.2f %.2f %.2f, speed %.1f m/s\n", (i + 1) / 60.0, t.m[12], t.m[13], t.m[14], t.m[4], t.m[5], t.m[6], phys.speed(vehicle));
+                }
+            }
+            Mat4 t = phys.transform(vehicle);
+            for (size_t i = 0; i < veh_local.size(); ++i) scene[veh_first + i].world = t * veh_local[i];
+            // Chase camera behind the vehicle, looking along its heading.
+            float hx = t.m[8], hz = t.m[10], hl = std::sqrt(hx * hx + hz * hz);
+            if (hl > 1e-3f) hx /= hl, hz /= hl;
+            cx = t.m[12] - hx * 9, cy = t.m[13] + 3.5f, cz = t.m[14] - hz * 9;
+            yaw = std::atan2(hx, hz), pitch = -0.25f;
+        }
+        float speed = (k[SDL_SCANCODE_LSHIFT] ? 400.f : 60.f) * dt * (vehicle < 0);
         float fx = std::sin(yaw), fz = std::cos(yaw);
         if (k[SDL_SCANCODE_W]) cx += fx * speed, cz += fz * speed;
         if (k[SDL_SCANCODE_S]) cx -= fx * speed, cz -= fz * speed;

@@ -33,3 +33,7 @@
 | TM collision block size | open question | same layout as `.sm` blocks, but its tree length is unknown; geometry is found from the end of the file |
 | No model viewer in the engine | deliberate | step 3 exports OBJ for Blender; rendering starts with the map viewer |
 | Networking protocol | risk | undocumented; roadmap step 8 |
+| Vehicle handling units | unverified | spring/damping per wheel mass; drive and drag scales are placeholders; see [vehicles.md](../formats/vehicles.md#engine-model-implemented-unverified) |
+| Grip, rollover, idle hold | shortcut | friction 1, grip at 80 % of centre-of-mass height, no `c_PGF*` or material friction |
+| Physics scope | not implemented | no tracks, wings, floats, gears, wheel spin/steer drawing; trees and animated meshes have no collision; other spawned vehicles are static |
+| Jolt fetched at configure | accepted | network on first configure; default AVX2 build ([ADR 0004](../architecture/adr/0004-jolt-physics.md)) |

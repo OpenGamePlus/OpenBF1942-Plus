@@ -35,7 +35,7 @@ struct Builder {
         std::string root_pos;  // "x-y-z" of the placed instance, truncated: object lightmap names
     };
 
-    void geometry(const std::string& name, const Mat4& world, const Anim& anim) {
+    void geometry(const std::string& name, const Mat4& world, const Anim& anim, const std::string& owner) {
         const ConObject* g = find("geometrytemplate", name);
         if (!g) return void(++skipped["missing geometry template"]);
         std::string type = lower(g->type);
@@ -54,7 +54,7 @@ struct Builder {
                 if (type == "animatedmesh" && (!vfs.has(skin) || !vfs.has(anim.skeleton))) skin.clear();
                 std::string lm = con.level_dir + "/objectlightmaps/" + file + "_" + anim.root_pos + ".tga";
                 if (type != "standardmesh" || anim.root_pos.empty() || !vfs.has(lm)) lm.clear();
-                return void(out.push_back({p, world, type == "animatedmesh" ? skin : "", anim.skeleton, anim.states, lm}));
+                return void(out.push_back({p, world, type == "animatedmesh" ? skin : "", anim.skeleton, anim.states, lm, owner}));
             }
         ++skipped["missing mesh file"];
     }
@@ -90,7 +90,7 @@ struct Builder {
         std::vector<Child> children;
         for (auto& [k, a] : t->props) {
             if (a.empty()) continue;
-            if (k == "geometry") geometry(a[0], world, anim);
+            if (k == "geometry") geometry(a[0], world, anim, lower(name));
             else if (k == "addtemplate") children.push_back({a[0]});
             // setPosition/setRotation after addTemplate place that child relative to the parent.
             else if (k == "setposition" && !children.empty()) parse_vec3(a[0], children.back().pos);
@@ -126,6 +126,14 @@ std::vector<DrawItem> build_scene(const Con& con, const Vfs& vfs, std::map<std::
                         std::to_string(static_cast<long>(pos[2]));
         b.object(inst.name, translate(pos[0], pos[1], pos[2]) * rotation_ypr(rot[0], rot[1], rot[2]) * scale(scl[0], scl[1], scl[2]), 0, team, anim);
     }
+    return std::move(b.out);
+}
+
+std::vector<DrawItem> build_object(const Con& con, const Vfs& vfs, const std::string& name, const Mat4& world,
+                                   std::map<std::string, int>& skipped) {
+    const std::function<bool(const std::string&)> none;
+    Builder b{con, vfs, skipped, none, {}};
+    b.object(name, world, 0);
     return std::move(b.out);
 }
 
