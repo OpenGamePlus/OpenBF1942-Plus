@@ -2,6 +2,11 @@
 
 Append-only. Newest first. At most 3 bullets per stage.
 
+## 2026-11-10 — first network recording (E0)
+
+- Elevated `pktmon` sees only LAN broadcasts: the client sends a GameSpy `\status\` to port 22000, and same-machine traffic is loopback. A UDP relay in WSL (a separate host) recorded a full 5-minute session: 14,707 packets. The query protocol on port 23000 is documented.
+- Kept out of the repository: the recording (player name, CD-key hash). Next: decode the bit-packed game packets.
+
 ## 2026-11-10 — landing craft and ship spawns (roadmap B3)
 
 - Spawn points inside ships (`teamOnVehicle 1` spawners) belong to the spawner's team and move with the ship: 1,936 bots over 78 levels (was 1,689), 5 levels still one-sided (Battle of Britain ×3, Santo Croce, Essen).
