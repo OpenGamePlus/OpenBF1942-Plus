@@ -2,6 +2,11 @@
 
 Append-only. Newest first. At most 3 bullets per stage.
 
+## 2026-11-10 — game transport decoded
+
+- `tools/bfnet.py`: header (6-bit sequence and ack, 4-bit type, 32-bit received mask), data length, ping / pong clocks; holds on every packet of the recording. The relay that recorded it is its `record` command.
+- Payload is an LSB-first bit stream with length-prefixed strings; client frame and server tick counters found. Message layout still open.
+
 ## 2026-11-10 — README and license
 
 - README rebuilt on the OpenCoD2-Plus model (banner, screenshots rendered by our engine, transparency, notice) in six languages; gameplay called an early prototype, not playable.

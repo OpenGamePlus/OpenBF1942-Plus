@@ -1,6 +1,6 @@
 # Network (roadmap E0, research in progress)
 
-Status: **one 5-minute client/server session recorded (2026-11-10). Discovery and query protocols identified; game packets recorded but not decoded.** Goal and rules: [ADR 0005](../architecture/adr/0005-network-compatibility.md).
+Status: **one 5-minute client/server session recorded (2026-11-10). Discovery and query protocols identified; the game transport layer decoded and checked on every packet of the recording (`tools/bfnet.py`); payload messages not decoded yet.** Goal and rules: [ADR 0005](../architecture/adr/0005-network-compatibility.md).
 
 ## Programs
 
@@ -36,20 +36,45 @@ How it was captured:
 | `\status\` | `gamename bfield1942`, `gamever v1.61`, `hostname`, `hostport`, `mapname`, `gametype conquest`, `numplayers`, `maxplayers`, `tickets1/2`, `password`, `dedicated`, server options (`spawn_wave_time`, `soldier_friendly_fire`, …) |
 | `\players\` | per player N: `playername_N`, `keyhash_N`, `team_N`, `score_N`, `kills_N`, `deaths_N`, `ping_N`; `teamname_0/1`; ends with `\final\\queryid\<n>.1` |
 
-**Game traffic.** UDP on the game port.
+**Game traffic.** UDP on the game port. Rates in the recording:
 
 | Phase | Packets |
 |---|---|
-| Connect | client 84 bytes starting `01 42 13 00`, then 13 / 8 / 17-byte exchanges both ways; server 74 bytes, client 56 and 134 bytes (text-like, bit-packed) |
-| Keep-alive | 13- and 17-byte packets every 3 s, both ways |
-| Play | client about 30 packets/s, mostly 54 bytes; server about 20 packets/s, mostly 72 bytes, up to 587 |
+| Connect | one 84-byte connection request (first byte 01), one type-2 / type-4 exchange, then pings and the first data packets |
+| Keep-alive | a ping every 3 s from each side (13 bytes), answered by a pong (17 bytes) |
+| Play | client about 30 data packets/s, mostly 54 bytes; server about 20/s, mostly 72 bytes, up to 587 |
 | 5 minutes in total | client 8,863 packets / 468 KB; server 5,844 / 675 KB |
 
-The first byte is 00 (data) or 01 (connection); a counter in the following bits rises packet by packet. The payloads look bit-packed (unverified).
+### Transport (checked on all 14,707 packets of the recording)
+
+Little-endian. Byte 0: `00` game packet, `01` connection request (84 bytes, fields not decoded).
+
+| Offset | Size | Field |
+|---|---|---|
+| 0 | 1 | `00` |
+| 1 | 2 | bits 0–5 sequence (+1 per data packet, wraps at 64); bits 6–11 acknowledgement: the last sequence received from the other side; bits 12–15 type |
+| 3 | 4 | received bitmask: one bit per recent packet from the other side (`ffffffff` once 32 have arrived; `01`, `03`, `07` … at the start) |
+| 7 | … | by type, below |
+
+| Type | Rest of the packet |
+|---|---|
+| 15 data | u16 payload length (always the bytes that follow), payload |
+| 7 ping | u8 0, u32 sender's clock (ms), u8 flag (1; 0 in the very first) |
+| 8 pong | u8 value (unverified: 2–5 from the server, 17–72 from the client), u32 the ping's clock echoed, u32 own clock (ms), u8 flag |
+| 2, 4 | once each during the connection (server 2, client 4); not decoded |
+
+Every data packet in the recording had the next sequence number (no loss on one machine); 89 of 14,163 acknowledgements lagged the latest packet sent, the ones in flight. Pings and pongs do not advance the sequence.
+
+### Payload (in progress, unverified)
+
+- A bit stream read least-significant bit first. Strings are an 8-bit length and 8-bit characters at any bit offset (the server's first data packet carries the mod and server names; the client's first ones its player name and CD-key hash).
+- Client data packets start with 11 constant bits (value 193) and a counter that rises by 1 per packet: its input frame (31 bits read; the bit after it is always set).
+- Server data packets start with 6 bits: 4 on ordinary updates (then a 14-bit or wider tick counter), 6 on about 60 packets that come every 10 s or with game events (a reliable-message counter appears a few bits later), 2 once.
+- Client frames and server ticks run over the same span (0–8,585 and 2,020–10,605): one game clock at about 30 Hz, the server's counting from before the client joined.
 
 A second client with the same CD key gets 20 packets of handshake and no more until the server restarts (confirmed).
 
 ## Next
 
-- Decode the game packets offline from the recording: bit layout of the header, sequence and acknowledgement, the handshake fields, then object updates (`NetworkableInfo`).
-- Record more sessions with the WSL relay; this needs no elevation and works remotely. Wanted: two clients, vehicles, deaths, a map change.
+- Payload messages: the fields after the counters, the reliable messages (prefix 6), the connection packets, then object updates (`NetworkableInfo`).
+- Record more sessions with the WSL relay (`tools/bfnet.py record`); this needs no elevation and works remotely. Wanted: two clients, vehicles, deaths, a map change.
