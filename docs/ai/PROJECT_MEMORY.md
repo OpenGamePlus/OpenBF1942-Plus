@@ -2,6 +2,11 @@
 
 Append-only. Newest first. At most 3 bullets per stage.
 
+## 2026-11-10 — README and license
+
+- README rebuilt on the OpenCoD2-Plus model (banner, screenshots rendered by our engine, transparency, notice) in six languages; gameplay called an early prototype, not playable.
+- License chosen: AGPL-3.0, so modified servers also share their source; same as OpenCoD2-Plus Server.
+
 ## 2026-11-10 — repository moved
 
 - The repository moved to the account `OpenGamePlus` (private, history kept); commits are now signed with that account's noreply address. Its `gh` token has no `workflow` scope: changing `.github/workflows/` needs `gh auth refresh -s workflow`.

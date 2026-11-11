@@ -28,7 +28,7 @@
 | A hard rule or stack choice | new ADR, ARCHITECTURE_NOTES, AGENTS.md |
 | An engine module or its dependencies | [boundaries.md](../architecture/boundaries.md), SYSTEM_SUMMARY tree |
 | A risk or open question | `docs/roadmap/debt.md` |
-| English README | Spanish `README.es.md` in the same commit |
+| English README | the five translations (`README.es.md`, `README.pt.md`, `README.fr.md`, `README.de.md`, `README.ru.md`) in the same commit |
 
 ## Memory entry template
 

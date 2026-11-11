@@ -8,7 +8,7 @@ Last updated: 2026-11-10
 AGENTS.md            agent entry point
 CMakeLists.txt       engine build (libraries obf, obf_render; obf_mapview, obf_sim, test_engine)
 .github/workflows/   CI: build, engine tests, tool tests, doc checks
-README.md            English; README.es.md Spanish translation
+README.md            English; README.{es,pt,fr,de,ru}.md translations; LICENSE AGPL-3.0
 docs/                formats/, architecture/adr/, roadmap/, ai/
 engine/              C++ engine: rfa, vfs, dds, terrain, con, sm, tm, anim, scene, physics, damage, conquest, nav, audio, sound, hud, game, render, math.h, mapview.cpp, sim.cpp, test_engine.cpp
 tools/rfa.py         RFA archive reader (list, extract)
