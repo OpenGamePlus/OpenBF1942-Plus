@@ -70,6 +70,7 @@ Every data packet in the recording had the next sequence number (no loss on one 
 - A bit stream read least-significant bit first. Strings are an 8-bit length and 8-bit characters at any bit offset (the server's first data packet carries the mod and server names; the client's first ones its player name and CD-key hash).
 - Client data packets start with 11 constant bits (value 193) and a counter that rises by 1 per packet: its input frame (31 bits read; the bit after it is always set).
 - Server data packets start with 6 bits: 4 on ordinary updates (then a 14-bit or wider tick counter), 6 on about 60 packets that come every 10 s or with game events (a reliable-message counter appears a few bits later), 2 once.
+- Ordinary server updates carry three floats from bit 94: a world position (x, y, z), matching the Berlin spawn area the player walked in; 5,483 of 5,573 server packets hold one, moving at a median 0.9 m/s with one jump (a respawn, probably). Whose object it is (the player's own soldier, or the first object of a list) is open.
 - Client frames and server ticks run over the same span (0–8,585 and 2,020–10,605): one game clock at about 30 Hz, the server's counting from before the client joined.
 
 A second client with the same CD key gets 20 packets of handshake and no more until the server restarts (confirmed).

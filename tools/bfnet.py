@@ -15,6 +15,7 @@ import collections
 import json
 import select
 import socket
+import struct
 import sys
 import time
 
@@ -90,6 +91,16 @@ def frame(direction, payload):
         return None
 
 
+def position(payload):
+    """(x, y, z) of an ordinary server update: three floats from bit 94 (unverified: whose object), else None."""
+    r = BitReader(payload)
+    if len(payload) * 8 < 190 or r.u(6) != 4:
+        return None
+    r.pos = 94
+    v = tuple(struct.unpack("<f", r.u(32).to_bytes(4, "little"))[0] for _ in range(3))
+    return v if 0 < v[0] < 1e5 and 0 < v[2] < 1e5 and abs(v[1]) < 1e5 else None  # world x, z are positive
+
+
 def load(path):
     with open(path) as f:
         return [(r["t"], r["dir"], bytes.fromhex(r["hex"])) for r in map(json.loads, f)]
@@ -100,6 +111,7 @@ def summary(rows):
     last = {"c2s": None, "s2c": None}
     gaps = mismatches = data = 0
     frames = {"c2s": [], "s2c": []}
+    positions = []
     for _, d, b in rows:
         p = parse(b)
         if p["kind"] == "connect":
@@ -118,6 +130,8 @@ def summary(rows):
         f = frame(d, p["payload"])
         if f is not None:
             frames[d].append(f)
+        if d == "s2c" and (v := position(p["payload"])) is not None:
+            positions.append(v)
     names = {DATA: "data", PING: "ping", PONG: "pong", CONNECT_REPLY: "type 2", CONNECT_ACK: "type 4", "connect": "connect"}
     for (d, t), n in sorted(counts.items(), key=str):
         out.append(f"{d} {names.get(t, t)}: {n}")
@@ -125,6 +139,10 @@ def summary(rows):
     for d, label in (("c2s", "client frames"), ("s2c", "server ticks")):
         if frames[d]:
             out.append(f"{label}: {min(frames[d])}..{max(frames[d])} in {len(frames[d])} packets")
+    if positions:
+        lo = [min(v[i] for v in positions) for i in range(3)]
+        hi = [max(v[i] for v in positions) for i in range(3)]
+        out.append(f"server positions: {len(positions)}, x {lo[0]:.0f}..{hi[0]:.0f} y {lo[1]:.0f}..{hi[1]:.0f} z {lo[2]:.0f}..{hi[2]:.0f}")
     return out
 
 

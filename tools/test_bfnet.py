@@ -3,7 +3,9 @@ import os
 import tempfile
 import unittest
 
-from bfnet import DATA, PING, PONG, BitReader, frame, load, parse, summary
+import struct
+
+from bfnet import DATA, PING, PONG, BitReader, frame, load, parse, position, summary
 
 
 def header(seq, ack, kind, ackbits=0xFFFFFFFF):
@@ -52,6 +54,9 @@ class BfnetTest(unittest.TestCase):
             rows.append({"t": i, "dir": "s2c", "client": "x", "hex": (header(i + 1, i + 1, DATA) + bytes([len(s), 0]) + s).hex()})
         self.assertEqual(frame("c2s", bits([(0b11000001, 11), (7, 31)])), 7)
         self.assertIsNone(frame("s2c", bits([(6, 6), (7, 14)])))
+        f = [struct.unpack("<I", struct.pack("<f", c))[0] for c in (1800.5, 38.75, 12.25)]
+        self.assertEqual(position(bits([(4, 6), (0, 88)] + [(c, 32) for c in f])), (1800.5, 38.75, 12.25))
+        self.assertIsNone(position(bits([(6, 6), (0, 88)] + [(c, 32) for c in f])))
         with tempfile.TemporaryDirectory() as d:
             path = os.path.join(d, "s.jsonl")
             with open(path, "w") as f:
