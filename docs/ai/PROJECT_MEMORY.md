@@ -6,7 +6,7 @@ Append-only. Newest first. At most 3 bullets per stage.
 
 - Meshes with two collision blocks now collide on the last (detailed) one; the first is often a stub (2 faces on the suburb houses). 78-level sweep: no errors, stuck sidesteps 9,810 → 7,010, bot deaths 98 → 146, captures 54 → 51.
 - Checked and left alone: textures named only by file name resolve through each level's `alternativePath`, already handled; the 41 non-power-of-two retail textures are all loading screens and fonts.
-- Open: terrain material 7 counts as outside the world inside the combat area (not implemented; no combat area or outside damage yet).
+- Material map orientation verified (row = z): no spawn or flag of the 21 base maps lies on material 7, the original's outside-the-world material. Outside damage not implemented: its default values are unknown (debt, step D).
 
 ## 2026-11-13 — payload structure from the Mac client
 

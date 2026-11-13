@@ -13,6 +13,7 @@
 | C++ reads `Terrain.con` by line scan | shortcut | replace with a C++ CON interpreter when objects are placed |
 | C++ VFS mounts archives only, not loose files | shortcut | add when a mod needs it |
 | Missing colour tiles drawn grey | unverified | original behaviour unknown; only over open sea so far |
+| Outside the world | not implemented | past the combat area or on material 7 the original damages soldiers and vehicles; default damage and time allowed unknown (measure in D), see [terrain.md](../formats/terrain.md#material-map-materialmapraw) |
 | `texOffsetX/Y`, material map, detail texture, terrain LOD | not implemented | see [terrain.md](../formats/terrain.md) |
 | Water drawn on every map | unverified | Berlin has `waterLevel` but no `Water.*` settings |
 | Little-endian hosts only | accepted | `memcpy` of file integers in C++ |
