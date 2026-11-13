@@ -2,6 +2,11 @@
 
 Append-only. Newest first. At most 3 bullets per stage.
 
+## 2026-11-14 — back to the roadmap; collision choice re-measured
+
+- The 2026-11-10 rejection of the last collision block (El Alamein stuck 33 → 474) does not reproduce with today's engine: 5-minute games 39 → 29 there, and lower on Gazala, Battleaxe and Stalingrad; Tobruk, Wake and Berlin up 9–21 %. The last block stays; pathfinding.md and debt.md updated.
+- Roadmap E0 row updated to the decoded state; next in order is B1 (cities).
+
 ## 2026-11-13 — object descriptors understood, 97 % of ghost updates
 
 - Descriptor rules found (`_analyseObject`, `compareProperties`) and checked bit-exactly: tree order, child PlayerControlObjects are separate ghosts (next id), every networked instance is a property except rotational bundles with identical controls; widths from template ammo and gear counts.

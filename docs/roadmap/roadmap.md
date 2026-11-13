@@ -10,7 +10,7 @@ Goal: a modern engine that plays Battlefield 1942 from the user's retail install
 | 5 Skinned meshes, animation | done: soldiers, held weapons, first person, fire / reload, seated soldiers; tracks open |
 | 6 Physics, vehicles | cars, tanks, aircraft, boats, moving parts, crews and seats; handling uncalibrated |
 | 7 Gameplay | conquest against bots with full kits, explosions, supply depots, postures, parachutes, bot crews, sound and HUD; look compared with the original client |
-| 8 Networking | research: one session recorded, query protocol and game transport decoded ([network.md](../formats/network.md)) |
+| 8 Networking | research: two sessions recorded; query, master server (from research), transport, game events and 97 % of object updates decoded ([network.md](../formats/network.md)) |
 
 ## Order and why
 
@@ -21,7 +21,7 @@ Third-party research feeds several steps ([references.md](../references.md)). Pl
 | # | Phase | Steps | Exit check |
 |---|---|---|---|
 | 1 | **A. Consolidate** (done 2026-11-10) | A1 split `mapview.cpp` (~1,500 lines: rendering, game, AI, demos) into a game library (world: soldiers, vehicles, projectiles, rules, AI) with no SDL/GL, a renderer, and thin executables; A2 CI on GitHub (build + all tests); A3 headless game runner (the `--sim` checks as a tool) | same outputs as today on the 78-level sweeps; CI green |
-| 2 | **E0. Protocol research** (runs alongside 3–5; one session recorded, query protocol and game transport known) | capture traffic between an original client and server on the maintainer's machine; transport, connection handshake, packet framing, compression; map the `NetworkableInfo` templates (`setNetworkableInfo WillyBodyInfo`, `ControlPointInfo`, …) to replicated fields; game-server query protocol | a network format spec (docs/formats, new) with a parser that decodes recorded sessions (tool + tests on synthetic packets) |
+| 2 | **E0. Protocol research** (runs alongside 3–5; payload decoded: actions, 51 game events, 97 % of object updates; open: object layouts built from templates, the server's template numbering) | capture traffic between an original client and server on the maintainer's machine; transport, connection handshake, packet framing, compression; map the `NetworkableInfo` templates (`setNetworkableInfo WillyBodyInfo`, `ControlPointInfo`, …) to replicated fields; game-server query protocol | a network format spec (docs/formats, new) with a parser that decodes recorded sessions (tool + tests on synthetic packets) |
 | 3 | **B1. AI navigation** (level 0 used; cities open) | read `<Map>/Pathfinding/` maps; bots route around obstacles | bots reach their flag on all levels; firefights per minute up sharply |
 | 4 | **C1. Audio** (weapons and driven engines play; [ADR 0006](../architecture/adr/0006-audio.md)) | `.wav` playback, `.ssc` sound scripts on templates (engines, weapons, impacts, radio) | every vehicle and weapon of bf1942 makes its sound |
 | 5 | **C2. HUD and text** (`.font` text, crosshair, health, tickets, feed; `.dif`, ammo, minimap open) | fonts (`.dif`, `.font`), crosshair, hit points, ammo, tickets, minimap, kill messages | window-title HUD retired |
