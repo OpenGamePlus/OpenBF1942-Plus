@@ -36,6 +36,20 @@ How it was captured:
 | `\status\` | `gamename bfield1942`, `gamever v1.61`, `hostname`, `hostport`, `mapname`, `gametype conquest`, `numplayers`, `maxplayers`, `tickets1/2`, `password`, `dedicated`, server options (`spawn_wave_time`, `soldier_friendly_fire`, …) |
 | `\players\` | per player N: `playername_N`, `keyhash_N`, `team_N`, `score_N`, `kills_N`, `deaths_N`, `ping_N`; `teamname_0/1`; ends with `\final\\queryid\<n>.1` |
 
+**Master server (internet server list).** GameSpy 2002 SDK. **Unverified:** taken from keowu's reverse engineering of BF1942 v1.61 ([references.md](../references.md)), not yet seen in our captures. GameSpy's own master (`master.gamespy.com`) is gone. That is why the original client's internet list is empty, while servers joined by address still work.
+
+1. The client opens TCP port 28900 on the master. The master speaks first: `\basic\\secure\<challenge>`.
+2. The client sends its query: `gamename bfield1942`, `gamever`, `location 0`, `validate <response>`, `enctype 2`, `\final\`, `queryid 1.1`. Then it sends the list request for `bfield1942`. The validate response is computed from the challenge and a secret key per game held in the executable; algorithm and key are open (see Luigi Auriemma's GameSpy papers).
+3. The master answers with one buffer of at most 2,047 bytes, encrypted with **enctype 2** (GameSpy's "GOA": per-session XOR keys and shuffle rounds).
+   - The first byte XOR `0xEC` is non-zero. Zero means the master refused.
+   - Once decrypted, the buffer holds a header (13 bytes in keowu's parser, `0x13` in his paper's text), then 6-byte entries (IPv4 address and port, network byte order), then `\final\`.
+   - The ports in keowu's sample are 23000, so the entries name each server's **query port**, not its game port.
+4. The client sends `\status\` over UDP to every entry. It shows the server's answer and drops servers whose `gamever` differs from its own.
+
+How a server registers with the master (heartbeat) is not covered by that research. GameSpy v1 servers usually send UDP heartbeats to port 27900, but that is unverified for BF1942. For E2 there are two routes: a master of our own, which needs enctype 2 and the validate algorithm, or a community master that already speaks the protocol.
+
+**CD-key hash.** `keyhash` (in `\players\` answers and in the client's first data packets) is the MD5 of the CD key, in hex; the key itself is in the registry. The duplicate-key check compares these hashes, so the same key twice on one server blocks the second player. Our recording confirms the blocking; the MD5 claim comes from keowu's paper.
+
 **Game traffic.** UDP on the game port. Rates in the recording:
 
 | Phase | Packets |

@@ -2,6 +2,11 @@
 
 Append-only. Newest first. At most 3 bullets per stage.
 
+## 2026-11-13 — master server protocol documented
+
+- `network.md` now has the GameSpy 2002 master-server exchange from keowu's research: TCP 28900, `\basic\secure\` challenge, validate + enctype 2, the server list as 6-byte query-port entries ending in `\final\`, then `\status\` to each server. All unverified.
+- Open for E2: the validate algorithm and secret key, enctype 2, server heartbeats to the master.
+
 ## 2026-11-13 — static collision uses the detailed block
 
 - Meshes with two collision blocks now collide on the last (detailed) one; the first is often a stub (2 faces on the suburb houses). 78-level sweep: no errors, stuck sidesteps 9,810 → 7,010, bot deaths 98 → 146, captures 54 → 51.
