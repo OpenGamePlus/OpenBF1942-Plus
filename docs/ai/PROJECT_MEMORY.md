@@ -2,6 +2,12 @@
 
 Append-only. Newest first. At most 3 bullets per stage.
 
+## 2026-11-13 — second recording, payload walk verified
+
+- 14-minute session (three 5-minute Berlin rounds, tanks entered, deaths) with the server's XML event log, kept outside the repository with the player's data. Every action and ghost section decodes to its last byte (24,223 client, 15,924 server payloads).
+- Transport type 5 is the disconnect; the server tick runs at 30 Hz and restarts each round.
+- Next: the game events (196 packets) against the event log's ground truth.
+
 ## 2026-11-13 — master server protocol documented
 
 - `network.md` now has the GameSpy 2002 master-server exchange from keowu's research: TCP 28900, `\basic\secure\` challenge, validate + enctype 2, the server list as 6-byte query-port entries ending in `\final\`, then `\status\` to each server. All unverified.

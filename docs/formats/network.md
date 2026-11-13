@@ -1,6 +1,6 @@
 # Network (roadmap E0, research in progress)
 
-Status: **one 5-minute client/server session recorded (2026-11-10). Discovery and query protocols identified; the game transport layer decoded and checked on every packet of the recording (`tools/bfnet.py`); payload structure read from the Mac client decompilation (stream manager sections, ghost entries), not yet checked on traffic.** Goal and rules: [ADR 0005](../architecture/adr/0005-network-compatibility.md).
+Status: **two client/server sessions recorded (2026-11-10, 5 min; 2026-11-13, 14 min with three rounds, vehicles and deaths, plus the server's XML event log). Discovery and query protocols identified; the game transport layer decoded and checked on every packet of the recording (`tools/bfnet.py`); payload structure read from the Mac client decompilation and checked on the second recording: every action and ghost section is walked to its last byte.** Goal and rules: [ADR 0005](../architecture/adr/0005-network-compatibility.md).
 
 ## Programs
 
@@ -76,12 +76,13 @@ Little-endian. Byte 0: `00` game packet, `01` connection request (84 bytes, fiel
 | 7 ping | u8 0, u32 sender's clock (ms), u8 flag (1; 0 in the very first) |
 | 8 pong | u8 value (unverified: 2–5 from the server, 17–72 from the client), u32 the ping's clock echoed, u32 own clock (ms), u8 flag |
 | 2, 4 | once each during the connection (server 2, client 4); not decoded |
+| 5 | disconnect: sent three times each way when the client quits; the rest of the packet is uninitialised memory |
 
 Every data packet in the recording had the next sequence number (no loss on one machine); 89 of 14,163 acknowledgements lagged the latest packet sent, the ones in flight. Pings and pongs do not advance the sequence.
 
 ### Payload
 
-Read from the symbol-named Mac client decompilation ([references.md](../references.md): `dice::ref2::io::BitStream`, `dice::bf::ClientConnection`, the stream managers) and decoded by `tools/bfnet.py` `payload`. **Unverified as a whole:** the recording of 2026-11-10 is gone, so the full walk has not run on real traffic yet. What that recording did show fits it exactly: the server's prefixes 4, 6 and 2, the client's constant 11 bits (193) and the floats at bit 94.
+Read from the symbol-named Mac client decompilation ([references.md](../references.md): `dice::ref2::io::BitStream`, `dice::bf::ClientConnection`, the stream managers) and decoded by `tools/bfnet.py` `payload`. **Checked on the 2026-11-13 recording:** all 24,223 client action payloads and all 15,924 ghost-only server payloads end in their last byte, with no decoding error; field meanings inside the sections stay unverified unless stated.
 
 **Bit stream.** Least-significant bit first, multi-byte values little-endian. Signed integers are a sign bit then an (n − 1)-bit magnitude. Unsigned floats are an n-bit integer divided by 2ⁿ − 1, signed floats that times 2 minus 1. A unit quaternion is a sign bit for w, then x, y, z as signed floats; w is rebuilt. Strings are an 8-bit length and 8-bit characters at any bit offset.
 
@@ -98,6 +99,8 @@ Read from the symbol-named Mac client decompilation ([references.md](../referenc
 
 So the client's 11 constant bits are mask 1, count 3 and the sign of the first frame: each client packet carries three actions. Server prefix 4 is ghosts only (ordinary updates), 6 is events and ghosts, 2 events only.
 
+The server tick counts at 30 Hz from the start of each round: it reached 9,001 at the end of each 5-minute round and restarted at 0.
+
 **Control object state** (the player's own soldier or vehicle): u12 bit length of the rest, s32, a flag, a compressed vector with scale 1 (mode 0 puts the full position at bit 94 of an ordinary update, the floats seen in the recording), then a u16 networkable id and its state (not walked; the length skips it).
 
 **Ghost entries:** u2 kind, u16 networkable id. Kind 0: nothing more. Kind 1: a flag and a u11 bit length, then the object's update (read by its networkable; skipped by the length). Kind 3: the ghost is removed. Kind 2: invalid.
@@ -106,6 +109,5 @@ A second client with the same CD key gets 20 packets of handshake and no more un
 
 ## Next
 
-- Record a new session and run `bfnet.py summary` on it: every ghost-only server payload must end in its last byte.
 - Game events (prefix 6): the per-event readers (`GameEventMaker` classes); the action values; the control state and per-object updates (`NetworkableInfo`); the compressed-vector bit tables.
 - Record more sessions with the WSL relay (`tools/bfnet.py record`); this needs no elevation and works remotely. Wanted: two clients, vehicles, deaths, a map change.
