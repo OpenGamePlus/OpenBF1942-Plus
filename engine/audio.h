@@ -31,6 +31,7 @@ struct SoundLayer {
     std::string wav;  // VFS path, @ROOT / @RTD resolved (sound/44khz/...)
     bool loop = false, stereo = false;  // stereo: not positioned (first-person sounds)
     bool finish = false;                // stop FinishSample: a released loop plays its pass to the end
+    bool trigger = false;               // trigger Volume: starts when its time / control volume first rises above 0
     float volume = 1, min_distance = 1;
     std::vector<SoundEffect> effects;
 };
@@ -75,6 +76,7 @@ private:
         std::shared_ptr<const Wav> wav;
         float pos[3], control = 0, time = 0, release_time = -1;
         double phase = 0;
+        bool started = false;  // a trigger layer that has begun
     };
     int rate_, next_ = 1;
     std::vector<Voice> voices_;

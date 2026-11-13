@@ -2,6 +2,12 @@
 
 Append-only. Newest first. At most 3 bullets per stage.
 
+## 2026-11-14 — audio heard by the maintainer: stutter, knife, reload fixed
+
+- Stutter and delay: one lock covered file loading and the voice list, so the audio thread waited on archive reads. The mixer now locks only its voices.
+- Knife and reload were silent: `trigger Volume` layers (151 scripts) start when their volume rises; we played them from time 0, so short clips ended unheard. Implemented with a mixer test; device blocks 1,024 → 512 frames.
+- Maintainer: shots, grenades, knife and reloads now play; a fixed delay remains, suspected to be WSLg's audio path.
+
 ## 2026-11-14 — C1: impacts, explosions and every driven engine
 
 - A shot's end plays its effect's sound: the projectile's `endEffectTemplate`, else the MaterialManager `setEffectTemplate` for its material against the target (body part, armour, terrain material map). Physics hits now carry the shot id; `Game::fire` wraps every shot.

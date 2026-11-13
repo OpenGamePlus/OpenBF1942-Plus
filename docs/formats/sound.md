@@ -20,7 +20,8 @@ Line-based text with CRLF line ends. `#` starts a comment line, `*** … ***` li
 | `loop`, `stereo`, `dopplerOff` | loop the layer; play it unpositioned (first-person sounds); no Doppler |
 | `volume v`, `minDistance d`, `priority p` | gain (above 1 occurs, e.g. 10 on first-person shots; we cap it at 1); full level up to d metres, then 1/distance; voice priority (unused) |
 | `stop FinishSample` | a released loop finishes the pass under way |
-| `randomStartPitch a / b`, `relativePosition x/y/z`, `trigger`, `randomPlay`, `addGroup` | not used yet (`randomPlay`: all variants play at once) |
+| `trigger Volume` | the layer starts, from its first sample, when its time / control volume first rises above 0 (distance not counted). Reloads and the knife chain layers this way (151 of 1,083 scripts); playing them all from time 0 left short clips silent (reported by the maintainer) |
+| `randomStartPitch a / b`, `relativePosition x/y/z`, `randomPlay`, `addGroup` | not used yet (`randomPlay`: all variants play at once) |
 | `beginEffect … endEffect` | one curve: `controlDestination Volume\|Pitch`, `controlSource Distance\|Time\|TimeRelease\|Default` (Default: the object's control, e.g. engine load), `envelope Ramp\|Linear`, then `param` values |
 
 Curves:
@@ -40,6 +41,7 @@ The 31 to 82 scripts that come out empty are missing files or fully commented ou
 
 - **What plays:** every shot (player, vehicles, bots) plays patch 0 and the distant patch 2 of its `FireArms` script at the muzzle. A weapon whose patch 5 loops (BAR, Thompson) keeps that loop running while its shooter fires, stopping 0.25 s after the last shot. A reload plays patch 1. The first build merged all patches into one, so each shot left a loop running; the maintainer heard it. Every intact vehicle with a driver (the player or a bot) loops its `Engine` script, with control = speed / 30 m/s (aircraft / 80); the loop stops when the driver's seat empties or the vehicle is wrecked.
 - **Impacts and explosions:** where a shot ends, its effect plays every patch of that `EffectBundle`'s script once. The effect is the projectile's `endEffectTemplate` (grenades, mines, packs), else the MaterialManager's `setEffectTemplate` for the projectile's material against the target: body part on soldiers, armour face or vehicle material, else the terrain material map under the hit (shortcut: static objects count as the ground under them). This gives ricochets, blood, shell and bazooka explosions. 61 of the 67 effects the retail tables name have a sound script; `e_richoPHeavy` (aircraft bullets) has none and 4 names are not defined in retail, so those stay silent.
+- **Device:** SDL, 44.1 kHz float stereo, 512-frame blocks (12 ms; 1,024 before).
 - **Threads:** the mixer locks only its voice list; scripts and `.wav` files load on the game thread outside that lock. Holding one lock over both (first build) blocked SDL's audio thread whenever a new effect loaded from the archives: choppy, delayed sound, reported by the maintainer and fixed.
 - **How it plays:** the listener is the camera. `obf_mapview` plays through SDL; `obf_sim` and `--shot` runs are silent.
 - **Missing:** soldiers (steps, voices), projectiles in flight (`Projectile` scripts, shell whistle), aircraft wings and landing gear, turret and track movement, ambient bundles, radio.

@@ -118,7 +118,7 @@ int run(int argc, char** argv) {
         Sounds* s;
     } actx{&sounds};
     SDL_AudioSpec want{}, have{};
-    want.freq = 44100, want.format = AUDIO_F32SYS, want.channels = 2, want.samples = 1024, want.userdata = &actx;
+    want.freq = 44100, want.format = AUDIO_F32SYS, want.channels = 2, want.samples = 512, want.userdata = &actx;
     want.callback = [](void* u, Uint8* buf, int len) {
         auto* a = static_cast<AudioCtx*>(u);
         auto* out = reinterpret_cast<float*>(buf);

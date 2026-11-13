@@ -660,6 +660,26 @@ int main() {
         mixer.mix(out.data(), 4096 - 2048, Listener{});
         mixer.mix(out.data(), 2048, Listener{});
         assert(mixer.voices() == 0);  // the one-shot ended
+        {  // trigger Volume: silent and unread until its time step (0.05 s), then from its first sample
+            files["objects/knife/knife.ssc"] = "newPatch\nload @ROOT/Sound/@RTD/knf1.wav\ntrigger Volume\nbeginEffect\n"
+                                               "controlDestination Volume\ncontrolSource Time\nenvelope Ramp\nparam 0.05\nparam 0.05\n"
+                                               "param 0\nparam 1\nendEffect\n";
+            SoundPatch knife = ssc_parse("objects/knife/knife.ssc", read);
+            assert(knife.layers.size() == 1 && knife.layers[0].trigger);
+            auto ramp = std::make_shared<Wav>();  // rising samples: shows where reading started
+            ramp->rate = 44100;
+            for (int i = 0; i < 4410; ++i) ramp->samples.push_back(static_cast<int16_t>(i + 1));
+            Mixer m2(44100);
+            float here[3] = {0, 0, 0};
+            m2.play(knife, {ramp}, here);
+            std::vector<float> o(2 * 2048, 0.0f);
+            m2.mix(o.data(), 1024, Listener{});  // 0-23 ms: before its step
+            assert(std::fabs(o[0]) < 1e-9f && std::fabs(o[2 * 1023]) < 1e-9f);
+            m2.mix(o.data(), 1024, Listener{}), m2.mix(o.data(), 1024, Listener{});  // up to 70 ms: started at the block after 50 ms
+            std::fill(o.begin(), o.end(), 0.0f);
+            m2.mix(o.data(), 1, Listener{});
+            assert(o[0] > 0 && o[0] < 1024.0f / 32768.0f);  // early in the sample, not 3 blocks in
+        }
         SoundPatch loop;
         loop.layers.push_back(sp.layers[1]);
         int h = mixer.play(loop, {tone}, right_of_listener);

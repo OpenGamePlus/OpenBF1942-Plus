@@ -128,7 +128,7 @@ void parse_into(std::vector<SoundPatch>& patches, const std::string& path, const
             if (p.rfind("@root/", 0) == 0) p = p.substr(6);
             else p = join(dir_of(path), p);
             for (size_t r; (r = p.find("@rtd")) != std::string::npos;) p.replace(r, 4, "44khz");
-            patch.layers.push_back({p, false, false, false, 1, 1, {}});
+            patch.layers.push_back({p, false, false, false, false, 1, 1, {}});
             fx = nullptr;
         } else if (!layer) {
             continue;
@@ -138,6 +138,8 @@ void parse_into(std::vector<SoundPatch>& patches, const std::string& path, const
             layer->finish = lowered(arg) == "finishsample";
         } else if (k == "stereo") {
             layer->stereo = true;
+        } else if (k == "trigger") {
+            layer->trigger = lowered(arg) == "volume";
         } else if (k == "volume") {
             layer->volume = v;
         } else if (k == "mindistance") {
@@ -223,6 +225,7 @@ void Mixer::mix(float* out, int frames, const Listener& l) {
         float d[3] = {v.pos[0] - l.pos[0], v.pos[1] - l.pos[1], v.pos[2] - l.pos[2]};
         float dist = std::sqrt(d[0] * d[0] + d[1] * d[1] + d[2] * d[2]);
         float gain = std::min(v.layer.volume, 1.0f), pitch = 1;  // shortcut: volumes above 1 (first-person shots say 10) capped
+        float timed = 1;  // the volume from time and control curves alone: what starts a trigger layer
         bool has_release = false;
         for (const SoundEffect& e : v.layer.effects) {
             float x = e.source == SoundEffect::Distance ? dist : e.source == SoundEffect::Time ? v.time
@@ -231,7 +234,7 @@ void Mixer::mix(float* out, int frames, const Listener& l) {
             if (e.source == SoundEffect::Unknown) continue;
             has_release |= e.source == SoundEffect::TimeRelease;
             float y = e.eval(x);
-            if (e.dest == SoundEffect::Volume) gain *= std::max(0.0f, y);
+            if (e.dest == SoundEffect::Volume) gain *= std::max(0.0f, y), timed *= e.source == SoundEffect::Distance ? 1.0f : std::max(0.0f, y);
             else pitch *= std::max(0.05f, y);
         }
         if (v.layer.loop && v.release_time >= 0 && (!has_release || v.time - v.release_time > 10)) v.release_time = -2;  // done
@@ -240,6 +243,13 @@ void Mixer::mix(float* out, int frames, const Listener& l) {
             gain *= std::min(1.0f, v.layer.min_distance / std::max(dist, 1e-3f));
             float pan = dist > 1e-3f ? std::clamp((d[0] * l.right[0] + d[1] * l.right[1] + d[2] * l.right[2]) / dist, -1.0f, 1.0f) : 0.0f;
             lg = std::sqrt((1 - pan) / 2) * 1.41421356f, rg = std::sqrt((1 + pan) / 2) * 1.41421356f;
+        }
+        if (v.layer.trigger && !v.started) {  // waits silent, without reading its sample, until its moment
+            if (timed <= 1e-4f) {
+                v.time += dt;
+                continue;
+            }
+            v.started = true;
         }
         const Wav& w = *v.wav;
         double step = static_cast<double>(w.rate) / rate_ * pitch;
