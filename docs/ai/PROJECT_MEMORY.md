@@ -5,6 +5,7 @@ Append-only. Newest first. At most 3 bullets per stage.
 ## 2026-11-14 — B1: opening nav cells from collision rejected
 
 - Opening blocked infantry cells where vertical rays at 0.4–1.6 m find no collision made Stalingrad (63 → 227) and Battleaxe (1,065 → 1,695 stuck) worse and did not help Berlin: the rays miss low rubble and thin fences that physics blocks. Reverted; recorded in pathfinding.md.
+- Also rejected: walking a bot stuck in a blocked cell back to its last free spot (captures 52 → 51, stuck events doubled by loops into the same trap). B1 left with the visible-exit route and the vehicle-target rule.
 
 ## 2026-11-14 — B1: bots stop duelling vehicles they cannot hurt
 
