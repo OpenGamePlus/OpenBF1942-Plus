@@ -16,6 +16,8 @@ Goal: a modern engine that plays Battlefield 1942 from the user's retail install
 
 Network compatibility makes fidelity a requirement, not a polish step: an original client runs its own simulation and trusts the server for object state, so our rules, object identities and replicated values have to match Refractor's. The protocol is undocumented and the riskiest item, so its research starts right after the code is reorganised, and its findings shape the game layer built in B.
 
+Third-party research feeds several steps ([references.md](../references.md)). Plan set 2026-11-13: E0 reads the payload through the symbol-named Linux server and Mac client decompilations; then small fidelity checks (terrain material 7 is outside the world, COL02 collision, non-power-of-two textures, textures resolved by file name); the GameSpy master server goes into the network spec for E2; the rest waits for its step (C5 `.lsb` and `.rs` flags, D server event logs, C4 `MemeFile` menus).
+
 | # | Phase | Steps | Exit check |
 |---|---|---|---|
 | 1 | **A. Consolidate** (done 2026-11-10) | A1 split `mapview.cpp` (~1,500 lines: rendering, game, AI, demos) into a game library (world: soldiers, vehicles, projectiles, rules, AI) with no SDL/GL, a renderer, and thin executables; A2 CI on GitHub (build + all tests); A3 headless game runner (the `--sim` checks as a tool) | same outputs as today on the 78-level sweeps; CI green |

@@ -8,4 +8,5 @@
 | Module boundaries | [architecture/boundaries.md](architecture/boundaries.md) |
 | Roadmap (order, exit checks) | [roadmap/roadmap.md](roadmap/roadmap.md) |
 | Debt, risks, open questions | [roadmap/debt.md](roadmap/debt.md) |
+| Third-party research we use | [references.md](references.md) |
 | AI memory layer | [ai/README_AI.md](ai/README_AI.md) |

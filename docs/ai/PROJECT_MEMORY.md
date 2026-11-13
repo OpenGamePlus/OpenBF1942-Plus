@@ -2,6 +2,12 @@
 
 Append-only. Newest first. At most 3 bullets per stage.
 
+## 2026-11-13 — external sources reviewed
+
+- Ten third-party BF1942 repositories reviewed; seven kept in `docs/references.md` with licence and allowed use (port GPLv3 code with attribution; facts only from unlicensed or decompiled sources, never committed).
+- Key find: decompilations of the Linux dedicated server and Mac client keep DICE's symbol names (BitStream, ghost manager, networkables), the next lever for E0.
+- Rejected: librfa, RefractorForgeLivery, RefractorForgeArchive (nothing beyond what we have or RefractorForge).
+
 ## 2026-11-10 — game transport decoded
 
 - `tools/bfnet.py`: header (6-bit sequence and ack, 4-bit type, 32-bit received mask), data length, ping / pong clocks; holds on every packet of the recording. The relay that recorded it is its `record` command.
