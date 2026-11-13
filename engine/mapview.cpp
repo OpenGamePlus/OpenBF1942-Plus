@@ -113,14 +113,10 @@ int run(int argc, char** argv) {
 
     if (SDL_Init(SDL_INIT_VIDEO) != 0) throw std::runtime_error(SDL_GetError());
     // Sound: the game adds voices, SDL's audio thread mixes them; without a device the game runs silent.
-    Sounds sounds(vfs, con, 44100);
-    std::mutex sound_lock;
-    Listener listener;
+    Sounds sounds(vfs, con, 44100);  // the mixer locks its voice list itself; files load outside that lock
     struct AudioCtx {
         Sounds* s;
-        std::mutex* m;
-        Listener* l;
-    } actx{&sounds, &sound_lock, &listener};
+    } actx{&sounds};
     SDL_AudioSpec want{}, have{};
     want.freq = 44100, want.format = AUDIO_F32SYS, want.channels = 2, want.samples = 1024, want.userdata = &actx;
     want.callback = [](void* u, Uint8* buf, int len) {
@@ -128,8 +124,7 @@ int run(int argc, char** argv) {
         auto* out = reinterpret_cast<float*>(buf);
         int frames = len / static_cast<int>(2 * sizeof(float));
         std::fill(out, out + 2 * frames, 0.0f);
-        std::lock_guard<std::mutex> g(*a->m);
-        a->s->mixer.mix(out, frames, *a->l);
+        a->s->mixer.mix(out, frames);
         for (int i = 0; i < 2 * frames; ++i) out[i] = std::clamp(out[i] * 0.5f, -1.0f, 1.0f);  // headroom for many voices
     };
     SDL_AudioDeviceID audio = 0;
@@ -219,8 +214,7 @@ int run(int argc, char** argv) {
         }
         game.pose();
         if (audio) {
-            std::lock_guard<std::mutex> g(sound_lock);
-            listener = Listener{{cam.x, cam.y, cam.z}, {std::cos(cam.yaw), 0, -std::sin(cam.yaw)}};
+            sounds.mixer.listen(Listener{{cam.x, cam.y, cam.z}, {std::cos(cam.yaw), 0, -std::sin(cam.yaw)}});
             float now_s = static_cast<float>(SDL_GetTicks()) / 1000.0f;
             for (auto& e : game.sounds) {
                 if (e.effect) sounds.effect(e.tmpl, e.pos);

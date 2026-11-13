@@ -177,6 +177,7 @@ SoundPatch ssc_parse(const std::string& path, const std::function<std::string(co
 }
 
 int Mixer::play(const SoundPatch& patch, const std::vector<std::shared_ptr<const Wav>>& wavs, const float pos[3], float control) {
+    std::lock_guard<std::mutex> g(m_);
     int h = next_++;
     for (size_t i = 0; i < patch.layers.size() && i < wavs.size(); ++i) {
         if (!wavs[i] || !wavs[i]->frames()) continue;
@@ -187,11 +188,13 @@ int Mixer::play(const SoundPatch& patch, const std::vector<std::shared_ptr<const
 }
 
 void Mixer::update(int handle, const float pos[3], float control) {
+    std::lock_guard<std::mutex> g(m_);
     for (auto& v : voices_)
         if (v.handle == handle) std::copy(pos, pos + 3, v.pos), v.control = control;
 }
 
 void Mixer::release(int handle) {
+    std::lock_guard<std::mutex> g(m_);
     for (auto& v : voices_) {
         if (v.handle != handle || v.release_time >= 0) continue;
         if (v.layer.finish) v.layer.loop = false;  // stop FinishSample: this pass to its end
@@ -199,7 +202,22 @@ void Mixer::release(int handle) {
     }
 }
 
+void Mixer::listen(const Listener& l) {
+    std::lock_guard<std::mutex> g(m_);
+    listener_ = l;
+}
+
+void Mixer::mix(float* out, int frames) {
+    Listener l;
+    {
+        std::lock_guard<std::mutex> g(m_);
+        l = listener_;
+    }
+    mix(out, frames, l);
+}
+
 void Mixer::mix(float* out, int frames, const Listener& l) {
+    std::lock_guard<std::mutex> g(m_);
     const float dt = static_cast<float>(frames) / static_cast<float>(rate_);
     for (auto& v : voices_) {
         float d[3] = {v.pos[0] - l.pos[0], v.pos[1] - l.pos[1], v.pos[2] - l.pos[2]};

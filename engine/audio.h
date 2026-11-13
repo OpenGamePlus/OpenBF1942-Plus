@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <functional>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <vector>
 
@@ -50,7 +51,8 @@ struct Listener {
     float pos[3] = {}, right[3] = {1, 0, 0};
 };
 
-// Mixes playing patches into interleaved stereo float. Not thread-safe: lock around calls from two threads.
+// Mixes playing patches into interleaved stereo float. Thread-safe: the game thread adds and moves voices while the
+// audio thread mixes; the lock covers only the voice list, so callers load files and parse scripts outside it.
 class Mixer {
 public:
     explicit Mixer(int rate) : rate_(rate) {}
@@ -59,7 +61,12 @@ public:
     void update(int handle, const float pos[3], float control);
     void release(int handle);  // loops fade by their TimeRelease effects (or stop), one-shots finish
     void mix(float* out, int frames, const Listener& l);  // adds into out (2 * frames)
-    size_t voices() const { return voices_.size(); }
+    void listen(const Listener& l);                       // the listener mix(out, frames) uses
+    void mix(float* out, int frames);
+    size_t voices() const {
+        std::lock_guard<std::mutex> g(m_);
+        return voices_.size();
+    }
 
 private:
     struct Voice {
@@ -71,6 +78,8 @@ private:
     };
     int rate_, next_ = 1;
     std::vector<Voice> voices_;
+    Listener listener_;
+    mutable std::mutex m_;
 };
 
 }  // namespace obf
