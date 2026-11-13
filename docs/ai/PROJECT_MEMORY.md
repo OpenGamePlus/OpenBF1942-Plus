@@ -2,6 +2,12 @@
 
 Append-only. Newest first. At most 3 bullets per stage.
 
+## 2026-11-13 — game events decoded
+
+- The 51 game events (ids from the Mac client's `GameEvent::initEvents`, layouts from each `deSerialize`) are in `bfnet.py`; every data packet of the recording now decodes to its last byte. `readUnsigned(min, max)` is range-coded, which the first attempt missed.
+- Matched against the server's XML log: spawn requests carry team and kit, `CreateObject` carries template, networkable id and exact position, vehicle enter / exit, score kinds 1 / 4 / 7, round status.
+- Open: action values, per-object ghost updates, the download section.
+
 ## 2026-11-13 — second recording, payload walk verified
 
 - 14-minute session (three 5-minute Berlin rounds, tanks entered, deaths) with the server's XML event log, kept outside the repository with the player's data. Every action and ghost section decodes to its last byte (24,223 client, 15,924 server payloads).

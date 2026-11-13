@@ -1,6 +1,6 @@
 # Network (roadmap E0, research in progress)
 
-Status: **two client/server sessions recorded (2026-11-10, 5 min; 2026-11-13, 14 min with three rounds, vehicles and deaths, plus the server's XML event log). Discovery and query protocols identified; the game transport layer decoded and checked on every packet of the recording (`tools/bfnet.py`); payload structure read from the Mac client decompilation and checked on the second recording: every action and ghost section is walked to its last byte.** Goal and rules: [ADR 0005](../architecture/adr/0005-network-compatibility.md).
+Status: **two client/server sessions recorded (2026-11-10, 5 min; 2026-11-13, 14 min with three rounds, vehicles and deaths, plus the server's XML event log). Discovery and query protocols identified; the game transport layer decoded and checked on every packet of the recording (`tools/bfnet.py`); payload structure read from the Mac client decompilation and checked on the second recording: every action, game event and ghost section is walked to its last byte.** Goal and rules: [ADR 0005](../architecture/adr/0005-network-compatibility.md).
 
 ## Programs
 
@@ -93,7 +93,7 @@ Read from the symbol-named Mac client decompilation ([references.md](../referenc
 | Id | Manager | Section |
 |---|---|---|
 | 0 | PlayerAction (client → server) | u4 count; if any, s32 frame of the first action; per action six u12 values and a u32 (meaning open) |
-| 1 | GameEvent (reliable) | u8 count, u5 block index, a flag; per event a 7-bit event id, then the event's own fields (one reader per event type; open) |
+| 1 | GameEvent (reliable) | u8 count, u5 block index, a flag; per event a 7-bit event id, then the event's own fields (see [Game events](#game-events)) |
 | 2 | Ghost (server → client) | u32 server tick, u8 entry count, a flag; when set the player's **control object state**; then the entries |
 | 3 | Download | open |
 
@@ -105,9 +105,64 @@ The server tick counts at 30 Hz from the start of each round: it reached 9,001 a
 
 **Ghost entries:** u2 kind, u16 networkable id. Kind 0: nothing more. Kind 1: a flag and a u11 bit length, then the object's update (read by its networkable; skipped by the length). Kind 3: the ghost is removed. Kind 2: invalid.
 
+### Game events
+
+From the Mac client's `GameEvent::initEvents` (id → class) and each class's `deSerialize`, implemented in `bfnet.py` `EVENTS`. With them every data packet of the 2026-11-13 recording decodes to its last byte (24,233 client, 16,120 server), events followed by ghosts included. Fields read with `readUnsigned(min, max)` use the smallest n with 2ⁿ − 1 ≥ max − min + 1 bits (`ScoreMsg` kind: 4 bits; `ConnectionType`: 3).
+
+"Seen" marks the meanings matched against the server's XML event log of the same session; the rest are names and layouts only.
+
+| Id | Event | Fields | Seen |
+|---|---|---|---|
+| 2 | Ack | u32 | |
+| 4 | Simulation | flag, f32 | once after joining |
+| 5 | CreateMultipleObjects | u32 template, u16 first networkable id, u4 count | with every spawn (the kit's weapons) |
+| 6 | DestroyObject | u16 networkable id | wrecks removed, round end |
+| 7 | CreateObject | u32 template, u16 networkable id, flag; when set position and rotation (full vectors) | yes: the log's vehicle positions match to the centimetre |
+| 8 | CreatePlayer | u3, u4, flag, u8, 4 × u16, flag, 32-byte name | client sends its name; server echoes |
+| 9 | SetDefaultVehicle | u8 player, u16 networkable id | the player's soldier at each spawn |
+| 10 | SetVehicle | u8 player, u16 networkable id | yes: entering a vehicle |
+| 11 | ExitVehicle | flag (1 on death), u8 player | yes |
+| 12 | DestroyPlayer | u8 player | |
+| 13 | SetPlayerName | u8 length, name, u8 | |
+| 15 | ConnectionType | range 0–6 | client: 0 at join, 5 later |
+| 16 | UpdateRate | u8 | |
+| 17 | CreatePlayerAck | u8 player | |
+| 19 | Map | flag, u8 and u8 lengths, u8, two strings | the server's map list (level, mod) |
+| 20 | Challenge | 10 bytes, s32, u8 length + mod name, 8 bytes | server's first event |
+| 21 | ChallengeResponse | 73 bytes (begins with the CD-key hash in hex), 3 × u32, s32, 32 bytes, flag | client's answer |
+| 22 | GameRules | f32, flag, flag, f32, u32 (300: the round time in s), u32, flag | each round |
+| 23 | WelcomeMsg | u8 length, text, s8 | |
+| 24 | ResetMap | u32 | new round |
+| 25 | CheckSum | u8 n, n bits, u8 m, m bits, u32 | |
+| 26 / 27 | ServerInfo / ServerInfo2 | three strings (game, mod, game) / server name | at join |
+| 30 | FlagHolder | flag, u8 | |
+| 35 | HandlePickup | u8 player, u16 networkable id | the kit at each spawn |
+| 36 | GameStatus | u8 status (5: 5 bytes and a string follow) | 3 before a round, 1 playing, 2 round over |
+| 37 | ControlPointCaptured | u8, u8 | |
+| 38 | ReqScoutCamera | u8, u16 | |
+| 39 | SpecialGame | range 0–3 | bursts of 0 every half second, meaning open |
+| 40 | ChatFragment | flag; when set three flags, u8 player unless the second flag, u8 channel; then u4 length and text | |
+| 41 | TimerSync | u32, u32 | regular |
+| 42 | ScoreMsg | kind (range 0–10), u8 player; kinds 3 and 6 add u8 victim, u32 weapon, u8 | 1 = flag attack, 4 = death, 7 = spawn |
+| 43 | PBFragment | flag; when set u32, u16 part, u16 length, data (PunkBuster) | |
+| 47 | SpawnRequest | u8 team, u8 kit | yes: kits 2, 0, 3, 2, 1 were AT, Scout, Medic, AT, Assault |
+| 48–50 | StatsKills / Shots / Hits | u8 player, u8 count, 10 × (u32, u16) | round end |
+| 51 | Suicide | none | |
+| 52 / 53 | DataBaseComplete / Ack | u16, u16 / none | at join |
+| 54 | SetLevel | 64-byte level path, 64-byte game mode file, u8, u8, u16, u8, u16, u16, u8, u32, u32 | `bf1942/levels/berlin/`, `conquest.con` |
+| 55 | SessionId | 64 bytes (`_ClientID_<n>`) | |
+| 57 | SetTeam | u8, u8 | |
+| 58 | RadioMessage | u16, flag, u8 | yes |
+| 59 | TriggerObjectSpawner | u8 | |
+| 60 | HitFromPos | u3, u8 | when hit, probably the damage direction |
+| 61 | RemoteCommand | 9 bytes, 64 bytes | |
+| 62 | ChangeKit | u8 | |
+
+Ids 3 (Debug, s32) and 18 (Vote) are registered too. Networkable ids of the level's objects and vehicles start above 512; the template numbers are indexes into the server's template list (1741 the Soviet soldier, 2949 the T34-85 on Berlin).
+
 A second client with the same CD key gets 20 packets of handshake and no more until the server restarts (confirmed).
 
 ## Next
 
-- Game events (prefix 6): the per-event readers (`GameEventMaker` classes); the action values; the control state and per-object updates (`NetworkableInfo`); the compressed-vector bit tables.
+- The action values; the control state and per-object ghost updates (`NetworkableInfo`); the compressed-vector bit tables; the download section; the meaning of the unlabelled event fields.
 - Record more sessions with the WSL relay (`tools/bfnet.py record`); this needs no elevation and works remotely. Wanted: two clients, vehicles, deaths, a map change.

@@ -67,7 +67,17 @@ class BfnetTest(unittest.TestCase):
         self.assertEqual(m["ghosts"]["control"]["position"], (1800.5, 38.75, 12.25))
         self.assertEqual([(e["kind"], e["id"]) for e in m["ghosts"]["entries"]], [(1, 77), (3, 78), (0, 79)])
         self.assertEqual((m["ghosts"]["tick"], m["end"]), (2100, sum(w for _, w in g)))
-        self.assertEqual(payload("s2c", bits([(6, 6), (1, 8)]))["open"], "events")
+        # events then ghosts: SpawnRequest (team 2, kit 3), ScoreMsg kind 4 (4-bit range-coded kind), CreateObject
+        ev = [(2, 6), (3, 8), (0, 5), (0, 1), (47, 7), (2, 8), (3, 8), (42, 7), (4, 4), (0, 8)]
+        ev += [(7, 7), (2949, 32), (532, 16), (1, 1)] + [(c, 32) for c in f] * 2
+        m = payload("s2c", bits(ev))
+        e = m["events"]["events"]
+        self.assertEqual([x["name"] for x in e], ["SpawnRequest", "ScoreMsg", "CreateObject"])
+        self.assertEqual((e[0]["fields"], e[1]["kind"], e[2]["template"], e[2]["id"]), ([2, 3], 4, 2949, 532))
+        self.assertEqual(e[2]["position"], (1800.5, 38.75, 12.25))
+        self.assertEqual((m["open"], m["end"]), (None, sum(w for _, w in ev)))
+        with self.assertRaises(ValueError):
+            payload("s2c", bits([(2, 6), (1, 8), (0, 6), (1, 7)]))  # event id 1 is not registered
         with self.assertRaises(ValueError):
             payload("s2c", bits([(4, 6), (0, 32), (1, 8), (0, 1), (2, 2), (1, 16)]))  # kind 2 is an error
 
