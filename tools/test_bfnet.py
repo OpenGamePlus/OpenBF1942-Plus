@@ -97,6 +97,18 @@ class BfnetTest(unittest.TestCase):
         self.assertAlmostEqual(e["soldier"]["rotation"][0], 1.0, places=3)
         self.assertNotIn("soldier", payload("s2c", bits(g))["ghosts"]["entries"][0])  # not a known soldier: skipped
 
+    def test_vehicle(self):
+        # no control state: base (0, 0, 0); body mask 0x2 = position mode 1 (20 bits, scale 0.0005);
+        # engine mask 0x200 (12-bit float), sequence 7; then 22 bits of other components
+        body_ = [(0x2, 11), (1, 2), (0, 1), (200000, 19), (0, 1), (80000, 19), (0, 1), (400000, 19)]
+        eng = [(0x200, 10), (4095, 12), (7, 32)]
+        upd = body_ + eng + [(0, 22)]
+        g = [(4, 6), (10, 32), (1, 8), (0, 1), (1, 2), (531, 16), (0, 1), (sum(w for _, w in upd), 11)] + upd
+        v = payload("s2c", bits(g), (), {531})["ghosts"]["entries"][0]["vehicle"]
+        self.assertEqual([round(c, 3) for c in v["body"]["position"]], [100.0, 40.0, 200.0])
+        self.assertEqual((v["engine"]["sequence"], v["rest_bits"]), (7, 22))
+        self.assertAlmostEqual(v["engine"]["0x200"], 1.25)
+
     def test_summary(self):
         rows = []
         for i in range(3):

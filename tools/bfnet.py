@@ -120,7 +120,8 @@ def parse(d):
     return p
 
 
-CVEC_BITS = {2: 16, 3: 12}  # compressed-vector mode -> bits per component (from update lengths; mode 1 not seen yet)
+CVEC_BITS = {1: 20, 2: 16, 3: 12}  # compressed-vector mode -> bits per component, fitted from update lengths
+BODY_KIT_BITS = 7  # SimpleObject field 0x10: range set by the object's weapon; 7 bits on Berlin's tanks and Hanomags
 ANIM_STATE_BITS = 11  # range 0..states-1 of retail bf1942's animation state machine, from update lengths
 MANAGERS = ("actions", "events", "ghosts", "downloads")  # stream manager ids 0..3, in packet order
 
@@ -165,7 +166,55 @@ def soldier(r, base):
     return e
 
 
-def ghosts(r, soldiers=()):
+def body(r, base):
+    """SimpleObjectNetworkable update (a vehicle's body): u11 mask, then the fields whose bit is set."""
+    m = r.u(11)
+    e = {"mask": m}
+    if m & 0x2:
+        e["position"] = r.cvec(0.0005, base)
+    if m & 0x1:
+        e["rotation"] = r.quat()
+    for bit, scale in ((0x4, 0.001), (0x20, 0.0001), (0x8, 0.001), (0x40, 0.0001), (0x100, 0.0001), (0x200, 0.0001)):
+        if m & bit:  # 0x4 velocity; the others are open
+            e[hex(bit)] = r.cvec(scale, base)
+    if m & 0x80:
+        e["0x80"] = r.u(1)
+    if m & 0x10:
+        e["0x10"] = r.u(BODY_KIT_BITS)
+    if m & 0x400:
+        e["0x400"] = r.u(2)
+    return e
+
+
+def engine(r):
+    """EngineNetworkable update: u10 mask, fields by bit, then a u32 that rises by one per update."""
+    m = r.u(10)
+    e = {"mask": m}
+    for bit in (0x1, 0x2, 0x4):
+        if m & bit:
+            e[hex(bit)] = r.u(1)
+    if m & 0x8:
+        raise ValueError("engine: gear width unknown")  # range 0..number of gears of the engine template
+    for bit in (0x10, 0x20, 0x40):
+        if m & bit:
+            e[hex(bit)] = r.sfloat(16)  # times a template limit
+    for bit in (0x80, 0x100, 0x200):
+        if m & bit:
+            e[hex(bit)] = r.sfloat(12) * 1.25
+    e["sequence"] = r.u(32)
+    return e
+
+
+def vehicle(r, base, end):
+    """A vehicle's update: body, engine, then the other components (springs, turrets, weapons; not decoded)."""
+    e = {"body": body(r, base), "engine": engine(r)}
+    e["rest_bits"] = end - r.pos
+    if e["rest_bits"] < 0:
+        raise ValueError("vehicle update: read past its length")
+    return e
+
+
+def ghosts(r, soldiers=(), vehicles=()):
     """GhostManager section: u32 server tick, u8 entry count, a flag, the player's control object state when the
     flag is set, then the entries. Each entry is a u2 kind and a u16 networkable id; kind 1 carries a flag and an
     u11 bit length of its update (skipped here), kind 3 removes the ghost, kind 2 is an error."""
@@ -199,6 +248,11 @@ def ghosts(r, soldiers=()):
                         raise ValueError(f"soldier update: read {r.pos - end + e['bits']} bits of {e['bits']}")
                 except ValueError as x:
                     e["soldier_error"] = str(x)
+            elif nid in vehicles:
+                try:
+                    e["vehicle"] = vehicle(r, base, end)
+                except ValueError as x:
+                    e["vehicle_error"] = str(x)
             r.pos = end
         g["entries"].append(e)
     return g
@@ -326,10 +380,11 @@ def events(r):
     return {"block": block, "flag": flag, "events": [event(r) for _ in range(n)]}
 
 
-def payload(direction, data, soldiers=()):
+def payload(direction, data, soldiers=(), vehicles=()):
     """Data payload -> {"mask", section name: decoded, "end": bit position where decoding stopped, "open": name of
     the first section not decodable yet (downloads) or None}. A 6-bit mask names the stream managers that wrote into
-    the packet; their sections follow in id order. Ghost updates of the ids in `soldiers` are decoded as soldiers."""
+    the packet; their sections follow in id order. Ghost updates of the ids in `soldiers` / `vehicles` are decoded as
+    such."""
     r = BitReader(data)
     out = {"mask": r.u(6), "open": None}
     for i, name in enumerate(MANAGERS):
@@ -338,7 +393,7 @@ def payload(direction, data, soldiers=()):
         if name == "actions":
             out[name] = actions(r)
         elif name == "ghosts":
-            out[name] = ghosts(r, soldiers)
+            out[name] = ghosts(r, soldiers, vehicles)
         elif name == "events":
             out[name] = events(r)
         else:  # downloads: not decoded
@@ -360,6 +415,7 @@ def summary(rows):
     frames = {"c2s": [], "s2c": []}
     masks, errors, tails, positions, ids = collections.Counter(), collections.Counter(), collections.Counter(), [], set()
     names, soldiers, soldier_stats = collections.Counter(), set(), collections.Counter()
+    vehicles, vehicle_stats = set(), collections.Counter()
     for _, d, b in rows:
         p = parse(b)
         if p["kind"] == "connect":
@@ -376,7 +432,7 @@ def summary(rows):
             gaps += 1
         last[d] = p["seq"]
         try:
-            m = payload(d, p["payload"], soldiers)
+            m = payload(d, p["payload"], soldiers, vehicles - soldiers)
         except ValueError as e:
             errors[(d, str(e))] += 1
             continue
@@ -389,13 +445,20 @@ def summary(rows):
             names[(d, e["name"])] += 1
             if e["name"] == "SetDefaultVehicle":  # the player's soldier
                 soldiers.add(e["fields"][1])
+            elif e["name"] == "SetVehicle":  # a vehicle the player entered
+                vehicles.add(e["fields"][1])
             elif e["name"] == "DestroyObject":
                 soldiers.discard(e["fields"][0])
+                vehicles.discard(e["fields"][0])
         for e in m.get("ghosts", {}).get("entries", []):
             if "soldier" in e:
                 soldier_stats["decoded"] += 1
             elif "soldier_error" in e:
                 soldier_stats[e["soldier_error"]] += 1
+            elif "vehicle" in e:
+                vehicle_stats["decoded"] += 1
+            elif "vehicle_error" in e:
+                vehicle_stats[e["vehicle_error"]] += 1
         if "ghosts" in m:
             frames[d].append(m["ghosts"]["tick"])
             ids.update(e["id"] for e in m["ghosts"]["entries"])
@@ -419,6 +482,8 @@ def summary(rows):
         ev = sorted((k[1], n) for k, n in names.items() if k[0] == d)
         if ev:
             out.append(f"{d} events: " + ", ".join(f"{k} {n}" for k, n in ev))
+    if vehicle_stats:
+        out.append("vehicle updates: " + ", ".join(f"{k} {n}" for k, n in sorted(vehicle_stats.items())))
     if soldier_stats:
         out.append("soldier updates: " + ", ".join(f"{k} {n}" for k, n in sorted(soldier_stats.items())))
     if ids:

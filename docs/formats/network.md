@@ -107,7 +107,7 @@ The server tick counts at 30 Hz from the start of each round: it reached 9,001 a
 
 ### Ghost updates (in progress)
 
-What a kind-1 ghost entry carries, from the Mac client (`NetworkManager::setNetUpdate`, the `*Networkable::setNetUpdate` readers). `bfnet.py` decodes the soldier; other objects are still skipped by their length.
+What a kind-1 ghost entry carries, from the Mac client (`NetworkManager::setNetUpdate`, the `*Networkable::setNetUpdate` readers). `bfnet.py` decodes the soldier and a vehicle's body and engine; other objects are still skipped by their length.
 
 - An object is a **descriptor**: a list of unique net properties, each served by one or more networkable components (soldier, engine, firearms, rotational bundle, spring, kit, projectile, control point…). For each property the reader rewinds to the property's first bit, and every component sharing it reads from there; the next property starts where they stopped.
 - Each component starts with its own state mask and reads only the fields whose bit is set. Positions are compressed vectors relative to the stream's compression vector (reset at the start of the ghost section, set to the player's position by the control object state). Their scale comes from the reader: 0.001 for soldier positions, so mode 2 reaches ±32.8 m and mode 3 ±2 m around the player.
@@ -127,8 +127,14 @@ What a kind-1 ghost entry carries, from the Mac client (`NetworkManager::setNetU
   | 0x800 | u15 state bits |
   | 0x2000 | flag (kit part state) |
 
-- Widths found from the update lengths (the constants are not visible in the decompilation): compressed-vector mode 2 = 16 bits per component, mode 3 = 12 bits (mode 1 not seen yet); quaternion components 16 bits. Each guess is checked against every update's u11 bit length.
-- Still open: the component list of each descriptor (from the templates' networkable info) and the readers of vehicles, weapons, projectiles, control points and the managers (ids 1, 513, 514).
+- Widths found from the update lengths (the constants are not visible in the decompilation): compressed-vector mode 1 = 20 bits per component (5,047 of 5,053 vehicle updates fit, no other width does), mode 2 = 16, mode 3 = 12; quaternion components 16 bits. Each guess is checked against every update's u11 bit length.
+- **Descriptor contents.** Only template objects with `setNetworkableInfo` get a networkable component (`*::initNetworkableComp` checks for a non-empty info name). Components naming the same info share one property and read the same bits. The T34-85 has body (`T34-85BodyInfo`, also on its MG seat), engine, springs (`SpringInfo`, on four wheels), turret and MG holder (`T34-85TurretInfo`), gun base and MG console (`T34-85GunInfo`) and three weapons. The Hanomag is similar, with body, engine, springs, one shared bundle info and one weapon.
+- **Vehicle** (checked on 1,474 updates of the three tanks the player entered; first positions within 0.03–1.2 m of each object's `CreateObject` position):
+  - Body (`SimpleObjectNetworkable`): u11 mask. 0x2 position, compressed vector, scale 0.0005. 0x1 rotation, quaternion. 0x4 velocity, scale 0.001. 0x8, scale 0.001. 0x20, 0x40, 0x100, 0x200, scale 0.0001. 0x80 flag. 0x10 a range set by the object's weapon, 7 bits on these vehicles. 0x400 u2.
+  - Engine (`EngineNetworkable`): u10 mask. 0x1, 0x2, 0x4 flags. 0x8 gear, range 0 – the template's number of gears (width not settled). 0x10, 0x20, 0x40 16-bit signed floats times template limits. 0x80, 0x100, 0x200 12-bit signed floats × 1.25. Then always a u32 that rises by one per update.
+  - Then the other properties. At rest they are all-zero masks: 22 bits on the tanks, 11 on the Hanomag. That is one bit more than spring (1) + rotational bundles (7 each) + weapons (2 each) add up to, so their order and the extra bit are open; the recording has no update with a turret moving.
+  - Other readers, from the Mac client: rotational bundle u7 mask, then up to seven 16-bit signed floats (angles ×180, speeds, one ×41); spring u1, then two vectors in the separate "high" compression table; weapon u2, then two ranges set by its ammunition.
+- Still open: the order of a descriptor's properties, the "high" compression table, and the readers of weapons, projectiles, control points and the managers (ids 1, 513, 514).
 - In the 2026-11-13 recording, 45 networkable ids received updates: id 1 every few ticks, 513 and 514 rarely, the level's vehicles (519–535, 544) the most (up to 1,726 updates for a driven tank), grenades (546–548, 555–557) in short bursts, and the player's soldier only 116 times, since its state travels in the control object state.
 
 ### Game events
@@ -190,5 +196,6 @@ A second client with the same CD key gets 20 packets of handshake and no more un
 
 ## Next
 
-- The action values; the rest of the control state; ghost readers for vehicles, weapons, projectiles, control points and managers; compressed-vector mode 1; the download section; the meaning of the unlabelled event fields.
+- The action values; the rest of the control state; the order of a vehicle's properties after the engine; ghost readers for weapons, projectiles, control points and managers; the download section; the meaning of the unlabelled event fields.
+- Record a session with a second player (or a bot crew) in a tank, to see turrets and weapons in ghost updates.
 - Record more sessions with the WSL relay (`tools/bfnet.py record`); this needs no elevation and works remotely. Wanted: two clients, vehicles, deaths, a map change.

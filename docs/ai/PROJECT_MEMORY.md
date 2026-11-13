@@ -2,6 +2,12 @@
 
 Append-only. Newest first. At most 3 bullets per stage.
 
+## 2026-11-13 — vehicle body and engine in ghost updates
+
+- A vehicle's update is its body (`SimpleObjectNetworkable`) and engine, then the other networked components; components sharing a networkable info read the same bits once. `bfnet.py` decodes body and engine: 1,474 updates, first positions within 1.2 m of the creation spot; the engine ends with a per-update sequence number.
+- Compressed-vector mode 1 is 20 bits per component, fitted from the update lengths.
+- Open: the order of turrets, springs and weapons after the engine (all zero in this recording: one bit unexplained); needs a session with another player in a tank.
+
 ## 2026-11-13 — soldier ghost updates decoded
 
 - Ghost updates are per-descriptor lists of net properties read by networkable components. The soldier's reader (mask-driven position, rotation, velocity, animation states, state bits) is in `bfnet.py`: 180 updates read exactly their declared length, positions match the control position and the log's death spot.
