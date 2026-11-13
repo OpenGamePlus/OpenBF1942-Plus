@@ -3,6 +3,7 @@
 #include <SDL.h>
 
 #include <algorithm>
+#include <atomic>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -116,16 +117,23 @@ int run(int argc, char** argv) {
     Sounds sounds(vfs, con, 44100);  // the mixer locks its voice list itself; files load outside that lock
     struct AudioCtx {
         Sounds* s;
+        std::atomic<double> worst_ms{0}, worst_gap_ms{0};  // diagnostics: callback time, time between callbacks
+        Uint64 last = 0;
     } actx{&sounds};
     SDL_AudioSpec want{}, have{};
-    want.freq = 44100, want.format = AUDIO_F32SYS, want.channels = 2, want.samples = 512, want.userdata = &actx;
+    want.freq = 44100, want.format = AUDIO_F32SYS, want.channels = 2, want.samples = 1024, want.userdata = &actx;
     want.callback = [](void* u, Uint8* buf, int len) {
         auto* a = static_cast<AudioCtx*>(u);
         auto* out = reinterpret_cast<float*>(buf);
         int frames = len / static_cast<int>(2 * sizeof(float));
+        Uint64 t0 = SDL_GetPerformanceCounter();
+        double f = static_cast<double>(SDL_GetPerformanceFrequency()) / 1000;
+        if (a->last) a->worst_gap_ms = std::max(a->worst_gap_ms.load(), static_cast<double>(t0 - a->last) / f);
+        a->last = t0;
         std::fill(out, out + 2 * frames, 0.0f);
         a->s->mixer.mix(out, frames);
         for (int i = 0; i < 2 * frames; ++i) out[i] = std::clamp(out[i] * 0.5f, -1.0f, 1.0f);  // headroom for many voices
+        a->worst_ms = std::max(a->worst_ms.load(), static_cast<double>(SDL_GetPerformanceCounter() - t0) / f);
     };
     SDL_AudioDeviceID audio = 0;
     if (shot.empty() && SDL_InitSubSystem(SDL_INIT_AUDIO) == 0) audio = SDL_OpenAudioDevice(nullptr, 0, &want, &have, 0);
@@ -215,6 +223,18 @@ int run(int argc, char** argv) {
             game.demo(sim_seconds);
         }
         game.pose();
+        {  // every 5 s: frame and audio timing, to tell a slow game loop from a starved audio device
+            static float span = 0, worst_frame = 0;
+            static int nframes = 0;
+            span += dt, worst_frame = std::max(worst_frame, dt), ++nframes;
+            if (span >= 5 && audio) {
+                std::printf("timing: frames %.1f ms avg, %.1f worst; audio voices %zu, callback %.2f ms worst, gap %.1f ms worst (block %.1f ms)\n",
+                            1000 * span / static_cast<float>(nframes), 1000 * worst_frame, sounds.mixer.voices(), actx.worst_ms.load(),
+                            actx.worst_gap_ms.load(), 1000.0 * have.samples / have.freq);
+                std::fflush(stdout);
+                span = worst_frame = 0, nframes = 0, actx.worst_ms = 0, actx.worst_gap_ms = 0;
+            }
+        }
         if (audio) {
             sounds.mixer.listen(Listener{{cam.x, cam.y, cam.z}, {std::cos(cam.yaw), 0, -std::sin(cam.yaw)}});
             float now_s = static_cast<float>(SDL_GetTicks()) / 1000.0f;

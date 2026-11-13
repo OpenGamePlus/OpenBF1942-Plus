@@ -78,6 +78,7 @@ private:
         double phase = 0;
         bool started = false;  // a trigger layer that has begun
     };
+    static constexpr size_t kMaxVoices = 256;
     int rate_, next_ = 1;
     std::vector<Voice> voices_;
     Listener listener_;

@@ -13,6 +13,7 @@
 | C++ reads `Terrain.con` by line scan | shortcut | replace with a C++ CON interpreter when objects are placed |
 | C++ VFS mounts archives only, not loose files | shortcut | add when a mod needs it |
 | Missing colour tiles drawn grey | unverified | original behaviour unknown; only over open sea so far |
+| Audio under WSLg | open | the device stalls for seconds after a minute or so (see [sound.md](../formats/sound.md#use-in-the-engine)); to check with a native Windows build |
 | Bots ignore vehicles their weapon barely hurts | shortcut | a soldier on foot does not target a vehicle that its weapon would need more than 10 hits to destroy (guessed); the original AI's rule is unread |
 | Outside the world | not implemented | past the combat area or on material 7 the original damages soldiers and vehicles; default damage and time allowed unknown (measure in D), see [terrain.md](../formats/terrain.md#material-map-materialmapraw) |
 | `texOffsetX/Y`, terrain LOD; material map for driving and outside-world rules | not implemented (the material map is read for impact effects only) | see [terrain.md](../formats/terrain.md) |

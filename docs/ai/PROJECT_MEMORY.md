@@ -2,6 +2,12 @@
 
 Append-only. Newest first. At most 3 bullets per stage.
 
+## 2026-11-14 — audio stalls traced to WSLg's device
+
+- The maintainer heard stutter again after minutes. A per-5-s `timing` log showed our callback under 2 ms while the gap between callbacks grew from 23 ms to 3.7 s; not changed by 512 / 1,024 frames or 44.1 / 48 kHz. Suspected: WSLg's single RDP link for frames and audio.
+- An offline bench (driving and a full Berlin battle, no device) mixed in at most 1.1 ms per frame, with voices rising and falling.
+- The mixer now caps voices at 256 (oldest one-shots dropped); blocks back to 1,024 frames. Next check: a native Windows build.
+
 ## 2026-11-14 — C1: vehicle parts, shells in flight, footsteps, ambient; player starts at a spawn
 
 - Vehicle parts with their own scripts loop (engine, tracks by speed, turrets by measured turning rate, wings); the mixer reads `Speed` and `Acceleration` curves. Shells and rockets loop their whine in flight; soldiers step by speed, posture and ground material; map objects loop their ambient scripts. Game results of the 78-level sweep unchanged by the sounds.

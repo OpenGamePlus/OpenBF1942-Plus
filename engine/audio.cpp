@@ -181,6 +181,12 @@ SoundPatch ssc_parse(const std::string& path, const std::function<std::string(co
 
 int Mixer::play(const SoundPatch& patch, const std::vector<std::shared_ptr<const Wav>>& wavs, const float pos[3], float control) {
     std::lock_guard<std::mutex> g(m_);
+    // A stalled device (WSLg's PulseAudio paused callbacks for seconds) stops one-shots from ending, and they pile up:
+    // past the cap the oldest one-shots go; loops stay.
+    if (voices_.size() >= kMaxVoices) {
+        size_t drop = voices_.size() - kMaxVoices + patch.layers.size();
+        voices_.erase(std::remove_if(voices_.begin(), voices_.end(), [&](const Voice& v) { return !v.layer.loop && drop && drop--; }), voices_.end());
+    }
     int h = next_++;
     for (size_t i = 0; i < patch.layers.size() && i < wavs.size(); ++i) {
         if (!wavs[i] || !wavs[i]->frames()) continue;
