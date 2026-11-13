@@ -214,7 +214,56 @@ def vehicle(r, base, end):
     return e
 
 
-def ghosts(r, soldiers=(), vehicles=()):
+def control_point(r, base):
+    """ControlPointNetworkable update: u2 mask; 0x1 a 4-bit signed value, 0x2 a flag."""
+    m = r.u(2)
+    e = {"mask": m}
+    if m & 0x1:
+        e["value"] = r.s(4)
+    if m & 0x2:
+        e["flag"] = r.u(1)
+    return e
+
+
+def kit(r, base):
+    """KitNetworkable update: u4 mask; 0x1 position (full vector), 0x2 range 0-256, 0x4 flag, 0x8 range 0-8."""
+    m = r.u(4)
+    e = {"mask": m}
+    if m & 0x1:
+        e["position"] = r.vec()
+    if m & 0x2:
+        e["0x2"] = r.u(_range_bits(0, 0x100))
+    if m & 0x4:
+        e["0x4"] = r.u(1)
+    if m & 0x8:
+        e["0x8"] = r.u(_range_bits(0, 8))
+    return e
+
+
+def projectile(r, base):
+    """ProjectileNetworkable update: u8 mask; position and velocity at scale 0.01, a 12-bit quaternion."""
+    m = r.u(8)
+    e = {"mask": m}
+    if m & 0x2:
+        e["position"] = r.cvec(0.01, base)
+    if m & 0x1:
+        e["rotation"] = r.quat(12)
+    for bit in (0x4, 0x8):
+        if m & bit:
+            e[hex(bit)] = r.u(1)
+    if m & 0x10:
+        e["velocity"] = r.cvec(0.01, base)
+    for bit, n in ((0x20, 4), (0x40, 8), (0x80, 2)):
+        if m & bit:
+            e[hex(bit)] = r.u(n)
+    return e
+
+
+GHOST_READERS = {"soldier": soldier, "vehicle": None, "control_point": control_point, "kit": kit,
+                 "projectile": projectile}
+
+
+def ghosts(r, classes=None):
     """GhostManager section: u32 server tick, u8 entry count, a flag, the player's control object state when the
     flag is set, then the entries. Each entry is a u2 kind and a u16 networkable id; kind 1 carries a flag and an
     u11 bit length of its update (skipped here), kind 3 removes the ghost, kind 2 is an error."""
@@ -241,18 +290,19 @@ def ghosts(r, soldiers=(), vehicles=()):
             if e["bits"] > r.left():
                 raise ValueError("ghost entry: update past the end")
             end = r.pos + e["bits"]
-            if nid in soldiers:
+            cls = (classes or {}).get(nid)
+            if cls:
+                e["class"] = cls
                 try:
-                    e["soldier"] = soldier(r, base)
-                    if r.pos != end:
-                        raise ValueError(f"soldier update: read {r.pos - end + e['bits']} bits of {e['bits']}")
+                    if cls == "vehicle":  # trailing components are not decoded, so no exact length check
+                        e["update"] = vehicle(r, base, end)
+                    else:
+                        e["update"] = GHOST_READERS[cls](r, base)
+                        if r.pos != end:
+                            raise ValueError(f"{cls} update: read {r.pos - end + e['bits']} bits of {e['bits']}")
                 except ValueError as x:
-                    e["soldier_error"] = str(x)
-            elif nid in vehicles:
-                try:
-                    e["vehicle"] = vehicle(r, base, end)
-                except ValueError as x:
-                    e["vehicle_error"] = str(x)
+                    e.pop("update", None)
+                    e["error"] = str(x)
             r.pos = end
         g["entries"].append(e)
     return g
@@ -380,11 +430,11 @@ def events(r):
     return {"block": block, "flag": flag, "events": [event(r) for _ in range(n)]}
 
 
-def payload(direction, data, soldiers=(), vehicles=()):
+def payload(direction, data, classes=None):
     """Data payload -> {"mask", section name: decoded, "end": bit position where decoding stopped, "open": name of
     the first section not decodable yet (downloads) or None}. A 6-bit mask names the stream managers that wrote into
-    the packet; their sections follow in id order. Ghost updates of the ids in `soldiers` / `vehicles` are decoded as
-    such."""
+    the packet; their sections follow in id order. `classes` maps networkable ids to a GHOST_READERS name; their
+    ghost updates are decoded with it (see `track_classes`)."""
     r = BitReader(data)
     out = {"mask": r.u(6), "open": None}
     for i, name in enumerate(MANAGERS):
@@ -393,7 +443,7 @@ def payload(direction, data, soldiers=(), vehicles=()):
         if name == "actions":
             out[name] = actions(r)
         elif name == "ghosts":
-            out[name] = ghosts(r, soldiers, vehicles)
+            out[name] = ghosts(r, classes)
         elif name == "events":
             out[name] = events(r)
         else:  # downloads: not decoded
@@ -408,14 +458,38 @@ def load(path):
         return [(r["t"], r["dir"], bytes.fromhex(r["hex"])) for r in map(json.loads, f)]
 
 
+def track_classes(classes, m):
+    """Update `classes` (networkable id -> ghost reader) from a decoded payload's events and ghost entries:
+    SetDefaultVehicle names the player's soldier, SetVehicle a vehicle, HandlePickup a kit, CreateMultipleObjects
+    projectiles; an object from CreateObject whose update fits the control point reader exactly becomes one.
+    DestroyObject forgets an id (ids are reused)."""
+    for e in m.get("events", {}).get("events", []):
+        n = e["name"]
+        if n == "SetDefaultVehicle":
+            classes[e["fields"][1]] = "soldier"
+        elif n == "SetVehicle":
+            classes[e["fields"][1]] = "vehicle"
+        elif n == "HandlePickup":
+            classes[e["fields"][1]] = "kit"
+        elif n == "CreateMultipleObjects":
+            for i in range(e["fields"][2]):
+                classes[e["fields"][1] + i] = "projectile"
+        elif n == "CreateObject":
+            classes.setdefault(e["id"], None)
+        elif n == "DestroyObject":
+            classes.pop(e["fields"][0], None)
+    for e in m.get("ghosts", {}).get("entries", []):
+        if e.get("bits") is not None and e["bits"] <= 7 and e["id"] in classes and classes[e["id"]] is None:
+            classes[e["id"]] = "control_point"  # shortcut: classified by size; only flags are this small so far
+
+
 def summary(rows):
     out, counts = [], collections.Counter()
     last = {"c2s": None, "s2c": None}
     gaps = mismatches = data = 0
     frames = {"c2s": [], "s2c": []}
     masks, errors, tails, positions, ids = collections.Counter(), collections.Counter(), collections.Counter(), [], set()
-    names, soldiers, soldier_stats = collections.Counter(), set(), collections.Counter()
-    vehicles, vehicle_stats = set(), collections.Counter()
+    names, classes, ghost_stats = collections.Counter(), {}, collections.Counter()
     for _, d, b in rows:
         p = parse(b)
         if p["kind"] == "connect":
@@ -432,7 +506,7 @@ def summary(rows):
             gaps += 1
         last[d] = p["seq"]
         try:
-            m = payload(d, p["payload"], soldiers, vehicles - soldiers)
+            m = payload(d, p["payload"], classes)
         except ValueError as e:
             errors[(d, str(e))] += 1
             continue
@@ -443,22 +517,10 @@ def summary(rows):
             frames[d].append(m["actions"]["first"])
         for e in m.get("events", {}).get("events", []):
             names[(d, e["name"])] += 1
-            if e["name"] == "SetDefaultVehicle":  # the player's soldier
-                soldiers.add(e["fields"][1])
-            elif e["name"] == "SetVehicle":  # a vehicle the player entered
-                vehicles.add(e["fields"][1])
-            elif e["name"] == "DestroyObject":
-                soldiers.discard(e["fields"][0])
-                vehicles.discard(e["fields"][0])
+        track_classes(classes, m)
         for e in m.get("ghosts", {}).get("entries", []):
-            if "soldier" in e:
-                soldier_stats["decoded"] += 1
-            elif "soldier_error" in e:
-                soldier_stats[e["soldier_error"]] += 1
-            elif "vehicle" in e:
-                vehicle_stats["decoded"] += 1
-            elif "vehicle_error" in e:
-                vehicle_stats[e["vehicle_error"]] += 1
+            if "class" in e:
+                ghost_stats[(e["class"], "decoded" if "update" in e else e["error"])] += 1
         if "ghosts" in m:
             frames[d].append(m["ghosts"]["tick"])
             ids.update(e["id"] for e in m["ghosts"]["entries"])
@@ -482,10 +544,8 @@ def summary(rows):
         ev = sorted((k[1], n) for k, n in names.items() if k[0] == d)
         if ev:
             out.append(f"{d} events: " + ", ".join(f"{k} {n}" for k, n in ev))
-    if vehicle_stats:
-        out.append("vehicle updates: " + ", ".join(f"{k} {n}" for k, n in sorted(vehicle_stats.items())))
-    if soldier_stats:
-        out.append("soldier updates: " + ", ".join(f"{k} {n}" for k, n in sorted(soldier_stats.items())))
+    for (cls, what), n in sorted(ghost_stats.items()):
+        out.append(f"{cls} updates {what}: {n}")
     if ids:
         out.append(f"ghost ids: {len(ids)} distinct, {min(ids)}..{max(ids)}")
     if positions:

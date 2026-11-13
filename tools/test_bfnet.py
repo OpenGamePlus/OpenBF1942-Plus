@@ -89,13 +89,13 @@ class BfnetTest(unittest.TestCase):
         upd += [(65535, 16), (32767, 16), (32767, 16)]
         g = [(4, 6), (10, 32), (1, 8), (1, 1), (sum(w for _, w in control), 12)] + control
         g += [(1, 2), (536, 16), (0, 1), (sum(w for _, w in upd), 11)] + upd
-        e = payload("s2c", bits(g), {536})["ghosts"]["entries"][0]
-        x, y, z = e["soldier"]["position"]
+        e = payload("s2c", bits(g), {536: "soldier"})["ghosts"]["entries"][0]
+        x, y, z = e["update"]["position"]
         self.assertAlmostEqual(x, 1801.5, places=3)
         self.assertAlmostEqual(y, 40.0, places=3)
         self.assertAlmostEqual(z, 1899.75, places=3)
-        self.assertAlmostEqual(e["soldier"]["rotation"][0], 1.0, places=3)
-        self.assertNotIn("soldier", payload("s2c", bits(g))["ghosts"]["entries"][0])  # not a known soldier: skipped
+        self.assertAlmostEqual(e["update"]["rotation"][0], 1.0, places=3)
+        self.assertNotIn("update", payload("s2c", bits(g))["ghosts"]["entries"][0])  # class unknown: skipped
 
     def test_vehicle(self):
         # no control state: base (0, 0, 0); body mask 0x2 = position mode 1 (20 bits, scale 0.0005);
@@ -104,10 +104,22 @@ class BfnetTest(unittest.TestCase):
         eng = [(0x200, 10), (4095, 12), (7, 32)]
         upd = body_ + eng + [(0, 22)]
         g = [(4, 6), (10, 32), (1, 8), (0, 1), (1, 2), (531, 16), (0, 1), (sum(w for _, w in upd), 11)] + upd
-        v = payload("s2c", bits(g), (), {531})["ghosts"]["entries"][0]["vehicle"]
+        v = payload("s2c", bits(g), {531: "vehicle"})["ghosts"]["entries"][0]["update"]
         self.assertEqual([round(c, 3) for c in v["body"]["position"]], [100.0, 40.0, 200.0])
         self.assertEqual((v["engine"]["sequence"], v["rest_bits"]), (7, 22))
         self.assertAlmostEqual(v["engine"]["0x200"], 1.25)
+
+    def test_small_readers(self):
+        g = [(4, 6), (10, 32), (3, 8), (0, 1)]
+        g += [(1, 2), (515, 16), (0, 1), (7, 11), (3, 2), (1, 1), (3, 3), (1, 1)]  # flag: value -3, flag 1
+        g += [(1, 2), (540, 16), (0, 1), (8, 11), (8, 4), (5, 4)]  # kit: mask 0x8, value 5
+        proj = [(0x3, 8), (3, 2)] + [(0, 1), (100, 11)] * 3 + [(0, 1)] + [(2047, 12)] * 3
+        g += [(1, 2), (546, 16), (0, 1), (sum(w for _, w in proj), 11)] + proj
+        u = [e["update"] for e in payload("s2c", bits(g), {515: "control_point", 540: "kit", 546: "projectile"})["ghosts"]["entries"]]
+        self.assertEqual((u[0]["value"], u[0]["flag"], u[1]["0x8"]), (-3, 1, 5))
+        self.assertEqual([round(c, 2) for c in u[2]["position"]], [1.0, 1.0, 1.0])
+        bad = [(4, 6), (10, 32), (1, 8), (0, 1), (1, 2), (515, 16), (0, 1), (5, 11), (0, 5)]
+        self.assertIn("read 2 bits of 5", payload("s2c", bits(bad), {515: "control_point"})["ghosts"]["entries"][0]["error"])
 
     def test_summary(self):
         rows = []

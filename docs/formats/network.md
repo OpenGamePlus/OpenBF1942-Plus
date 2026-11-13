@@ -107,7 +107,7 @@ The server tick counts at 30 Hz from the start of each round: it reached 9,001 a
 
 ### Ghost updates (in progress)
 
-What a kind-1 ghost entry carries, from the Mac client (`NetworkManager::setNetUpdate`, the `*Networkable::setNetUpdate` readers). `bfnet.py` decodes the soldier and a vehicle's body and engine; other objects are still skipped by their length.
+What a kind-1 ghost entry carries, from the Mac client (`NetworkManager::setNetUpdate`, the `*Networkable::setNetUpdate` readers). `bfnet.py` decodes soldiers, vehicles' body and engine, grenades, flags and kits; other objects are still skipped by their length.
 
 - An object is a **descriptor**: a list of unique net properties, each served by one or more networkable components (soldier, engine, firearms, rotational bundle, spring, kit, projectile, control point…). For each property the reader rewinds to the property's first bit, and every component sharing it reads from there; the next property starts where they stopped.
 - Each component starts with its own state mask and reads only the fields whose bit is set. Positions are compressed vectors relative to the stream's compression vector (reset at the start of the ghost section, set to the player's position by the control object state). Their scale comes from the reader: 0.001 for soldier positions, so mode 2 reaches ±32.8 m and mode 3 ±2 m around the player.
@@ -134,7 +134,11 @@ What a kind-1 ghost entry carries, from the Mac client (`NetworkManager::setNetU
   - Engine (`EngineNetworkable`): u10 mask. 0x1, 0x2, 0x4 flags. 0x8 gear, range 0 – the template's number of gears (width not settled). 0x10, 0x20, 0x40 16-bit signed floats times template limits. 0x80, 0x100, 0x200 12-bit signed floats × 1.25. Then always a u32 that rises by one per update.
   - Then the other properties. At rest they are all-zero masks: 22 bits on the tanks, 11 on the Hanomag. That is one bit more than spring (1) + rotational bundles (7 each) + weapons (2 each) add up to, so their order and the extra bit are open; the recording has no update with a turret moving.
   - Other readers, from the Mac client: rotational bundle u7 mask, then up to seven 16-bit signed floats (angles ×180, speeds, one ×41); spring u1, then two vectors in the separate "high" compression table; weapon u2, then two ranges set by its ammunition.
-- Still open: the order of a descriptor's properties, the "high" compression table, and the readers of weapons, projectiles, control points and the managers (ids 1, 513, 514).
+- **Projectile** (grenades; the three objects `CreateMultipleObjects` makes at each spawn): u8 mask. 0x2 position and 0x10 velocity, compressed vectors at scale 0.01. 0x1 rotation, quaternion with **12-bit** components. 0x4, 0x8 flags. 0x20 u4, 0x40 u8, 0x80 u2. **Checked:** 881 updates read exactly their length. Both grenades that killed the player land within 2 and 4.6 m of the death positions in the server log.
+- **Control point:** u2 mask, 0x1 a 4-bit signed value, 0x2 a flag. The four Berlin flags' 13 updates fit.
+- **Kit:** u4 mask, 0x1 position (full vector), 0x2 range 0–256 (9 bits), 0x4 flag, 0x8 range 0–8 (4 bits); 114 bits with all set, as in the recording.
+- `bfnet.py` `track_classes` assigns readers to networkable ids from the events: `SetDefaultVehicle` soldier, `SetVehicle` vehicle, `HandlePickup` kit, `CreateMultipleObjects` projectiles; a created object whose first update is 7 bits or less is taken as a control point (shortcut: only flags are that small so far).
+- Still open: the order of a descriptor's properties, the "high" compression table, the readers of hand weapons and the managers (ids 1, 513, 514), and the class of objects the events do not name (the vehicles nobody entered, static guns).
 - In the 2026-11-13 recording, 45 networkable ids received updates: id 1 every few ticks, 513 and 514 rarely, the level's vehicles (519–535, 544) the most (up to 1,726 updates for a driven tank), grenades (546–548, 555–557) in short bursts, and the player's soldier only 116 times, since its state travels in the control object state.
 
 ### Game events

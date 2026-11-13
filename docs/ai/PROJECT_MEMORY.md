@@ -2,6 +2,12 @@
 
 Append-only. Newest first. At most 3 bullets per stage.
 
+## 2026-11-13 — grenades, flags and kits in ghost updates
+
+- Projectile (12-bit quaternion), control point and kit readers added; ghost decoding now takes an id → class map that `track_classes` builds from the events. 881 grenade updates read exactly their length.
+- Ground truth: both grenades that killed the player land 2 and 4.6 m from the death positions in the server's XML log.
+- Open: hand weapons, the managers (ids 1, 513, 514), the class of objects no event names.
+
 ## 2026-11-13 — vehicle body and engine in ghost updates
 
 - A vehicle's update is its body (`SimpleObjectNetworkable`) and engine, then the other networked components; components sharing a networkable info read the same bits once. `bfnet.py` decodes body and engine: 1,474 updates, first positions within 1.2 m of the creation spot; the engine ends with a per-update sequence number.
