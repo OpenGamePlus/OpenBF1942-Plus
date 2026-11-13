@@ -5,6 +5,7 @@ import unittest
 
 import struct
 
+import bfnet
 from bfnet import DATA, PING, PONG, BitReader, load, parse, payload, summary
 
 
@@ -104,10 +105,13 @@ class BfnetTest(unittest.TestCase):
         eng = [(0x200, 10), (4095, 12), (7, 32)]
         upd = body_ + eng + [(0, 22)]
         g = [(4, 6), (10, 32), (1, 8), (0, 1), (1, 2), (531, 16), (0, 1), (sum(w for _, w in upd), 11)] + upd
-        v = payload("s2c", bits(g), {531: "vehicle"})["ghosts"]["entries"][0]["update"]
+        v = bfnet.vehicle(bfnet.BitReader(bits(upd)), (0.0, 0.0, 0.0), sum(w for _, w in upd))
         self.assertEqual([round(c, 3) for c in v["body"]["position"]], [100.0, 40.0, 200.0])
         self.assertEqual((v["engine"]["sequence"], v["rest_bits"]), (7, 22))
         self.assertAlmostEqual(v["engine"]["0x200"], 1.25)
+        # an id named a vehicle by an event is re-read with the layout whose components fit exactly (22 bits: T34-85)
+        e = payload("s2c", bits(g), {531: "vehicle"})["ghosts"]["entries"][0]
+        self.assertEqual((e["class"], [k for k, _ in e["update"]["components"]][:3]), ("t34-85", ["body", "engine", "spring"]))
 
     def test_small_readers(self):
         g = [(4, 6), (10, 32), (3, 8), (0, 1)]
@@ -139,6 +143,16 @@ class BfnetTest(unittest.TestCase):
         self.assertEqual(u[0]["teams"][1], {"tickets": 197})
         self.assertEqual(u[1]["groups"], {1: {"team": 2, "active": 1, "x8": 225, "z8": 222}})
         self.assertEqual(classes["spawn_groups"], 3)
+
+    def test_layout(self):
+        # a vehicle's MG seat: yaw bundle (0x1: 0.0), pitch bundle (0x2: 0.0), weapon with ammo 501 of 9 bits, mags 2
+        seat = [(0x1, 7), (32767, 16), (0x2, 7), (32767, 16), (3, 2), (501, 9), (2, 2)]
+        g = [(4, 6), (10, 32), (1, 8), (0, 1), (1, 2), (533, 16), (0, 1), (sum(w for _, w in seat), 11)] + seat
+        e = payload("s2c", bits(g), {533: ("layout", "vehicle_mg_seat")})["ghosts"]["entries"][0]
+        comps = e["update"]["components"]
+        self.assertEqual([k for k, _ in comps], ["bundle", "bundle", "firearm"])
+        self.assertAlmostEqual(comps[0][1]["0x1"], 0.0, places=4)
+        self.assertEqual((comps[2][1]["ammo"], comps[2][1]["mags"]), (501, 2))
 
     def test_summary(self):
         rows = []

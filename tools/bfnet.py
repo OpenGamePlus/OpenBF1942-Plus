@@ -186,7 +186,7 @@ def body(r, base):
     return e
 
 
-def engine(r):
+def engine(r, gears=None):
     """EngineNetworkable update: u10 mask, fields by bit, then a u32 that rises by one per update."""
     m = r.u(10)
     e = {"mask": m}
@@ -194,7 +194,9 @@ def engine(r):
         if m & bit:
             e[hex(bit)] = r.u(1)
     if m & 0x8:
-        raise ValueError("engine: gear width unknown")  # range 0..number of gears of the engine template
+        if gears is None:
+            raise ValueError("engine: gear width unknown")
+        e["gear"] = r.u(_range_bits(0, gears))  # range 0..the engine template's number of gears
     for bit in (0x10, 0x20, 0x40):
         if m & bit:
             e[hex(bit)] = r.sfloat(16)  # times a template limit
@@ -203,6 +205,68 @@ def engine(r):
             e[hex(bit)] = r.sfloat(12) * 1.25
     e["sequence"] = r.u(32)
     return e
+
+
+def bundle(r):
+    """RotationalBundleNetworkable update: u7 mask, then a 16-bit signed float per set bit (angles x180, speeds,
+    the last x41; raw value kept)."""
+    m = r.u(7)
+    e = {"mask": m}
+    for i in range(7):
+        if m & (1 << i):
+            e[hex(1 << i)] = r.sfloat(16)
+    return e
+
+
+def firearm(r, mag, mags):
+    """FireArmsNetworkable update: u2 mask; 0x1 range 0..magSize+1, 0x2 range 0..numOfMag+1 (template values)."""
+    m = r.u(2)
+    e = {"mask": m}
+    if m & 0x1:
+        e["ammo"] = r.u(_range_bits(0, mag + 1))
+    if m & 0x2:
+        e["mags"] = r.u(_range_bits(0, mags + 1))
+    return e
+
+
+def spring(r):
+    """SpringNetworkable update: u1; when set, two vectors in the 'high' compression table (widths unknown)."""
+    if r.u(1):
+        raise ValueError("spring: high-compressed vectors not decoded")
+    return {"mask": 0}
+
+
+# Component lists ("descriptors") of objects seen on Berlin, built by hand from their templates with the rules in
+# network.md: tree order, sub-PlayerControlObjects excluded (own ghost), one entry per networked instance except
+# rotational bundles with the same controls and limits, which count once; widths from template values (body 0x10
+# fitted).
+# shortcut: hand-written per object type; build them from the templates when the engine needs them (E1).
+LAYOUTS = {
+    "t34-85": [("body", 7), ("engine", 5), ("spring",), ("spring",), ("spring",), ("spring",), ("bundle",), ("bundle",),
+               ("firearm", 30, 1), ("firearm", 400, 1)],
+    "hanomag": [("body", 7), ("engine", 4), ("spring",), ("spring",), ("spring",), ("spring",), ("bundle",)],
+    "stationary_mg": [("body", 5), ("bundle",), ("bundle",)],
+    "vehicle_mg_seat": [("bundle",), ("bundle",), ("firearm", 500, 1)],
+}
+
+
+def composite(r, base, layout):
+    """Read an object's update as the components of a LAYOUTS entry, in order."""
+    global BODY_KIT_BITS
+    out = []
+    for c in LAYOUTS[layout]:
+        if c[0] == "body":
+            BODY_KIT_BITS = c[1]
+            out.append(("body", body(r, base)))
+        elif c[0] == "engine":
+            out.append(("engine", engine(r, c[1])))
+        elif c[0] == "spring":
+            out.append(("spring", spring(r)))
+        elif c[0] == "bundle":
+            out.append(("bundle", bundle(r)))
+        else:
+            out.append(("firearm", firearm(r, c[1], c[2])))
+    return {"layout": layout, "components": out}
 
 
 def vehicle(r, base, end):
@@ -335,9 +399,22 @@ GHOST_READERS = {"player": player, "score_manager": score_manager, "soldier": so
 
 
 def classify(classes, nid, data, start, bits, base):
-    """Give a created object no event named a class from its update: a vehicle when it decodes as body and engine
-    with the body within 5 m of the CreateObject position; a control point when it is 7 bits or less and fits."""
+    """Give an object no event named a class from its update: a LAYOUTS entry that reads it exactly (with the body,
+    if it has a position, within 5 m of the CreateObject position); else a vehicle when it decodes as body and engine
+    near that position; else a control point when it is 7 bits or less and fits."""
     created = classes.get("created", {}).get(nid)
+    for name in LAYOUTS:
+        r = BitReader(data, start)
+        try:
+            u = composite(r, base, name)
+        except ValueError:
+            continue
+        body_ = next((c for k, c in u["components"] if k == "body"), None)
+        near = created is not None and body_ and "position" in body_ and math.dist(body_["position"], created) < 5
+        known = classes.get(nid) == "vehicle"  # an event already said so: the exact fit is enough
+        if r.pos == start + bits and (near or known or body_ is None or "position" not in body_):
+            classes[nid] = ("layout", name)
+            return
     if created is not None:
         try:
             v = vehicle(BitReader(data, start), base, start + bits)
@@ -383,13 +460,18 @@ def ghosts(r, classes=None):
             if e["bits"] > r.left():
                 raise ValueError("ghost entry: update past the end")
             end = r.pos + e["bits"]
-            if classes is not None and nid in classes and classes[nid] is None:
-                classify(classes, nid, r.data, r.pos, e["bits"], base)
+            if classes is not None and classes.get(nid) in (None, "vehicle") and (nid in classes or nid - 1 in classes):
+                classify(classes, nid, r.data, r.pos, e["bits"], base)  # nid - 1: a vehicle's MG seat is its next id
             cls = (classes or {}).get(nid)
             if cls:
                 e["class"] = cls
                 try:
-                    if cls == "vehicle":  # trailing components are not decoded, so no exact length check
+                    if isinstance(cls, tuple):
+                        e["class"] = cls[1]
+                        e["update"] = composite(r, base, cls[1])
+                        if r.pos != end:
+                            raise ValueError(f"{cls[1]} update: read {r.pos - end + e['bits']} bits of {e['bits']}")
+                    elif cls == "vehicle":  # trailing components are not decoded, so no exact length check
                         e["update"] = vehicle(r, base, end)
                     elif cls == "spawn_manager":
                         if "spawn_groups" not in classes:  # per level: fitted on the first update

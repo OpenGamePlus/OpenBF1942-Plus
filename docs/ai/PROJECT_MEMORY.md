@@ -2,6 +2,12 @@
 
 Append-only. Newest first. At most 3 bullets per stage.
 
+## 2026-11-13 — object descriptors understood, 97 % of ghost updates
+
+- Descriptor rules found (`_analyseObject`, `compareProperties`) and checked bit-exactly: tree order, child PlayerControlObjects are separate ghosts (next id), every networked instance is a property except rotational bundles with identical controls; widths from template ammo and gear counts.
+- Berlin's T34-85, Hanomag, stationary MG and vehicle MG seat decode completely (turrets, weapons, gears); 7,130 of 7,342 ghost updates.
+- Open: layouts from templates (server template numbering differs from our script order), springs' high compression table, a hand weapon and small spawn objects.
+
 ## 2026-11-13 — player, score and spawn managers; 92 % of ghost updates
 
 - Player (deaths, teamkills, score, kit, respawn countdown), score manager (two team blocks with tickets, score, deaths) and spawn manager (24 groups on Berlin, positions / 8) decoded, each checked against the events and the server log.
