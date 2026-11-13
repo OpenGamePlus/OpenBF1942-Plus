@@ -601,13 +601,15 @@ int main() {
         std::string mm = "MaterialManager.material 236\nMaterialManager.materialDamage 10\n"
                                "MaterialManager.material 52\nMaterialManager.materialDefGroup 52\nMaterialManager.materialDamage 1\n"
                                "MaterialManager.material 7\nMaterialManager.materialAttGroup 236\nMaterialManager.materialDamage 0.1.0\n"
-                               "MaterialManager.attGroup 236\nMaterialManager.defGroup 52\nMaterialManager.damageMod 4\n";
+                               "MaterialManager.attGroup 236\nMaterialManager.defGroup 52\nMaterialManager.damageMod 4\n"
+                               "MaterialManager.setEffectTemplate e_ExplSmall2\n";
         vfs.add("game/mm.con", std::vector<uint8_t>(mm.begin(), mm.end()));
         Con con(vfs);
         con.run("game/mm.con");
         DamageTable t = damage_table(con.settings["materialmanager"]);
         assert(t.damage(236, 52) == 40 && t.damage(52, 236) == 0 && t.damage(999, 52) == 0);
         assert(std::fabs(t.damage(7, 52) - 0.4f) < 1e-6f);  // shared attGroup; "0.1.0" reads as 0.1
+        assert(t.effect(236, 52) == "e_explsmall2" && t.effect(7, 52) == "e_explsmall2" && t.effect(52, 236).empty());
     }
 
     {  // audio: wav, sound script, mixer

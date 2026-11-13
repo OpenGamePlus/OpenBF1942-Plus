@@ -15,7 +15,7 @@
 | Missing colour tiles drawn grey | unverified | original behaviour unknown; only over open sea so far |
 | Bots ignore vehicles their weapon barely hurts | shortcut | a soldier on foot does not target a vehicle that its weapon would need more than 10 hits to destroy (guessed); the original AI's rule is unread |
 | Outside the world | not implemented | past the combat area or on material 7 the original damages soldiers and vehicles; default damage and time allowed unknown (measure in D), see [terrain.md](../formats/terrain.md#material-map-materialmapraw) |
-| `texOffsetX/Y`, material map, detail texture, terrain LOD | not implemented | see [terrain.md](../formats/terrain.md) |
+| `texOffsetX/Y`, terrain LOD; material map for driving and outside-world rules | not implemented (the material map is read for impact effects only) | see [terrain.md](../formats/terrain.md) |
 | Water drawn on every map | unverified | Berlin has `waterLevel` but no `Water.*` settings |
 | Little-endian hosts only | accepted | `memcpy` of file integers in C++ |
 | Texture `alternativePath` lookup | unverified | tried as `<alt>/<file name>` before the given path; every level's `init.con` names its own `Texture` folder this way, and 76–146 mesh textures per mod resolve only through it |

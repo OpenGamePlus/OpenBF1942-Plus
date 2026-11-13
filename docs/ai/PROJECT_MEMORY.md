@@ -2,6 +2,12 @@
 
 Append-only. Newest first. At most 3 bullets per stage.
 
+## 2026-11-14 — C1: impacts, explosions and every driven engine
+
+- A shot's end plays its effect's sound: the projectile's `endEffectTemplate`, else the MaterialManager `setEffectTemplate` for its material against the target (body part, armour, terrain material map). Physics hits now carry the shot id; `Game::fire` wraps every shot.
+- Every vehicle with a driver, bot or player, loops its engine (`Sounds::engines`); the 78-level sweep's game results are identical to before.
+- Open: projectiles in flight, aircraft wings and gear, soldiers, ambient; nobody has listened to the new sounds yet.
+
 ## 2026-11-14 — B1: opening nav cells from collision rejected
 
 - Opening blocked infantry cells where vertical rays at 0.4–1.6 m find no collision made Stalingrad (63 → 227) and Battleaxe (1,065 → 1,695 stuck) worse and did not help Berlin: the rays miss low rubble and thin fences that physics blocks. Reverted; recorded in pathfinding.md.

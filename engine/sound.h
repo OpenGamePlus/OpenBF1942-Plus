@@ -18,9 +18,16 @@ public:
     // patch 0 and the distant patch 2; automatic weapons (a looping patch 5) loop it while their shooter keeps firing.
     void shot(const std::string& tmpl, const float pos[3], int source, float now);
     void reload(const std::string& tmpl, const float pos[3]);  // patch 1
+    void effect(const std::string& tmpl, const float pos[3]);  // an EffectBundle's script: every patch, once
     void tick(float now);  // ends automatic fire that stopped (no shot for 0.25 s)
-    // The looping Engine script under a vehicle template; tmpl "" stops it. control: 0 idle .. 1 full.
-    void engine(const std::string& tmpl, const float pos[3], float control);
+    // The looping Engine script under each running vehicle's template; a key missing from the list stops its loop.
+    struct Running {
+        int key;
+        std::string tmpl;
+        float pos[3];
+        float control;  // 0 idle .. 1 full
+    };
+    void engines(const std::vector<Running>& running);
     // Script path of a template, or of its first child (addTemplate, depth-first) of the given type; "" if none.
     std::string script(const std::string& tmpl, const std::string& type = "") const;
 
@@ -43,8 +50,7 @@ private:
         float last;
     };
     std::map<int, Burst> bursts_;  // automatic fire by source
-    std::string engine_tmpl_;
-    int engine_ = -1;
+    std::map<int, int> engines_;  // vehicle key -> mixer handle (-1: no script)
 };
 
 }  // namespace obf

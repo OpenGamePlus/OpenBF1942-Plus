@@ -91,15 +91,28 @@ public:
     void print_weapon() const;
 
     // The vehicle under control: its template, position and engine load 0..1; "" on foot.
-    std::string driving(float pos[3], float& control) const;
+    struct EngineSound {
+        int key;           // the vehicle's physics id
+        std::string tmpl;  // its PlayerControlObject template
+        float pos[3];
+        float control;     // 0 idle .. 1 full load
+    };
+    // Every intact vehicle with someone in the driver's seat (the player or a bot).
+    std::vector<EngineSound> engines() const;
 
     struct SoundEvent {
-        std::string tmpl;  // FireArms template
+        std::string tmpl;  // FireArms template; with effect, an EffectBundle (a shot's end effect: explosions)
         float pos[3];
         int source = -1;   // the shooter: -1 the player, a bot's index, 100000 + 16 * vehicle body + seat
         bool reload = false;
+        bool effect = false;
     };
     std::vector<SoundEvent> sounds;  // since the frontend last cleared it
+    // phys.fire for a weapon's projectile; remembers its end effect for the sound where it ends.
+    int fire(const WeaponDef& w, const float pos[3], const float vel[3], int ignore_vehicle, int ignore_character, int tag);
+    std::map<int, std::string> end_effects;  // live shot id -> its projectile's endEffectTemplate
+    std::vector<uint8_t> material_map;       // terrain MaterialManager id per cell, row = z (info.material_size per side)
+    int ground_material(float x, float z) const;
 
     Physics phys;
     Camera cam;

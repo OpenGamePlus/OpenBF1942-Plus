@@ -190,6 +190,10 @@ Game::Game(const Vfs& vfs_, Con& con_, const Heightmap& hm_, const TerrainInfo& 
     }
     // Combat: damage tables, the soldier's kit weapon.
     damage = damage_table(con.settings["materialmanager"]);
+    if (!info.material_map.empty() && info.material_size > 0 && vfs.has(Vfs::key(info.material_map) + ".raw")) {
+        material_map = vfs.read(Vfs::key(info.material_map) + ".raw");
+        if (material_map.size() != static_cast<size_t>(info.material_size) * static_cast<size_t>(info.material_size)) material_map.clear();
+    }
     hand = weapon_def(con, weapon_name);
     for (const std::string& w : kit_weapons(team, opt.kit)) loadout.push_back({weapon_def(con, w), Ammo::full(weapon_def(con, w))});
     if (loadout.empty() && !hand.name.empty()) loadout.push_back({hand, Ammo::full(hand)});
@@ -253,6 +257,24 @@ std::vector<float> Game::route(int ch, const float pos[3], float gx, float gz) c
         }
     }
     return nav_path(nav, pos[0], pos[2], gx, gz);
+}
+
+// Terrain material under (x, z) from the level's material map (row = z, verified with spawn points); 0 if none.
+int Game::ground_material(float x, float z) const {
+    int n = info.material_size;
+    if (material_map.empty() || n <= 0) return 0;
+    float cell = info.world_size / static_cast<float>(n);
+    int c = std::clamp(static_cast<int>(x / cell), 0, n - 1), r = std::clamp(static_cast<int>(z / cell), 0, n - 1);
+    return material_map[static_cast<size_t>(r) * static_cast<size_t>(n) + static_cast<size_t>(c)];
+}
+
+int Game::fire(const WeaponDef& w, const float pos[3], const float vel[3], int ignore_vehicle, int ignore_character, int tag) {
+    int id = phys.fire(pos, vel, w.material, w.material2, w.ttl, ignore_vehicle, ignore_character, tag, w.radius, w.bounce);
+    if (!w.end_effect.empty()) {
+        if (end_effects.size() > 4096) end_effects.clear();  // shots that ended without a hit leave entries behind
+        end_effects[id] = w.end_effect;
+    }
+    return id;
 }
 
 // Terrain height under (x, z), bilinear between samples.
@@ -563,29 +585,36 @@ void Game::fire(float t) {
         if (!(l > 1e-6f)) return;
         float pos[3], vel[3];
         for (int i = 0; i < 3; ++i) d[i] /= l, pos[i] = m.m[12 + i] + d[i] * (st.has_muzzle ? 1.0f : v.len), vel[i] = d[i] * w.velocity;
-        phys.fire(pos, vel, w.material, w.material2, w.ttl, v.id, -1, team, w.radius, w.bounce);
+        fire(w, pos, vel, v.id, -1, team);
         sounds.push_back({w.name, {pos[0], pos[1], pos[2]}, 100000 + 16 * v.id + seat});
     } else if (player >= 0 && !hand.name.empty() && t >= hand_next && hand_ammo.take(t)) {
         hand_next = t + hand.interval;
         float p[3], d[3] = {std::sin(cam.yaw) * std::cos(cam.pitch), std::sin(cam.pitch), std::cos(cam.yaw) * std::cos(cam.pitch)}, pos[3], vel[3];
         phys.character_position(player, p);
         for (int i = 0; i < 3; ++i) pos[i] = p[i] + (i == 1 ? eye_height() : 0.0f) + d[i] * 0.6f, vel[i] = d[i] * hand.velocity;
-        int id = phys.fire(pos, vel, hand.material, hand.material2, hand.ttl, -1, player, team, hand.radius, hand.bounce);
+        int id = fire(hand, pos, vel, -1, player, team);
         last_shot = t;
         if (id >= 0 && hand.bounce && hand.ttl > 60) placed.push_back({id, hand.near});  // not a grenade: waits for a trigger
         sounds.push_back({hand.name, {pos[0], pos[1], pos[2]}, -1});
     }
 }
 
-std::string Game::driving(float pos[3], float& control) const {
-    if (cur < 0) return "";
-    const Veh& v = vehicles[static_cast<size_t>(cur)];
-    if (v.wrecked) return "";
-    Mat4 m = phys.transform(v.id);
-    for (int i = 0; i < 3; ++i) pos[i] = m.m[12 + i];
-    // shortcut: engine load from speed (30 m/s = full; aircraft 80), until engines expose their rpm
-    control = std::clamp(std::fabs(phys.speed(v.id)) / (v.plane ? 80.0f : 30.0f), 0.0f, 1.0f);
-    return v.name;
+std::vector<Game::EngineSound> Game::engines() const {
+    std::vector<EngineSound> out;
+    auto add = [&](size_t vi) {
+        const Veh& v = vehicles[vi];
+        if (v.wrecked) return;
+        for (const EngineSound& e : out)
+            if (e.key == v.id) return;
+        Mat4 m = phys.transform(v.id);
+        // shortcut: engine load from speed (30 m/s = full; aircraft 80), until engines expose their rpm
+        float control = std::clamp(std::fabs(phys.speed(v.id)) / (v.plane ? 80.0f : 30.0f), 0.0f, 1.0f);
+        out.push_back({v.id, v.name, {m.m[12], m.m[13], m.m[14]}, control});
+    };
+    if (cur >= 0 && seat == 0) add(static_cast<size_t>(cur));
+    for (const Bot& b : bots)
+        if (!b.dead && b.veh >= 0 && b.vseat == 0) add(static_cast<size_t>(b.veh));
+    return out;
 }
 
 // shortcut: guessed; no damage landing under 10 m/s (a 5 m drop), a full soldier's hit points at 20 m/s (20 m)
@@ -650,6 +679,18 @@ void Game::apply_hits() {
         phys.drive(v.id, 0, 0);
     };
     for (const Physics::Hit& h : phys.take_hits()) {
+        if (auto fx = end_effects.find(h.shot); fx != end_effects.end()) {
+            sounds.push_back({fx->second, {h.pos[0], h.pos[1], h.pos[2]}, -1, false, true});
+            end_effects.erase(fx);
+        } else {  // the MaterialManager's effect for what it hit: ricochets, blood, shell explosions
+            // shortcut: a static object counts as the ground material under it (hits do not carry the face material)
+            int target = h.character >= 0 ? (h.height > 1.45f ? 40 : h.height > 0.85f ? 41 : 42) : ground_material(h.pos[0], h.pos[2]);
+            for (const Veh& v : vehicles)
+                if (h.vehicle >= 0 && v.id == h.vehicle) target = h.armor >= 0 ? h.armor : v.material;
+            std::string fx2 = damage.effect(h.material, target);
+            if (fx2.empty() && h.material2 >= 0) fx2 = damage.effect(h.material2, target);
+            if (!fx2.empty()) sounds.push_back({fx2, {h.pos[0], h.pos[1], h.pos[2]}, -1, false, true});
+        }
         bool splash = h.radius > 0 && h.material2 >= 0;
         auto direct = [&](int target) {
             return damage.damage(h.material, target) + (h.material2 >= 0 && !splash ? damage.damage(h.material2, target) : 0.0f);
@@ -813,7 +854,7 @@ void Game::crew(Bot& b, float t, float step, const float* target, int target_veh
                 l = std::sqrt(dir[0] * dir[0] + dir[1] * dir[1] + dir[2] * dir[2]);
                 for (int i = 0; i < 3; ++i) pos[i] = o[i] + dir[i] / l * 1.0f, vel[i] = dir[i] / l * st.weapon.velocity;
                 const WeaponDef& w = st.weapon;
-                phys.fire(pos, vel, w.material, w.material2, w.ttl, v.id, -1, b.team, w.radius, w.bounce);
+                fire(w, pos, vel, v.id, -1, b.team);
                 sounds.push_back({w.name, {pos[0], pos[1], pos[2]}, 100000 + 16 * v.id + b.vseat});
                 b.last_shot = t;
             }
@@ -995,7 +1036,7 @@ void Game::think(float t, float step) {
                 float tan_a = (v * v - std::sqrt(disc)) / (gr * hd), ca = 1 / std::sqrt(1 + tan_a * tan_a), sa = tan_a * ca;
                 float dir[3] = {d[0] / hd * ca + err(rng), sa + err(rng), d[2] / hd * ca + err(rng)}, pos[3], vel[3];
                 for (int i = 0; i < 3; ++i) pos[i] = eye[i] + dir[i] * 0.5f, vel[i] = dir[i] * v;
-                phys.fire(pos, vel, b.grenade.material, b.grenade.material2, b.grenade.ttl, -1, b.ch, b.team, b.grenade.radius, true);
+                fire(b.grenade, pos, vel, -1, b.ch, b.team);
                 sounds.push_back({b.grenade.name, {pos[0], pos[1], pos[2]}, static_cast<int>(bi)});
                 ++grenades_thrown;
                 continue;
@@ -1005,7 +1046,7 @@ void Game::think(float t, float step) {
                 float dir[3] = {d[0] / dist + err(rng), d[1] / dist + err(rng), d[2] / dist + err(rng)};
                 float l = std::sqrt(dir[0] * dir[0] + dir[1] * dir[1] + dir[2] * dir[2]), pos[3], vel[3];
                 for (int i = 0; i < 3; ++i) pos[i] = eye[i] + dir[i] / l * 0.6f, vel[i] = dir[i] / l * b.weapon.velocity;
-                phys.fire(pos, vel, b.weapon.material, b.weapon.material2, b.weapon.ttl, -1, b.ch, b.team, b.weapon.radius, b.weapon.bounce);
+                fire(b.weapon, pos, vel, -1, b.ch, b.team);
                 b.last_shot = t;
                 sounds.push_back({b.weapon.name, {pos[0], pos[1], pos[2]}, static_cast<int>(bi)});
             }

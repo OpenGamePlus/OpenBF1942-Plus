@@ -109,6 +109,11 @@ void Sounds::reload(const std::string& tmpl, const float pos[3]) {
     if (const SoundPatch* r = weapon_patch(tmpl, 1)) play_patch(*r, pos, 0, true);
 }
 
+void Sounds::effect(const std::string& tmpl, const float pos[3]) {
+    for (size_t i = 0; i < 16; ++i)  // patches left empty (commented out) are skipped, not the end
+        if (const SoundPatch* p = weapon_patch(tmpl, i)) play_patch(*p, pos, 0, true);
+}
+
 void Sounds::tick(float now) {
     for (auto it = bursts_.begin(); it != bursts_.end();)
         if (now - it->second.last > 0.25f) mixer.release(it->second.handle), it = bursts_.erase(it);
@@ -124,19 +129,24 @@ int Sounds::play(const std::string& path, const float pos[3], float control) {
 }
 
 
-void Sounds::engine(const std::string& tmpl, const float pos[3], float control) {
-    if (tmpl != engine_tmpl_) {
-        if (engine_ >= 0) mixer.release(engine_);
-        engine_tmpl_ = tmpl, engine_ = -1;
-        if (!tmpl.empty()) {
-            auto key = tmpl + "\n engine";
-            auto it = scripts_.find(key);
-            if (it == scripts_.end()) it = scripts_.emplace(key, script(tmpl, "Engine")).first;
-            engine_ = play(it->second, pos, control);
+void Sounds::engines(const std::vector<Running>& running) {
+    std::map<int, int> next;
+    for (const Running& r : running) {
+        auto it = engines_.find(r.key);
+        if (it == engines_.end()) {
+            auto key = r.tmpl + "\n engine";
+            auto sc = scripts_.find(key);
+            if (sc == scripts_.end()) sc = scripts_.emplace(key, script(r.tmpl, "Engine")).first;
+            next[r.key] = play(sc->second, r.pos, r.control);
+        } else {
+            if (it->second >= 0) mixer.update(it->second, r.pos, r.control);
+            next[r.key] = it->second;
+            engines_.erase(it);
         }
-    } else if (engine_ >= 0) {
-        mixer.update(engine_, pos, control);
     }
+    for (auto& [key, handle] : engines_)  // vehicles no longer running
+        if (handle >= 0) mixer.release(handle);
+    engines_ = std::move(next);
 }
 
 }  // namespace obf

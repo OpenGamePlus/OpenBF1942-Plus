@@ -60,6 +60,7 @@ struct WeaponDef {
     bool fire_once = false;             // fireOnce: one round per trigger pull
     int ammo_type = 0;                  // ammoType: which supply depots refill it
     float radius = 0;                   // projectile radius: explosion (material2 damage falls off to 0 at it)
+    std::string end_effect;             // projectile endEffectTemplate (an EffectBundle: explosion sound, later visuals)
     bool bounce = false;                // dieAfterColl 0 (grenades, mines, explosive packs)
     float near = 0;                     // explodeNearEnemyDistance (mines), 0: none
 };
@@ -136,6 +137,7 @@ public:
         int tag = 0;          // as given to fire (the game uses the shooter's team)
         float pos[3] = {};
         float radius = 0;     // explosion radius as given to fire; also reported when the shot's time runs out
+        int shot = -1;        // the id fire returned
     };
     // Returns the shot's id. bounce (dieAfterColl 0): bounces off whatever it meets and comes to rest, until its
     // time runs out or explode(); no hit on contact.

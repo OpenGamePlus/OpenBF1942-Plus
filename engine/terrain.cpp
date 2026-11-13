@@ -26,6 +26,8 @@ TerrainInfo parse_terrain_con(const std::string& text) {
         else if (cmd == "geometrytemplate.file") t.heightmap = arg;
         else if (cmd == "geometrytemplate.texbasename") t.tex_base = arg;
         else if (cmd == "geometrytemplate.detailtexname") t.detail = arg;
+        else if (cmd == "geometrytemplate.materialmap") t.material_map = arg;
+        else if (cmd == "geometrytemplate.materialsize") t.material_size = std::atoi(arg.c_str());
     }
     if (!(t.world_size > 0) || !(t.y_scale > 0) || !std::isfinite(t.world_size) || !std::isfinite(t.y_scale) || t.heightmap.empty())
         throw std::runtime_error("Terrain.con: missing or invalid settings");

@@ -32,7 +32,7 @@ The engine fires a vehicle's first `FireArms` with a projectile from that part's
 `MaterialManager` commands, loaded from `bf1942/game/materialmanagersettings.con` (it runs `materialmanagerdefine.con` and `damage_system/*.con`; the engine runs it, assumed like `animationstates.con`):
 
 - `material <n>` with `materialAttGroup`, `materialDefGroup`, `materialDamage`, `materialFriction`, … (158 materials).
-- `attGroup <a>` / `defGroup <d>` / `damageMod <m>` (5,147 pairs).
+- `attGroup <a>` / `defGroup <d>` / `damageMod <m>` (5,147 pairs). `setEffectTemplate <effect>` after a pair names the `EffectBundle` played where that attack meets that defence (4,977 lines in `game/`: ricochets, blood, explosions); used for impact sounds.
 
 Damage of one hit = `materialDamage(m) × damageMod(attGroup(m), defGroup(target))` for the projectile's `material` and again for its `material2`, added.
 

@@ -223,13 +223,14 @@ int run(int argc, char** argv) {
             listener = Listener{{cam.x, cam.y, cam.z}, {std::cos(cam.yaw), 0, -std::sin(cam.yaw)}};
             float now_s = static_cast<float>(SDL_GetTicks()) / 1000.0f;
             for (auto& e : game.sounds) {
-                if (e.reload) sounds.reload(e.tmpl, e.pos);
+                if (e.effect) sounds.effect(e.tmpl, e.pos);
+                else if (e.reload) sounds.reload(e.tmpl, e.pos);
                 else sounds.shot(e.tmpl, e.pos, e.source, now_s);
             }
             sounds.tick(now_s);
-            float vp[3] = {}, control = 0;
-            std::string v = game.driving(vp, control);
-            sounds.engine(v, vp, control);
+            std::vector<Sounds::Running> running;
+            for (const Game::EngineSound& e : game.engines()) running.push_back({e.key, e.tmpl, {e.pos[0], e.pos[1], e.pos[2]}, e.control});
+            sounds.engines(running);
         }
 
         float speed = (k[SDL_SCANCODE_LSHIFT] ? 400.f : 60.f) * dt * !game.controls_camera();  // free camera

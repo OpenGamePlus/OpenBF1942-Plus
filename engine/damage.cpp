@@ -1,6 +1,7 @@
 #include "damage.h"
 
 #include <cmath>
+#include <cctype>
 #include <cstdlib>
 
 namespace obf {
@@ -10,6 +11,13 @@ float DamageTable::damage(int attacker, int target) const {
     if (a == materials.end() || t == materials.end()) return 0;
     auto m = mods.find({a->second.att, t->second.def});
     return m == mods.end() ? 0 : a->second.damage * m->second;
+}
+
+std::string DamageTable::effect(int attacker, int target) const {
+    auto a = materials.find(attacker), t = materials.find(target);
+    if (a == materials.end() || t == materials.end()) return "";
+    auto e = effects.find({a->second.att, t->second.def});
+    return e == effects.end() ? "" : e->second;
 }
 
 DamageTable damage_table(const std::vector<std::pair<std::string, std::vector<std::string>>>& commands) {
@@ -28,6 +36,11 @@ DamageTable damage_table(const std::vector<std::pair<std::string, std::vector<st
         else if (method == "attgroup") att = i;
         else if (method == "defgroup") def = i;
         else if (method == "damagemod") t.mods[{att, def}] = v;
+        else if (method == "seteffecttemplate") {
+            std::string e = args[0];
+            for (char& c : e) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+            t.effects[{att, def}] = e;
+        }
     }
     return t;
 }

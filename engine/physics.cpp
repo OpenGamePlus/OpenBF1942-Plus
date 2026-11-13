@@ -327,6 +327,7 @@ WeaponDef weapon_def(const Con& con, const std::string& name) {
         else if (k == "radius") wd.radius = std::clamp(num(a), 0.0f, 100.0f);
         else if (k == "dieaftercoll") wd.bounce = std::atoi(a[0].c_str()) == 0;
         else if (k == "explodenearenemydistance") wd.near = std::clamp(num(a), 0.0f, 100.0f);
+        else if (k == "endeffecttemplate") wd.end_effect = lower(a[0]);
         else if (k == "timetolive") {  // CRD_NONE/<seconds>/...
             auto s = a[0].find('/');
             if (s != std::string::npos) wd.ttl = std::clamp(static_cast<float>(std::atof(a[0].c_str() + s + 1)), 0.1f, 360.0f);
@@ -860,7 +861,7 @@ void Physics::Impl::projectiles() {
             RRayCast ray{RVec3(s.p), step};
             RayCastResult hit;
             Physics::Hit h;
-            h.material = s.material, h.material2 = s.material2, h.tag = s.tag, h.radius = s.radius;
+            h.material = s.material, h.material2 = s.material2, h.tag = s.tag, h.radius = s.radius, h.shot = s.id;
             if (s.bounce && sys.GetNarrowPhaseQuery().CastRay(ray, hit, {}, {}, filter)) {
                 // shortcut: restitution 0.3, tangential speed kept at 60 %; rests below 1 m/s (on moving vehicles too)
                 RVec3 at = ray.GetPointOnRay(hit.mFraction);
@@ -902,7 +903,7 @@ void Physics::Impl::projectiles() {
         }
         if (done && s.ttl <= 0 && s.radius > 0) {  // fuse ran out (grenades): explodes where it is
             Physics::Hit h;
-            h.material = s.material, h.material2 = s.material2, h.tag = s.tag, h.radius = s.radius;
+            h.material = s.material, h.material2 = s.material2, h.tag = s.tag, h.radius = s.radius, h.shot = s.id;
             h.pos[0] = s.p.GetX(), h.pos[1] = s.p.GetY(), h.pos[2] = s.p.GetZ();
             hits.push_back(h);
         }

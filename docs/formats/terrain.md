@@ -13,7 +13,7 @@ Status: **verified** — `obf_mapview` loads all 78 levels of bf1942, XPack1 and
 | `yScale` | height scale | 0.35–1 |
 | `waterLevel` | water plane height in metres | |
 | `texBaseName` | colour tile prefix (`.../Textures/Tx`) | |
-| `materialMap`, `materialSize` | material map, side in samples | not used yet |
+| `materialMap`, `materialSize` | material map, side in samples | read by the engine for impact effects (the ground material a shot hits) |
 | `texOffsetX`, `texOffsetY` | | meaning unknown; ignoring them shows no visible misalignment |
 | `detailTexName` | detail texture, one per level (Berlin: grey gravel, 512 × 512 DXT5, mean ≈ 0.55 on every level checked) | multiplied into the colour tiles, normalised to its mean, one repeat per 4 m, faded out by 200 m. The scale was matched by eye to the original and the blend is guessed |
 | `targetTriCount`, `lodDistance`, `seaFloorLevel`, `waveHeight` | | not used yet |

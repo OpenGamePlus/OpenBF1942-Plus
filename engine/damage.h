@@ -16,8 +16,11 @@ struct Material {
 struct DamageTable {
     std::map<int, Material> materials;
     std::map<std::pair<int, int>, float> mods;  // (attGroup, defGroup) -> damageMod
+    std::map<std::pair<int, int>, std::string> effects;  // (attGroup, defGroup) -> setEffectTemplate, lower case
     // materialDamage(attacker) x damageMod(attacker's attGroup, target's defGroup); 0 if either is unknown.
     float damage(int attacker, int target) const;
+    // The effect (an EffectBundle template) of attacker hitting target; "" if none.
+    std::string effect(int attacker, int target) const;
 };
 
 // commands: (method, args) in order, as Con::settings["materialmanager"].
