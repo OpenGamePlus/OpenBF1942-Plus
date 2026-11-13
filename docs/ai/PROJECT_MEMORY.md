@@ -2,6 +2,12 @@
 
 Append-only. Newest first. At most 3 bullets per stage.
 
+## 2026-11-14 — B1: bots stop duelling vehicles they cannot hurt
+
+- Berlin's Soviet bots stood for minutes firing rifles at a bot in a Hanomag (5 damage of 100 per hit). Infantry now skips vehicles its weapon would need more than 10 hits to destroy (threshold guessed, in debt.md); Berlin's attackers end 11–19 m from their flags instead of 45–68 m.
+- 78-level sweep neutral (captures 54 → 52, bot deaths 154 → 141, fewer pointless fights); no errors.
+- Open: Berlin still captures nothing in 5 minutes; bots stand on 1 m ruin walls the infantry map marks blocked.
+
 ## 2026-11-14 — B1: bots leave blocked cells through a visible exit
 
 - Berlin's stuck events were 83 % in cells the infantry map marks blocked (spawns inside building footprints); the planner snapped to the nearest free cell behind a wall. `Game::route` now heads first for the nearest free cell in sight (physics ray, 15 m).

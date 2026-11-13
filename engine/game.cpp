@@ -942,6 +942,18 @@ void Game::think(float t, float step) {
             for (size_t oi = 0; oi < bots.size(); ++oi)
                 if (!bots[oi].dead && bots[oi].team != b.team) cand.push_back({d2(bots[oi].pos), static_cast<int>(oi)});
             std::sort(cand.begin(), cand.end());
+            // A soldier on foot leaves alone a vehicle its weapon barely hurts (rifles against tanks and half-tracks),
+            // else it stands and fires at it for good instead of running for its flag.
+            // shortcut: "barely" = more than 10 hits to destroy it, guessed; the original AI's rule is unread.
+            auto harmless = [&](int who) {
+                int vi = who == -1 ? cur : bots[static_cast<size_t>(who)].veh;
+                if (b.veh >= 0 || vi < 0 || b.weapon.name.empty()) return false;
+                const Veh& v = vehicles[static_cast<size_t>(vi)];
+                float hit = damage.damage(b.weapon.material, v.material) +
+                            (b.weapon.material2 >= 0 ? damage.damage(b.weapon.material2, v.material) : 0.0f);
+                return hit * 10 < v.hp;
+            };
+            cand.erase(std::remove_if(cand.begin(), cand.end(), [&](const auto& c) { return harmless(c.second); }), cand.end());
             for (size_t c = 0; c < cand.size() && c < 3 && cand[c].first < 120 * 120; ++c) {
                 float q[3];
                 int ch, veh;
