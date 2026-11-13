@@ -183,9 +183,11 @@ int run(int argc, char** argv) {
             if (ev.type == SDL_MOUSEBUTTONDOWN && !play.empty() && shot.empty()) grab = true;
             if (ev.type == SDL_MOUSEMOTION && (look || grab)) {
                 // The vertical axis felt inverted to the maintainer (under WSLg); flipped here, turrets included.
-                float yrel = -static_cast<float>(ev.motion.yrel);
-                mouse_x += static_cast<float>(ev.motion.xrel), mouse_y += yrel;
-                cam.yaw += static_cast<float>(ev.motion.xrel) * 0.004f;
+                // Both axes flipped at the maintainer's request (vertical 2026-11-10, horizontal 2026-11-14). By the
+                // view math, mouse right with xrel > 0 turns right; the flip is what the maintainer sees through WSLg.
+                float yrel = -static_cast<float>(ev.motion.yrel), xrel = -static_cast<float>(ev.motion.xrel);
+                mouse_x += xrel, mouse_y += yrel;
+                cam.yaw += xrel * 0.004f;
                 cam.pitch = std::clamp(cam.pitch - yrel * 0.004f, -1.5f, 1.5f);
             }
         }
