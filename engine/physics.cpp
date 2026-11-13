@@ -529,7 +529,7 @@ size_t Physics::add_scene(const std::vector<DrawItem>& items, const Vfs& vfs) {
             CollisionMesh c;
             try {
                 SmMesh m = sm_parse(vfs.read(item.mesh));
-                if (!m.collision.empty()) c = std::move(m.collision[0]);
+                if (!m.collision.empty()) c = std::move(m.collision.back());  // with two blocks the second is the detailed one that stops movement (references.md: RefractorForge, in-game test)
             } catch (const std::exception&) {
             }
             it = cache.emplace(item.mesh, std::move(c)).first;

@@ -45,7 +45,7 @@ Verified on all 1,718 `.sm` blocks and the 97 `.tm` blocks of the three mods (`t
 | `u32 nfaces`, `nfaces × 8 bytes` | `u16 a, b, c`, `u16 material` |
 | tree | spatial index over the faces, ends with an embedded `<mesh>.sgf` name; not decoded |
 
-Materials are `MaterialManager` ids (92 distinct values in use). 473 base-game meshes have two blocks; their respective roles are not known.
+Materials are `MaterialManager` ids (92 distinct values in use). 473 base-game meshes have two blocks. In 220 of the 230 two-block meshes the bf1942 mod loads, the first is far coarser than the second (the `suburbhouse_*` AI meshes: 2 faces against about 550). The second is the one that stops soldiers and vehicles (RefractorForge's in-game test in BF1942 and BF Vietnam, [references.md](../references.md); not checked by us in the game), so static collision uses the last block. What the first is for is open.
 
 ## Coordinates
 

@@ -247,8 +247,8 @@ std::unique_ptr<GpuMesh> upload_sm(const SmMesh& m, const std::string& path, con
     upload_buffers(*g, verts, idx);
     if (keep_vertices) *keep_vertices = std::move(verts);
     if (keep_indices) *keep_indices = idx;
-    if (!m.collision.empty()) {  // edges of the first collision block, same 10-float layout
-        const CollisionMesh& c = m.collision[0];
+    if (!m.collision.empty()) {  // edges of the collision block physics uses (the last), same 10-float layout
+        const CollisionMesh& c = m.collision.back();
         std::vector<float> cv;
         for (size_t i = 0; i < c.vertices.size(); i += 3) cv.insert(cv.end(), {c.vertices[i], c.vertices[i + 1], c.vertices[i + 2], 0, 1, 0, 0, 0, 0, 0});
         std::vector<uint32_t> ci;

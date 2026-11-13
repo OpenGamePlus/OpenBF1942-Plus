@@ -16,7 +16,7 @@
 | `texOffsetX/Y`, material map, detail texture, terrain LOD | not implemented | see [terrain.md](../formats/terrain.md) |
 | Water drawn on every map | unverified | Berlin has `waterLevel` but no `Water.*` settings |
 | Little-endian hosts only | accepted | `memcpy` of file integers in C++ |
-| Texture `alternativePath` lookup | unverified | tried as `<alt>/<file name>` before the given path |
+| Texture `alternativePath` lookup | unverified | tried as `<alt>/<file name>` before the given path; every level's `init.con` names its own `Texture` folder this way, and 76–146 mesh textures per mod resolve only through it |
 | Tree sprite orientation | unverified | `corner.y` sign chosen visually |
 | Viewer draws LOD 0 / first `LodObject` child only, distance cull 1.5 km | shortcut | per-mesh `setLodDistance` exists in geometry templates |
 | Effects not drawn | not implemented | later steps |
