@@ -105,6 +105,31 @@ The server tick counts at 30 Hz from the start of each round: it reached 9,001 a
 
 **Ghost entries:** u2 kind, u16 networkable id. Kind 0: nothing more. Kind 1: a flag and a u11 bit length, then the object's update (read by its networkable; skipped by the length). Kind 3: the ghost is removed. Kind 2: invalid.
 
+### Ghost updates (in progress)
+
+What a kind-1 ghost entry carries, from the Mac client (`NetworkManager::setNetUpdate`, the `*Networkable::setNetUpdate` readers); not decoded by `bfnet.py` yet.
+
+- An object is a **descriptor**: a list of unique net properties, each served by one or more networkable components (soldier, engine, firearms, rotational bundle, spring, kit, projectile, control point…). For each property the reader rewinds to the property's first bit, and every component sharing it reads from there; the next property starts where they stopped.
+- Each component starts with its own state mask and reads only the fields whose bit is set. Positions are compressed vectors relative to the stream's compression vector (reset at the start of the ghost section, set to the player's position by the control object state).
+- **Soldier** (`BFSoldierNetworkable`): u14 mask, a flag, then by mask bit:
+
+  | Bit | Field |
+  |---|---|
+  | 0x1 | position, compressed vector, scale 0.001 |
+  | 0x4 | rotation, unit quaternion |
+  | 0x2 | velocity, compressed vector, scale 0.001 |
+  | 0x200, 0x400 | two vectors, scale 0.0001 |
+  | 0x8, 0x10 | signed floats, 16 bits, scaled by limits from the template |
+  | 0x20, 0x40 | animation states, range 0 – (states − 1) of the animation state machine |
+  | 0x1000 | 16 bits |
+  | 0x80 | a value ranged by the active kit part |
+  | 0x100 | u32 |
+  | 0x800 | u15 state bits |
+  | 0x2000 | flag (kit part state) |
+
+- Open before a decoder can be written: the bit widths of the compressed-vector modes and of quaternion components (constants not visible in the decompilation), the component list of each descriptor (from the templates' networkable info), and the data-driven ranges (animation states, kit parts). The recording gives a check for each guess: every update's u11 bit length.
+- In the 2026-11-13 recording, 45 networkable ids received updates: id 1 every few ticks, 513 and 514 rarely, the level's vehicles (519–535, 544) the most (up to 1,726 updates for a driven tank), grenades (546–548, 555–557) in short bursts, and the player's soldier only 116 times, since its state travels in the control object state.
+
 ### Game events
 
 From the Mac client's `GameEvent::initEvents` (id → class) and each class's `deSerialize`, implemented in `bfnet.py` `EVENTS`. With them every data packet of the 2026-11-13 recording decodes to its last byte (24,233 client, 16,120 server), events followed by ghosts included. Fields read with `readUnsigned(min, max)` use the smallest n with 2ⁿ − 1 ≥ max − min + 1 bits (`ScoreMsg` kind: 4 bits; `ConnectionType`: 3).
