@@ -81,6 +81,22 @@ class BfnetTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             payload("s2c", bits([(4, 6), (0, 32), (1, 8), (0, 1), (2, 2), (1, 16)]))  # kind 2 is an error
 
+    def test_soldier(self):
+        # control state at (1800, 40, 1900); soldier 536: mask 0x5 = position (mode 3, 12 bits) + rotation (16 bits)
+        f = [struct.unpack("<I", struct.pack("<f", c))[0] for c in (1800.0, 40.0, 1900.0)]
+        control = [(0, 32), (0, 1), (0, 2)] + [(c, 32) for c in f]
+        upd = [(0x5, 14), (0, 1), (3, 2), (0, 1), (1500, 11), (0, 1), (0, 11), (1, 1), (250, 11), (0, 1)]
+        upd += [(65535, 16), (32767, 16), (32767, 16)]
+        g = [(4, 6), (10, 32), (1, 8), (1, 1), (sum(w for _, w in control), 12)] + control
+        g += [(1, 2), (536, 16), (0, 1), (sum(w for _, w in upd), 11)] + upd
+        e = payload("s2c", bits(g), {536})["ghosts"]["entries"][0]
+        x, y, z = e["soldier"]["position"]
+        self.assertAlmostEqual(x, 1801.5, places=3)
+        self.assertAlmostEqual(y, 40.0, places=3)
+        self.assertAlmostEqual(z, 1899.75, places=3)
+        self.assertAlmostEqual(e["soldier"]["rotation"][0], 1.0, places=3)
+        self.assertNotIn("soldier", payload("s2c", bits(g))["ghosts"]["entries"][0])  # not a known soldier: skipped
+
     def test_summary(self):
         rows = []
         for i in range(3):

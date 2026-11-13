@@ -107,27 +107,28 @@ The server tick counts at 30 Hz from the start of each round: it reached 9,001 a
 
 ### Ghost updates (in progress)
 
-What a kind-1 ghost entry carries, from the Mac client (`NetworkManager::setNetUpdate`, the `*Networkable::setNetUpdate` readers); not decoded by `bfnet.py` yet.
+What a kind-1 ghost entry carries, from the Mac client (`NetworkManager::setNetUpdate`, the `*Networkable::setNetUpdate` readers). `bfnet.py` decodes the soldier; other objects are still skipped by their length.
 
 - An object is a **descriptor**: a list of unique net properties, each served by one or more networkable components (soldier, engine, firearms, rotational bundle, spring, kit, projectile, control point…). For each property the reader rewinds to the property's first bit, and every component sharing it reads from there; the next property starts where they stopped.
-- Each component starts with its own state mask and reads only the fields whose bit is set. Positions are compressed vectors relative to the stream's compression vector (reset at the start of the ghost section, set to the player's position by the control object state).
-- **Soldier** (`BFSoldierNetworkable`): u14 mask, a flag, then by mask bit:
+- Each component starts with its own state mask and reads only the fields whose bit is set. Positions are compressed vectors relative to the stream's compression vector (reset at the start of the ghost section, set to the player's position by the control object state). Their scale comes from the reader: 0.001 for soldier positions, so mode 2 reaches ±32.8 m and mode 3 ±2 m around the player.
+- **Soldier** (`BFSoldierNetworkable`): u14 mask, a flag, then by mask bit. **Checked:** 180 soldier updates of the recording read exactly their declared length, and the own soldier's decoded position matches the control position (0 m at spawn) and the server log's death spot:
 
   | Bit | Field |
   |---|---|
   | 0x1 | position, compressed vector, scale 0.001 |
-  | 0x4 | rotation, unit quaternion |
+  | 0x4 | rotation, unit quaternion with 16-bit components |
   | 0x2 | velocity, compressed vector, scale 0.001 |
   | 0x200, 0x400 | two vectors, scale 0.0001 |
   | 0x8, 0x10 | signed floats, 16 bits, scaled by limits from the template |
-  | 0x20, 0x40 | animation states, range 0 – (states − 1) of the animation state machine |
+  | 0x20, 0x40 | animation states, range 0 – (states − 1) of the animation state machine: 11 bits with retail bf1942 |
   | 0x1000 | 16 bits |
-  | 0x80 | a value ranged by the active kit part |
+  | 0x80 | range 0 – a value of the active weapon, compared with its ammunition, probably the rounds in the magazine (5 bits in the 6 updates seen; width depends on the weapon, so not decoded yet) |
   | 0x100 | u32 |
   | 0x800 | u15 state bits |
   | 0x2000 | flag (kit part state) |
 
-- Open before a decoder can be written: the bit widths of the compressed-vector modes and of quaternion components (constants not visible in the decompilation), the component list of each descriptor (from the templates' networkable info), and the data-driven ranges (animation states, kit parts). The recording gives a check for each guess: every update's u11 bit length.
+- Widths found from the update lengths (the constants are not visible in the decompilation): compressed-vector mode 2 = 16 bits per component, mode 3 = 12 bits (mode 1 not seen yet); quaternion components 16 bits. Each guess is checked against every update's u11 bit length.
+- Still open: the component list of each descriptor (from the templates' networkable info) and the readers of vehicles, weapons, projectiles, control points and the managers (ids 1, 513, 514).
 - In the 2026-11-13 recording, 45 networkable ids received updates: id 1 every few ticks, 513 and 514 rarely, the level's vehicles (519–535, 544) the most (up to 1,726 updates for a driven tank), grenades (546–548, 555–557) in short bursts, and the player's soldier only 116 times, since its state travels in the control object state.
 
 ### Game events
@@ -189,5 +190,5 @@ A second client with the same CD key gets 20 packets of handshake and no more un
 
 ## Next
 
-- The action values; the control state and per-object ghost updates (`NetworkableInfo`); the compressed-vector bit tables; the download section; the meaning of the unlabelled event fields.
+- The action values; the rest of the control state; ghost readers for vehicles, weapons, projectiles, control points and managers; compressed-vector mode 1; the download section; the meaning of the unlabelled event fields.
 - Record more sessions with the WSL relay (`tools/bfnet.py record`); this needs no elevation and works remotely. Wanted: two clients, vehicles, deaths, a map change.

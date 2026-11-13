@@ -15,6 +15,7 @@ Usage:
 """
 import collections
 import json
+import math
 import select
 import socket
 import struct
@@ -59,6 +60,28 @@ class BitReader:
     def vec(self):
         return tuple(struct.unpack("<f", self.u(32).to_bytes(4, "little"))[0] for _ in range(3))
 
+    def ufloat(self, n):
+        return self.u(n) / ((1 << n) - 1)
+
+    def sfloat(self, n):
+        return self.ufloat(n) * 2 - 1
+
+    def quat(self, n=16):
+        """Unit quaternion (x, y, z, w): sign of w, then x, y, z as n-bit signed floats."""
+        neg = self.u(1)
+        x, y, z = (self.sfloat(n) for _ in range(3))
+        w = math.sqrt(max(0.0, 1 - min(1.0, x * x + y * y + z * z)))
+        return (x, y, z, -w if neg else w)
+
+    def cvec(self, scale, base):
+        """Compressed vector: u2 mode; 0 = full vector, else base + scale x three signed integers."""
+        mode = self.u(2)
+        if mode == 0:
+            return self.vec()
+        if mode not in CVEC_BITS:
+            raise ValueError(f"compressed vector: mode {mode} width unknown")
+        return tuple(base[i] + scale * self.s(CVEC_BITS[mode]) for i in range(3))
+
     def string(self):
         """8-bit length, then that many 8-bit characters."""
         n = self.u(8)
@@ -97,6 +120,8 @@ def parse(d):
     return p
 
 
+CVEC_BITS = {2: 16, 3: 12}  # compressed-vector mode -> bits per component (from update lengths; mode 1 not seen yet)
+ANIM_STATE_BITS = 11  # range 0..states-1 of retail bf1942's animation state machine, from update lengths
 MANAGERS = ("actions", "events", "ghosts", "downloads")  # stream manager ids 0..3, in packet order
 
 
@@ -108,18 +133,53 @@ def actions(r):
     return {"first": first, "actions": [([r.u(12) for _ in range(6)], r.u(32)) for _ in range(n)]}
 
 
-def ghosts(r):
+def soldier(r, base):
+    """BFSoldierNetworkable update: u14 mask, a flag, then the fields whose mask bit is set."""
+    m = r.u(14)
+    e = {"mask": m, "flag": r.u(1)}
+    if m & 0x1:
+        e["position"] = r.cvec(0.001, base)
+    if m & 0x4:
+        e["rotation"] = r.quat()
+    if m & 0x2:
+        e["velocity"] = r.cvec(0.001, base)
+    for bit in (0x200, 0x400):
+        if m & bit:
+            e[hex(bit)] = r.cvec(0.0001, base)
+    for bit in (0x8, 0x10):  # 16-bit signed floats scaled by template limits (raw value kept)
+        if m & bit:
+            e[hex(bit)] = r.sfloat(16)
+    for bit in (0x20, 0x40):
+        if m & bit:
+            e[hex(bit)] = r.u(ANIM_STATE_BITS)
+    if m & 0x1000:
+        e["0x1000"] = r.u(16)
+    if m & 0x80:
+        raise ValueError("soldier: kit part field width unknown")
+    if m & 0x100:
+        e["0x100"] = r.u(32)
+    if m & 0x800:
+        e["state"] = r.u(15)
+    if m & 0x2000:
+        e["kit_state"] = r.u(1)
+    return e
+
+
+def ghosts(r, soldiers=()):
     """GhostManager section: u32 server tick, u8 entry count, a flag, the player's control object state when the
     flag is set, then the entries. Each entry is a u2 kind and a u16 networkable id; kind 1 carries a flag and an
     u11 bit length of its update (skipped here), kind 3 removes the ghost, kind 2 is an error."""
     g = {"tick": r.u(32), "entries": []}
     n, has_control = r.u(8), r.u(1)
+    base = (0.0, 0.0, 0.0)  # the stream's compression vector
     if has_control:
         size = r.u(12)
         end = r.pos + size
-        c = {"bits": size, "frame": r.s(32), "flag": r.u(1), "mode": r.u(2)}
-        if c["mode"] == 0:  # full vector; other modes use bit widths held in engine tables (open)
-            c["position"] = r.vec()
+        c = {"bits": size, "frame": r.s(32), "flag": r.u(1)}
+        try:
+            c["position"] = base = r.cvec(1.0, base)
+        except ValueError:
+            pass
         r.pos = end
         g["control"] = c
     for _ in range(n):
@@ -131,7 +191,15 @@ def ghosts(r):
             e["flag"], e["bits"] = r.u(1), r.u(11)
             if e["bits"] > r.left():
                 raise ValueError("ghost entry: update past the end")
-            r.pos += e["bits"]
+            end = r.pos + e["bits"]
+            if nid in soldiers:
+                try:
+                    e["soldier"] = soldier(r, base)
+                    if r.pos != end:
+                        raise ValueError(f"soldier update: read {r.pos - end + e['bits']} bits of {e['bits']}")
+                except ValueError as x:
+                    e["soldier_error"] = str(x)
+            r.pos = end
         g["entries"].append(e)
     return g
 
@@ -258,10 +326,10 @@ def events(r):
     return {"block": block, "flag": flag, "events": [event(r) for _ in range(n)]}
 
 
-def payload(direction, data):
+def payload(direction, data, soldiers=()):
     """Data payload -> {"mask", section name: decoded, "end": bit position where decoding stopped, "open": name of
-    the first section not decodable yet (game events, downloads) or None}. A 6-bit mask names the stream managers
-    that wrote into the packet; their sections follow in id order."""
+    the first section not decodable yet (downloads) or None}. A 6-bit mask names the stream managers that wrote into
+    the packet; their sections follow in id order. Ghost updates of the ids in `soldiers` are decoded as soldiers."""
     r = BitReader(data)
     out = {"mask": r.u(6), "open": None}
     for i, name in enumerate(MANAGERS):
@@ -270,7 +338,7 @@ def payload(direction, data):
         if name == "actions":
             out[name] = actions(r)
         elif name == "ghosts":
-            out[name] = ghosts(r)
+            out[name] = ghosts(r, soldiers)
         elif name == "events":
             out[name] = events(r)
         else:  # downloads: not decoded
@@ -291,7 +359,7 @@ def summary(rows):
     gaps = mismatches = data = 0
     frames = {"c2s": [], "s2c": []}
     masks, errors, tails, positions, ids = collections.Counter(), collections.Counter(), collections.Counter(), [], set()
-    names = collections.Counter()
+    names, soldiers, soldier_stats = collections.Counter(), set(), collections.Counter()
     for _, d, b in rows:
         p = parse(b)
         if p["kind"] == "connect":
@@ -308,7 +376,7 @@ def summary(rows):
             gaps += 1
         last[d] = p["seq"]
         try:
-            m = payload(d, p["payload"])
+            m = payload(d, p["payload"], soldiers)
         except ValueError as e:
             errors[(d, str(e))] += 1
             continue
@@ -317,7 +385,17 @@ def summary(rows):
             tails[(d, len(p["payload"]) * 8 - m["end"] < 8)] += 1
         if m.get("actions", {}).get("first") is not None:
             frames[d].append(m["actions"]["first"])
-        names.update((d, e["name"]) for e in m.get("events", {}).get("events", []))
+        for e in m.get("events", {}).get("events", []):
+            names[(d, e["name"])] += 1
+            if e["name"] == "SetDefaultVehicle":  # the player's soldier
+                soldiers.add(e["fields"][1])
+            elif e["name"] == "DestroyObject":
+                soldiers.discard(e["fields"][0])
+        for e in m.get("ghosts", {}).get("entries", []):
+            if "soldier" in e:
+                soldier_stats["decoded"] += 1
+            elif "soldier_error" in e:
+                soldier_stats[e["soldier_error"]] += 1
         if "ghosts" in m:
             frames[d].append(m["ghosts"]["tick"])
             ids.update(e["id"] for e in m["ghosts"]["entries"])
@@ -341,6 +419,8 @@ def summary(rows):
         ev = sorted((k[1], n) for k, n in names.items() if k[0] == d)
         if ev:
             out.append(f"{d} events: " + ", ".join(f"{k} {n}" for k, n in ev))
+    if soldier_stats:
+        out.append("soldier updates: " + ", ".join(f"{k} {n}" for k, n in sorted(soldier_stats.items())))
     if ids:
         out.append(f"ghost ids: {len(ids)} distinct, {min(ids)}..{max(ids)}")
     if positions:

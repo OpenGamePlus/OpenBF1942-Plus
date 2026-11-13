@@ -2,6 +2,12 @@
 
 Append-only. Newest first. At most 3 bullets per stage.
 
+## 2026-11-13 — soldier ghost updates decoded
+
+- Ghost updates are per-descriptor lists of net properties read by networkable components. The soldier's reader (mask-driven position, rotation, velocity, animation states, state bits) is in `bfnet.py`: 180 updates read exactly their declared length, positions match the control position and the log's death spot.
+- Widths the decompilation hides were fitted from update lengths: compressed-vector modes 2 / 3 = 16 / 12 bits, quaternion 16, animation states 11.
+- Open: vehicle, weapon, projectile, control point and manager readers; the soldier's ammunition field width.
+
 ## 2026-11-13 — game events decoded
 
 - The 51 game events (ids from the Mac client's `GameEvent::initEvents`, layouts from each `deSerialize`) are in `bfnet.py`; every data packet of the recording now decodes to its last byte. `readUnsigned(min, max)` is range-coded, which the first attempt missed.
