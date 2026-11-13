@@ -259,8 +259,101 @@ def projectile(r, base):
     return e
 
 
-GHOST_READERS = {"soldier": soldier, "vehicle": None, "control_point": control_point, "kit": kit,
+def player(r, base):
+    """BFPlayer update: u24 mask, ranged fields by bit, then always a flag. Names are those matched against the
+    recording's events and server log; the others keep their bit."""
+    m = r.u(24)
+    e = {"mask": m}
+    byte = _range_bits(0, 0xff)
+    if m & 0x2:
+        e["team"] = r.u(_range_bits(0, 0x7f))  # set while choosing a spawn, cleared on spawning
+    if m & 0x4:
+        e["0x4"] = r.u(1)
+    for bit, name in ((0x8, "deaths"), (0x10, "0x10"), (0x20, "0x20"), (0x40, "0x40"), (0x80, "0x80"), (0x100, "0x100"),
+                      (0x200, "flag_attacks"), (0x400, "teamkills")):
+        if m & bit:
+            e[name] = r.u(byte)
+    if m & 0x800:
+        e["score"] = r.s(16)
+    for bit, name in ((0x1000, "0x1000"), (0x4000, "firing"), (0x8000, "0x8000")):
+        if m & bit:
+            e[name] = r.u(1)
+    if m & 0x10000:
+        e["ping"] = r.u(_range_bits(0, 0x3ff))  # unverified name
+    if m & 0x2000:
+        e["spawn_countdown"] = r.u(_range_bits(0, 0x7f))
+    if m & 0x40000:
+        e["0x40000"] = (r.u(_range_bits(0, 0x12)), r.u(1))
+    for bit, name in ((0x80000, "0x80000"), (0x100000, "0x100000"), (0x200000, "0x200000"), (0x400000, "0x400000"),
+                      (0x800000, "kit")):
+        if m & bit:
+            e[name] = r.u(byte)
+    e["flag"] = r.u(1)
+    return e
+
+
+TEAM_FIELDS = {0: "deaths", 6: "flag_attacks", 7: "teamkills", 8: "score", 9: "tickets", 10: "rounds_won"}
+
+
+def score_manager(r, base):
+    """ScoreManager update: u24 mask; bits 0-10 team 1 and 11-21 team 2 (signed 18-bit each), 22 and 23 signed
+    3-bit round-end values."""
+    m = r.u(24)
+    e = {"mask": m, "teams": [{}, {}]}
+    for i in range(22):
+        if m & (1 << i):
+            e["teams"][i // 11][TEAM_FIELDS.get(i % 11, str(i % 11))] = r.s(18)
+    for i in (22, 23):
+        if m & (1 << i):
+            e[str(i)] = r.s(3)
+    return e
+
+
+def spawn_manager(r, groups):
+    """BFSpawnPointManager update: a mask with one bit per spawn group of the level, then per set bit u4 team, a
+    flag (active), and the group's x / 8 and z / 8 as bytes."""
+    m = r.u(groups)
+    return {"mask": m, "groups": {i: {"team": r.u(4), "active": r.u(1), "x8": r.u(8), "z8": r.u(8)}
+                                  for i in range(groups) if m & (1 << i)}}
+
+
+def spawn_groups(data, start, bits):
+    """The spawn manager's group count, found as the mask width that makes an update end exactly at its length."""
+    for n in range(1, 65):
+        r = BitReader(data, start)
+        try:
+            spawn_manager(r, n)
+        except ValueError:
+            continue
+        if r.pos == start + bits:
+            return n
+    raise ValueError("spawn manager: no group count fits")
+
+
+GHOST_READERS = {"player": player, "score_manager": score_manager, "soldier": soldier, "vehicle": None, "control_point": control_point, "kit": kit,
                  "projectile": projectile}
+
+
+def classify(classes, nid, data, start, bits, base):
+    """Give a created object no event named a class from its update: a vehicle when it decodes as body and engine
+    with the body within 5 m of the CreateObject position; a control point when it is 7 bits or less and fits."""
+    created = classes.get("created", {}).get(nid)
+    if created is not None:
+        try:
+            v = vehicle(BitReader(data, start), base, start + bits)
+            if "position" in v["body"] and math.dist(v["body"]["position"], created) < 5:
+                classes[nid] = "vehicle"
+                return
+        except ValueError:
+            pass
+    if bits <= 7:  # shortcut: only flags are this small so far
+        r = BitReader(data, start)
+        try:
+            control_point(r, base)
+            if r.pos == start + bits:
+                classes[nid] = "control_point"
+        except ValueError:
+            pass
 
 
 def ghosts(r, classes=None):
@@ -290,12 +383,18 @@ def ghosts(r, classes=None):
             if e["bits"] > r.left():
                 raise ValueError("ghost entry: update past the end")
             end = r.pos + e["bits"]
+            if classes is not None and nid in classes and classes[nid] is None:
+                classify(classes, nid, r.data, r.pos, e["bits"], base)
             cls = (classes or {}).get(nid)
             if cls:
                 e["class"] = cls
                 try:
                     if cls == "vehicle":  # trailing components are not decoded, so no exact length check
                         e["update"] = vehicle(r, base, end)
+                    elif cls == "spawn_manager":
+                        if "spawn_groups" not in classes:  # per level: fitted on the first update
+                            classes["spawn_groups"] = spawn_groups(r.data, r.pos, e["bits"])
+                        e["update"] = spawn_manager(r, classes["spawn_groups"])
                     else:
                         e["update"] = GHOST_READERS[cls](r, base)
                         if r.pos != end:
@@ -460,13 +559,17 @@ def load(path):
 
 def track_classes(classes, m):
     """Update `classes` (networkable id -> ghost reader) from a decoded payload's events and ghost entries:
-    SetDefaultVehicle names the player's soldier, SetVehicle a vehicle, HandlePickup a kit, CreateMultipleObjects
-    projectiles; an object from CreateObject whose update fits the control point reader exactly becomes one.
-    DestroyObject forgets an id (ids are reused)."""
+    CreatePlayer names a player, DataBaseComplete the spawn and score managers, SetDefaultVehicle the player's soldier, SetVehicle a vehicle, HandlePickup a kit, CreateMultipleObjects
+    projectiles; other CreateObject ids are left for `classify`. DestroyObject forgets an id (ids are reused)."""
     for e in m.get("events", {}).get("events", []):
         n = e["name"]
         if n == "SetDefaultVehicle":
             classes[e["fields"][1]] = "soldier"
+        elif n == "CreatePlayer" and e["fields"][4]:  # server's echo: the player's networkable id
+            classes[e["fields"][4]] = "player"
+        elif n == "DataBaseComplete":
+            classes[e["fields"][0]], classes[e["fields"][1]] = "spawn_manager", "score_manager"
+            classes.pop("spawn_groups", None)
         elif n == "SetVehicle":
             classes[e["fields"][1]] = "vehicle"
         elif n == "HandlePickup":
@@ -476,11 +579,11 @@ def track_classes(classes, m):
                 classes[e["fields"][1] + i] = "projectile"
         elif n == "CreateObject":
             classes.setdefault(e["id"], None)
+            if e["placed"]:
+                classes.setdefault("created", {})[e["id"]] = e["position"]
         elif n == "DestroyObject":
             classes.pop(e["fields"][0], None)
-    for e in m.get("ghosts", {}).get("entries", []):
-        if e.get("bits") is not None and e["bits"] <= 7 and e["id"] in classes and classes[e["id"]] is None:
-            classes[e["id"]] = "control_point"  # shortcut: classified by size; only flags are this small so far
+            classes.get("created", {}).pop(e["fields"][0], None)
 
 
 def summary(rows):
@@ -519,8 +622,11 @@ def summary(rows):
             names[(d, e["name"])] += 1
         track_classes(classes, m)
         for e in m.get("ghosts", {}).get("entries", []):
+            if e["kind"] == 1:
+                ghost_stats[("all", "with an update")] += 1
             if "class" in e:
                 ghost_stats[(e["class"], "decoded" if "update" in e else e["error"])] += 1
+                ghost_stats[("all", "decoded")] += "update" in e
         if "ghosts" in m:
             frames[d].append(m["ghosts"]["tick"])
             ids.update(e["id"] for e in m["ghosts"]["entries"])

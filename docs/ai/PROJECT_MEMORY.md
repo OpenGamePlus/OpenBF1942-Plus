@@ -2,6 +2,12 @@
 
 Append-only. Newest first. At most 3 bullets per stage.
 
+## 2026-11-13 — player, score and spawn managers; 92 % of ghost updates
+
+- Player (deaths, teamkills, score, kit, respawn countdown), score manager (two team blocks with tickets, score, deaths) and spawn manager (24 groups on Berlin, positions / 8) decoded, each checked against the events and the server log.
+- Unnamed created objects are classified by fit: vehicle when body + engine decode within 5 m of the creation spot. 6,737 of 7,342 ghost updates of the recording now decode.
+- Open: static guns, hand weapons, small objects; the vehicle components after the engine.
+
 ## 2026-11-13 — grenades, flags and kits in ghost updates
 
 - Projectile (12-bit quaternion), control point and kit readers added; ghost decoding now takes an id → class map that `track_classes` builds from the events. 881 grenade updates read exactly their length.

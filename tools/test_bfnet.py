@@ -121,6 +121,25 @@ class BfnetTest(unittest.TestCase):
         bad = [(4, 6), (10, 32), (1, 8), (0, 1), (1, 2), (515, 16), (0, 1), (5, 11), (0, 5)]
         self.assertIn("read 2 bits of 5", payload("s2c", bits(bad), {515: "control_point"})["ghosts"]["entries"][0]["error"])
 
+    def test_player(self):
+        # mask: deaths (0x8), score (0x800), spawn countdown (0x2000), kit (0x800000); then the trailing flag
+        pl = [(0x8 | 0x800 | 0x2000 | 0x800000, 24), (1, 9), (1, 1), (2, 15), (8, 8), (3, 9), (1, 1)]
+        g = [(4, 6), (10, 32), (1, 8), (0, 1), (1, 2), (1, 16), (0, 1), (sum(w for _, w in pl), 11)] + pl
+        u = payload("s2c", bits(g), {1: "player"})["ghosts"]["entries"][0]["update"]
+        self.assertEqual((u["deaths"], u["score"], u["spawn_countdown"], u["kit"], u["flag"]), (1, -2, 8, 3, 1))
+
+    def test_managers(self):
+        # score manager: team 2 tickets (bit 20) = 197; spawn manager with 3 groups, group 1 set
+        sc = [(1 << 20, 24), (0, 1), (197, 17)]
+        sp = [(0b010, 3), (2, 4), (1, 1), (225, 8), (222, 8)]
+        g = [(4, 6), (10, 32), (2, 8), (0, 1), (1, 2), (514, 16), (0, 1), (42, 11)] + sc
+        g += [(1, 2), (513, 16), (0, 1), (24, 11)] + sp
+        classes = {513: "spawn_manager", 514: "score_manager"}
+        u = [e["update"] for e in payload("s2c", bits(g), classes)["ghosts"]["entries"]]
+        self.assertEqual(u[0]["teams"][1], {"tickets": 197})
+        self.assertEqual(u[1]["groups"], {1: {"team": 2, "active": 1, "x8": 225, "z8": 222}})
+        self.assertEqual(classes["spawn_groups"], 3)
+
     def test_summary(self):
         rows = []
         for i in range(3):
