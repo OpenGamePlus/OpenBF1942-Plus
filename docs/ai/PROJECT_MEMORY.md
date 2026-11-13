@@ -2,6 +2,10 @@
 
 Append-only. Newest first. At most 3 bullets per stage.
 
+## 2026-11-14 — B1: opening nav cells from collision rejected
+
+- Opening blocked infantry cells where vertical rays at 0.4–1.6 m find no collision made Stalingrad (63 → 227) and Battleaxe (1,065 → 1,695 stuck) worse and did not help Berlin: the rays miss low rubble and thin fences that physics blocks. Reverted; recorded in pathfinding.md.
+
 ## 2026-11-14 — B1: bots stop duelling vehicles they cannot hurt
 
 - Berlin's Soviet bots stood for minutes firing rifles at a bot in a Hanomag (5 damage of 100 per hit). Infantry now skips vehicles its weapon would need more than 10 hits to destroy (threshold guessed, in debt.md); Berlin's attackers end 11–19 m from their flags instead of 45–68 m.
