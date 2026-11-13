@@ -1,6 +1,6 @@
 # Network (roadmap E0, research in progress)
 
-Status: **one 5-minute client/server session recorded (2026-11-10). Discovery and query protocols identified; the game transport layer decoded and checked on every packet of the recording (`tools/bfnet.py`); payload messages not decoded yet.** Goal and rules: [ADR 0005](../architecture/adr/0005-network-compatibility.md).
+Status: **one 5-minute client/server session recorded (2026-11-10). Discovery and query protocols identified; the game transport layer decoded and checked on every packet of the recording (`tools/bfnet.py`); payload structure read from the Mac client decompilation (stream manager sections, ghost entries), not yet checked on traffic.** Goal and rules: [ADR 0005](../architecture/adr/0005-network-compatibility.md).
 
 ## Programs
 
@@ -65,17 +65,33 @@ Little-endian. Byte 0: `00` game packet, `01` connection request (84 bytes, fiel
 
 Every data packet in the recording had the next sequence number (no loss on one machine); 89 of 14,163 acknowledgements lagged the latest packet sent, the ones in flight. Pings and pongs do not advance the sequence.
 
-### Payload (in progress, unverified)
+### Payload
 
-- A bit stream read least-significant bit first. Strings are an 8-bit length and 8-bit characters at any bit offset (the server's first data packet carries the mod and server names; the client's first ones its player name and CD-key hash).
-- Client data packets start with 11 constant bits (value 193) and a counter that rises by 1 per packet: its input frame (31 bits read; the bit after it is always set).
-- Server data packets start with 6 bits: 4 on ordinary updates (then a 14-bit or wider tick counter), 6 on about 60 packets that come every 10 s or with game events (a reliable-message counter appears a few bits later), 2 once.
-- Ordinary server updates carry three floats from bit 94: a world position (x, y, z), matching the Berlin spawn area the player walked in; 5,483 of 5,573 server packets hold one, moving at a median 0.9 m/s with one jump (a respawn, probably). Whose object it is (the player's own soldier, or the first object of a list) is open.
-- Client frames and server ticks run over the same span (0–8,585 and 2,020–10,605): one game clock at about 30 Hz, the server's counting from before the client joined.
+Read from the symbol-named Mac client decompilation ([references.md](../references.md): `dice::ref2::io::BitStream`, `dice::bf::ClientConnection`, the stream managers) and decoded by `tools/bfnet.py` `payload`. **Unverified as a whole:** the recording of 2026-11-10 is gone, so the full walk has not run on real traffic yet. What that recording did show fits it exactly: the server's prefixes 4, 6 and 2, the client's constant 11 bits (193) and the floats at bit 94.
+
+**Bit stream.** Least-significant bit first, multi-byte values little-endian. Signed integers are a sign bit then an (n − 1)-bit magnitude. Unsigned floats are an n-bit integer divided by 2ⁿ − 1, signed floats that times 2 minus 1. A unit quaternion is a sign bit for w, then x, y, z as signed floats; w is rebuilt. Strings are an 8-bit length and 8-bit characters at any bit offset.
+
+**Vectors.** A full vector is three 32-bit floats. A compressed vector is a 2-bit mode: 0 = full vector; 1–3 = three signed integers of a width taken from an engine table (values not in the decompilation, open), times a scale, plus a base vector set by the reader (the stream's compression vector).
+
+**Packet.** An optional u32 (only on connections with a flag set; not seen yet), then a **6-bit mask** of the stream managers that wrote into the packet, then their sections in id order:
+
+| Id | Manager | Section |
+|---|---|---|
+| 0 | PlayerAction (client → server) | u4 count; if any, s32 frame of the first action; per action six u12 values and a u32 (meaning open) |
+| 1 | GameEvent (reliable) | u8 count, u5 block index, a flag; per event a 7-bit event id, then the event's own fields (one reader per event type; open) |
+| 2 | Ghost (server → client) | u32 server tick, u8 entry count, a flag; when set the player's **control object state**; then the entries |
+| 3 | Download | open |
+
+So the client's 11 constant bits are mask 1, count 3 and the sign of the first frame: each client packet carries three actions. Server prefix 4 is ghosts only (ordinary updates), 6 is events and ghosts, 2 events only.
+
+**Control object state** (the player's own soldier or vehicle): u12 bit length of the rest, s32, a flag, a compressed vector with scale 1 (mode 0 puts the full position at bit 94 of an ordinary update, the floats seen in the recording), then a u16 networkable id and its state (not walked; the length skips it).
+
+**Ghost entries:** u2 kind, u16 networkable id. Kind 0: nothing more. Kind 1: a flag and a u11 bit length, then the object's update (read by its networkable; skipped by the length). Kind 3: the ghost is removed. Kind 2: invalid.
 
 A second client with the same CD key gets 20 packets of handshake and no more until the server restarts (confirmed).
 
 ## Next
 
-- Payload messages: the fields after the counters, the reliable messages (prefix 6), the connection packets, then object updates (`NetworkableInfo`).
+- Record a new session and run `bfnet.py summary` on it: every ghost-only server payload must end in its last byte.
+- Game events (prefix 6): the per-event readers (`GameEventMaker` classes); the action values; the control state and per-object updates (`NetworkableInfo`); the compressed-vector bit tables.
 - Record more sessions with the WSL relay (`tools/bfnet.py record`); this needs no elevation and works remotely. Wanted: two clients, vehicles, deaths, a map change.

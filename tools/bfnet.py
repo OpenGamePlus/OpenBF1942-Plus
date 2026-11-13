@@ -9,7 +9,8 @@ Usage:
       ways is forwarded and logged as one JSON line {t, dir: c2s|s2c, client, hex}. The log holds the player's
       name and CD-key hash: keep it out of the repository.
   bfnet.py summary <in.jsonl>
-      packets per direction and type, sequence gaps, acknowledgement mismatches, client frame / server tick range
+      packets per direction and type, sequence gaps, acknowledgement mismatches, payload sections (stream manager
+      mask), how many fully decoded payloads end in their last byte, client frame / server tick range, ghost ids
 """
 import collections
 import json
@@ -40,6 +41,12 @@ class BitReader:
             v |= ((self.data[i >> 3] >> (i & 7)) & 1) << k
         self.pos += n
         return v
+
+    def s(self, n):
+        """Sign bit, then an (n - 1)-bit magnitude."""
+        neg = self.u(1)
+        v = self.u(n - 1)
+        return -v if neg else v
 
     def string(self):
         """8-bit length, then that many 8-bit characters."""
@@ -79,26 +86,63 @@ def parse(d):
     return p
 
 
-def frame(direction, payload):
-    """Client input frame (c2s) or server tick (s2c) carried by an ordinary data payload, else None (unverified layout:
-    c2s 11 prefix bits then a 31-bit counter; s2c prefix 4 in 6 bits then the counter)."""
-    r = BitReader(payload)
-    try:
-        if direction == "c2s":
-            return r.u(31) if r.u(11) == 0b11000001 else None
-        return r.u(14) if r.u(6) == 4 else None
-    except ValueError:
-        return None
+MANAGERS = ("actions", "events", "ghosts", "downloads")  # stream manager ids 0..3, in packet order
 
 
-def position(payload):
-    """(x, y, z) of an ordinary server update: three floats from bit 94 (unverified: whose object), else None."""
-    r = BitReader(payload)
-    if len(payload) * 8 < 190 or r.u(6) != 4:
-        return None
-    r.pos = 94
-    v = tuple(struct.unpack("<f", r.u(32).to_bytes(4, "little"))[0] for _ in range(3))
-    return v if 0 < v[0] < 1e5 and 0 < v[2] < 1e5 and abs(v[1]) < 1e5 else None  # world x, z are positive
+def actions(r):
+    """PlayerActionManager section: u4 count, then if any a signed 32-bit first frame, then per action six u12
+    values and a u32 (meaning of the values open)."""
+    n = r.u(4)
+    first = r.s(32) if n else None
+    return {"first": first, "actions": [([r.u(12) for _ in range(6)], r.u(32)) for _ in range(n)]}
+
+
+def ghosts(r):
+    """GhostManager section: u32 server tick, u8 entry count, a flag, the player's control object state when the
+    flag is set, then the entries. Each entry is a u2 kind and a u16 networkable id; kind 1 carries a flag and an
+    u11 bit length of its update (skipped here), kind 3 removes the ghost, kind 2 is an error."""
+    g = {"tick": r.u(32), "entries": []}
+    n, has_control = r.u(8), r.u(1)
+    if has_control:
+        size = r.u(12)
+        end = r.pos + size
+        c = {"bits": size, "frame": r.s(32), "flag": r.u(1), "mode": r.u(2)}
+        if c["mode"] == 0:  # full vector; other modes use bit widths held in engine tables (open)
+            c["position"] = tuple(struct.unpack("<f", r.u(32).to_bytes(4, "little"))[0] for _ in range(3))
+        r.pos = end
+        g["control"] = c
+    for _ in range(n):
+        kind, nid = r.u(2), r.u(16)
+        e = {"kind": kind, "id": nid}
+        if kind == 2:
+            raise ValueError("ghost entry: kind 2")
+        if kind == 1:
+            e["flag"], e["bits"] = r.u(1), r.u(11)
+            if e["bits"] > r.left():
+                raise ValueError("ghost entry: update past the end")
+            r.pos += e["bits"]
+        g["entries"].append(e)
+    return g
+
+
+def payload(direction, data):
+    """Data payload -> {"mask", section name: decoded, "end": bit position where decoding stopped, "open": name of
+    the first section not decodable yet (game events, downloads) or None}. A 6-bit mask names the stream managers
+    that wrote into the packet; their sections follow in id order."""
+    r = BitReader(data)
+    out = {"mask": r.u(6), "open": None}
+    for i, name in enumerate(MANAGERS):
+        if not out["mask"] >> i & 1:
+            continue
+        if name == "actions":
+            out[name] = actions(r)
+        elif name == "ghosts":
+            out[name] = ghosts(r)
+        else:  # events: u8 count, u5 block, flag, then per event a 7-bit id and its own fields
+            out["open"] = name
+            break
+    out["end"] = r.pos
+    return out
 
 
 def load(path):
@@ -111,7 +155,7 @@ def summary(rows):
     last = {"c2s": None, "s2c": None}
     gaps = mismatches = data = 0
     frames = {"c2s": [], "s2c": []}
-    positions = []
+    masks, errors, tails, positions, ids = collections.Counter(), collections.Counter(), collections.Counter(), [], set()
     for _, d, b in rows:
         p = parse(b)
         if p["kind"] == "connect":
@@ -127,22 +171,40 @@ def summary(rows):
         if last[d] is not None and (p["seq"] - last[d]) % 64 != 1:
             gaps += 1
         last[d] = p["seq"]
-        f = frame(d, p["payload"])
-        if f is not None:
-            frames[d].append(f)
-        if d == "s2c" and (v := position(p["payload"])) is not None:
-            positions.append(v)
+        try:
+            m = payload(d, p["payload"])
+        except ValueError as e:
+            errors[(d, str(e))] += 1
+            continue
+        masks[(d, m["mask"])] += 1
+        if m["open"] is None:  # fully walked: what is left must be byte padding
+            tails[(d, len(p["payload"]) * 8 - m["end"] < 8)] += 1
+        if m.get("actions", {}).get("first") is not None:
+            frames[d].append(m["actions"]["first"])
+        if "ghosts" in m:
+            frames[d].append(m["ghosts"]["tick"])
+            ids.update(e["id"] for e in m["ghosts"]["entries"])
+            if "position" in m["ghosts"].get("control", {}):
+                positions.append(m["ghosts"]["control"]["position"])
     names = {DATA: "data", PING: "ping", PONG: "pong", CONNECT_REPLY: "type 2", CONNECT_ACK: "type 4", "connect": "connect"}
     for (d, t), n in sorted(counts.items(), key=str):
         out.append(f"{d} {names.get(t, t)}: {n}")
     out.append(f"sequence gaps: {gaps}; acks behind the last packet received: {mismatches} of {data}")
+    for (d, mask), n in sorted(masks.items()):
+        out.append(f"{d} mask {mask} ({'+'.join(x for i, x in enumerate(MANAGERS) if mask >> i & 1) or 'none'}): {n}")
+    for (d, ok), n in sorted(tails.items()):
+        out.append(f"{d} fully decoded payloads ending {'in the last byte' if ok else 'EARLY'}: {n}")
+    for (d, e), n in sorted(errors.items()):
+        out.append(f"{d} decode errors '{e}': {n}")
     for d, label in (("c2s", "client frames"), ("s2c", "server ticks")):
         if frames[d]:
             out.append(f"{label}: {min(frames[d])}..{max(frames[d])} in {len(frames[d])} packets")
+    if ids:
+        out.append(f"ghost ids: {len(ids)} distinct, {min(ids)}..{max(ids)}")
     if positions:
         lo = [min(v[i] for v in positions) for i in range(3)]
         hi = [max(v[i] for v in positions) for i in range(3)]
-        out.append(f"server positions: {len(positions)}, x {lo[0]:.0f}..{hi[0]:.0f} y {lo[1]:.0f}..{hi[1]:.0f} z {lo[2]:.0f}..{hi[2]:.0f}")
+        out.append(f"control object positions: {len(positions)}, x {lo[0]:.0f}..{hi[0]:.0f} y {lo[1]:.0f}..{hi[1]:.0f} z {lo[2]:.0f}..{hi[2]:.0f}")
     return out
 
 

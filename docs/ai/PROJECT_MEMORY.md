@@ -2,6 +2,12 @@
 
 Append-only. Newest first. At most 3 bullets per stage.
 
+## 2026-11-13 — payload structure from the Mac client
+
+- The payload is a 6-bit mask of stream managers (actions, events, ghosts, downloads) and their sections in id order; it explains every prefix seen in the recording, and the bit-94 floats are the player's control object position. `bfnet.py payload` walks actions and ghost entries.
+- The 2026-11-10 recording was lost with its session scratchpad, so the walk is checked only on synthetic packets; recordings must live outside the scratchpad (still outside the repository).
+- Open: game event readers, action values, per-object ghost updates, compressed-vector bit widths.
+
 ## 2026-11-13 — external sources reviewed
 
 - Ten third-party BF1942 repositories reviewed; seven kept in `docs/references.md` with licence and allowed use (port GPLv3 code with attribution; facts only from unlicensed or decompiled sources, never committed).

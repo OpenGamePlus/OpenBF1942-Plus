@@ -40,7 +40,7 @@ tools/test_*.py      unit tests (synthetic data only)
 | Vehicle crews | seats from nested `PlayerControlObject`s (weapon, mouse-look parts, `SeatObject`, exit); player F1–F8; bot drivers on the tank / landing-craft maps, gunners aiming through the seat's look inputs, troop boats that land their passengers | [vehicles.md](../formats/vehicles.md), [weapons.md](../formats/weapons.md#ai-implemented-placeholder) |
 | Audio | SDL2 device, own mixer; `.ssc` patches by role (shot, reload, distant, automatic loop), driven engines | [sound.md](../formats/sound.md), [ADR 0006](../architecture/adr/0006-audio.md) |
 | HUD | `.font` text: crosshair, tickets and flags, health, weapon and rounds, vehicle and seat, kill / capture feed | [hud.md](../formats/hud.md) |
-| Network (research) | one original client/server session recorded through a WSL relay; GameSpy LAN discovery and query documented; game transport decoded (`tools/bfnet.py`), payload messages open | [network.md](../formats/network.md) |
+| Network (research) | one original client/server session recorded through a WSL relay; GameSpy LAN discovery and query documented; game transport decoded (`tools/bfnet.py`); payload sections and ghost entries read from the Mac client decompilation, not yet checked on traffic; game events open | [network.md](../formats/network.md) |
 | Engine (C++) | `obf` (game, headless) + `obf_render` (GL) libraries; `obf_mapview` (window), `obf_sim` (headless runs) | [boundaries.md](../architecture/boundaries.md) |
 
 ## Commands
