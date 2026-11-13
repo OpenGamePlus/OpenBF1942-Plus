@@ -320,6 +320,7 @@ WeaponDef weapon_def(const Con& con, const std::string& name) {
     const ConObject* p = proj.empty() ? nullptr : find(con, proj);
     if (!p || !(wd.velocity > 0)) return WeaponDef{};
     wd.name = lower(name);
+    wd.projectile = lower(proj);
     for (auto& [k, a] : p->props) {
         if (a.empty()) continue;
         if (k == "material") wd.material = std::atoi(a[0].c_str());
@@ -963,6 +964,11 @@ bool Physics::line_of_sight(const float a[3], const float b[3], int ignore_chara
 void Physics::projectiles(std::vector<float>& out) const {
     out.clear();
     for (auto& s : p_->shots) out.insert(out.end(), {s.p.GetX(), s.p.GetY(), s.p.GetZ(), s.v.GetX(), s.v.GetY(), s.v.GetZ()});
+}
+
+void Physics::projectile_ids(std::vector<int>& out) const {
+    out.clear();
+    for (auto& s : p_->shots) out.push_back(s.id);
 }
 
 // shortcut: jump speed and swimming depth are placeholders (no soldier speeds in the templates).

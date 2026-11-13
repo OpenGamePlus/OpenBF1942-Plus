@@ -20,7 +20,7 @@ Wav wav_parse(const std::vector<uint8_t>& data);  // PCM 8 / 16-bit, mono or ste
 // beginEffect ... endEffect: one control curve on a layer.
 struct SoundEffect {
     enum Dest { Volume, Pitch } dest = Volume;
-    enum Source { Distance, Time, TimeRelease, Control, Unknown } source = Unknown;  // Control: "Default" (engine rpm...)
+    enum Source { Distance, Time, TimeRelease, Control, Speed, Acceleration, Unknown } source = Unknown;  // Control: "Default"
     enum Shape { Ramp, Linear } shape = Ramp;
     std::vector<float> params;
     float eval(float x) const;  // Ramp: x0 x1 y0 dy -> y0 + dy * clamp((x - x0) / (x1 - x0)); Linear: a + b * x
@@ -59,7 +59,7 @@ public:
     explicit Mixer(int rate) : rate_(rate) {}
     // wavs: one per layer (null skips the layer). Returns a handle for update / release.
     int play(const SoundPatch& patch, const std::vector<std::shared_ptr<const Wav>>& wavs, const float pos[3], float control = 0);
-    void update(int handle, const float pos[3], float control);
+    void update(int handle, const float pos[3], float control, float speed = 0, float accel = 0);
     void release(int handle);  // loops fade by their TimeRelease effects (or stop), one-shots finish
     void mix(float* out, int frames, const Listener& l);  // adds into out (2 * frames)
     void listen(const Listener& l);                       // the listener mix(out, frames) uses
@@ -74,7 +74,7 @@ private:
         int handle;
         SoundLayer layer;
         std::shared_ptr<const Wav> wav;
-        float pos[3], control = 0, time = 0, release_time = -1;
+        float pos[3], control = 0, time = 0, release_time = -1, speed = 0, accel = 0;
         double phase = 0;
         bool started = false;  // a trigger layer that has begun
     };

@@ -14,7 +14,7 @@ std::string low(std::string s) {
 }
 }  // namespace
 
-std::string Sounds::script(const std::string& tmpl, const std::string& type) const {
+std::string Sounds::script(const std::string& tmpl, const std::string& type, bool children) const {
     auto& ts = con_.templates.at("objecttemplate");
     std::function<std::string(const std::string&, int)> find = [&](const std::string& n, int depth) -> std::string {
         auto it = ts.find(low(n));
@@ -23,6 +23,7 @@ std::string Sounds::script(const std::string& tmpl, const std::string& type) con
         if (type.empty() || low(o.type) == low(type))
             for (auto& [k, a] : o.props)
                 if (k == "loadsoundscript" && !a.empty()) return low(o.dir.empty() ? a[0] : o.dir + "/" + a[0]);
+        if (!children) return "";
         for (auto& [k, a] : o.props)
             if (k == "addtemplate" && !a.empty())
                 if (std::string s = find(a[0], depth + 1); !s.empty()) return s;
@@ -114,6 +115,25 @@ void Sounds::effect(const std::string& tmpl, const float pos[3]) {
         if (const SoundPatch* p = weapon_patch(tmpl, i)) play_patch(*p, pos, 0, true);
 }
 
+void Sounds::soldier(const std::string& script, int patch, const float pos[3]) {
+    // shortcut: the soldiers' shared script folder, where SoldierSound.inc's relative names point
+    const std::string key = "objects/soldiers/common/sounds/" + script;
+    auto it = weapon_.find(key);
+    if (it == weapon_.end()) {
+        auto read = [&](const std::string& p) {
+            if (!vfs_.has(p)) return std::string();
+            auto d = vfs_.read(p);
+            return std::string(d.begin(), d.end());
+        };
+        it = weapon_.emplace(key, vfs_.has(key) ? ssc_patches(key, read) : std::vector<SoundPatch>{}).first;
+    }
+    if (patch < 0 || static_cast<size_t>(patch) >= it->second.size() || it->second[static_cast<size_t>(patch)].layers.empty()) return;
+    const SoundPatch& all = it->second[static_cast<size_t>(patch)];
+    SoundPatch one;
+    one.layers.push_back(all.layers[variant_++ % all.layers.size()]);
+    play_patch(one, pos, 0, true);
+}
+
 void Sounds::tick(float now) {
     for (auto it = bursts_.begin(); it != bursts_.end();)
         if (now - it->second.last > 0.25f) mixer.release(it->second.handle), it = bursts_.erase(it);
@@ -129,24 +149,26 @@ int Sounds::play(const std::string& path, const float pos[3], float control) {
 }
 
 
-void Sounds::engines(const std::vector<Running>& running) {
-    std::map<int, int> next;
+void Sounds::loops(const std::vector<Running>& running) {
+    std::map<long long, int> next;
     for (const Running& r : running) {
-        auto it = engines_.find(r.key);
-        if (it == engines_.end()) {
-            auto key = r.tmpl + "\n engine";
+        auto it = loops_.find(r.key);
+        if (it == loops_.end()) {
+            auto key = r.tmpl + "\n own";
             auto sc = scripts_.find(key);
-            if (sc == scripts_.end()) sc = scripts_.emplace(key, script(r.tmpl, "Engine")).first;
-            next[r.key] = play(sc->second, r.pos, r.control);
+            if (sc == scripts_.end()) sc = scripts_.emplace(key, script(r.tmpl, "", false)).first;
+            int h = play(sc->second, r.pos, r.control);
+            if (h >= 0) mixer.update(h, r.pos, r.control, r.speed, r.accel);
+            next[r.key] = h;
         } else {
-            if (it->second >= 0) mixer.update(it->second, r.pos, r.control);
+            if (it->second >= 0) mixer.update(it->second, r.pos, r.control, r.speed, r.accel);
             next[r.key] = it->second;
-            engines_.erase(it);
+            loops_.erase(it);
         }
     }
-    for (auto& [key, handle] : engines_)  // vehicles no longer running
+    for (auto& [key, handle] : loops_)  // parts no longer running
         if (handle >= 0) mixer.release(handle);
-    engines_ = std::move(next);
+    loops_ = std::move(next);
 }
 
 }  // namespace obf

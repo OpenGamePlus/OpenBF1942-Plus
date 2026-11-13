@@ -154,7 +154,8 @@ void parse_into(std::vector<SoundPatch>& patches, const std::string& path, const
         } else if (fx && k == "controlsource") {
             std::string s = lowered(arg);
             fx->source = s == "distance" ? SoundEffect::Distance : s == "time" ? SoundEffect::Time : s == "timerelease" ? SoundEffect::TimeRelease
-                       : s == "default" ? SoundEffect::Control : SoundEffect::Unknown;
+                       : s == "default" ? SoundEffect::Control : s == "speed" ? SoundEffect::Speed
+                       : s == "acceleration" ? SoundEffect::Acceleration : SoundEffect::Unknown;
         } else if (fx && k == "envelope") {
             fx->shape = lowered(arg) == "linear" ? SoundEffect::Linear : SoundEffect::Ramp;
         } else if (fx && k == "param" && !arg.empty()) {
@@ -189,10 +190,10 @@ int Mixer::play(const SoundPatch& patch, const std::vector<std::shared_ptr<const
     return h;
 }
 
-void Mixer::update(int handle, const float pos[3], float control) {
+void Mixer::update(int handle, const float pos[3], float control, float speed, float accel) {
     std::lock_guard<std::mutex> g(m_);
     for (auto& v : voices_)
-        if (v.handle == handle) std::copy(pos, pos + 3, v.pos), v.control = control;
+        if (v.handle == handle) std::copy(pos, pos + 3, v.pos), v.control = control, v.speed = speed, v.accel = accel;
 }
 
 void Mixer::release(int handle) {
@@ -230,7 +231,8 @@ void Mixer::mix(float* out, int frames, const Listener& l) {
         for (const SoundEffect& e : v.layer.effects) {
             float x = e.source == SoundEffect::Distance ? dist : e.source == SoundEffect::Time ? v.time
                     : e.source == SoundEffect::TimeRelease ? (v.release_time < 0 ? 0.0f : v.time - v.release_time)
-                    : e.source == SoundEffect::Control ? v.control : 0.0f;
+                    : e.source == SoundEffect::Control ? v.control : e.source == SoundEffect::Speed ? v.speed
+                    : e.source == SoundEffect::Acceleration ? v.accel : 0.0f;
             if (e.source == SoundEffect::Unknown) continue;
             has_release |= e.source == SoundEffect::TimeRelease;
             float y = e.eval(x);

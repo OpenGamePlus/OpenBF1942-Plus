@@ -2,6 +2,12 @@
 
 Append-only. Newest first. At most 3 bullets per stage.
 
+## 2026-11-14 — C1: vehicle parts, shells in flight, footsteps, ambient; player starts at a spawn
+
+- Vehicle parts with their own scripts loop (engine, tracks by speed, turrets by measured turning rate, wings); the mixer reads `Speed` and `Acceleration` curves. Shells and rockets loop their whine in flight; soldiers step by speed, posture and ground material; map objects loop their ambient scripts. Game results of the 78-level sweep unchanged by the sounds.
+- The maintainer saw no map in the listening tests: `--play` without `--cam` started the player in the map's corner (under water on Berlin). It now starts on a spawn point its team owns (5 one-sided levels keep the corner).
+- Open in C1: radio, voices, jumps / landings / swimming, landing gear, refills.
+
 ## 2026-11-14 — audio heard by the maintainer: stutter, knife, reload fixed
 
 - Stutter and delay: one lock covered file loading and the voice list, so the audio thread waited on archive reads. The mixer now locks only its voices.

@@ -19,17 +19,21 @@ public:
     void shot(const std::string& tmpl, const float pos[3], int source, float now);
     void reload(const std::string& tmpl, const float pos[3]);  // patch 1
     void effect(const std::string& tmpl, const float pos[3]);  // an EffectBundle's script: every patch, once
+    // A soldier movement sound (script file of SoldierSound.inc, e.g. "soldierrun.ssc"): one layer of the patch, the
+    // next variant each time.
+    void soldier(const std::string& script, int patch, const float pos[3]);
     void tick(float now);  // ends automatic fire that stopped (no shot for 0.25 s)
-    // The looping Engine script under each running vehicle's template; a key missing from the list stops its loop.
+    // Looping part sounds (engines, tracks, turrets, wings): each template's own script, one loop per key; a key
+    // missing from the list stops its loop.
     struct Running {
-        int key;
+        long long key;
         std::string tmpl;
         float pos[3];
-        float control;  // 0 idle .. 1 full
+        float control, speed, accel;  // curve sources Default, Speed (m/s), Acceleration (m/s2)
     };
-    void engines(const std::vector<Running>& running);
-    // Script path of a template, or of its first child (addTemplate, depth-first) of the given type; "" if none.
-    std::string script(const std::string& tmpl, const std::string& type = "") const;
+    void loops(const std::vector<Running>& running);
+    // Script path of a template, or (children) of its first child (addTemplate, depth-first) of the given type; "" if none.
+    std::string script(const std::string& tmpl, const std::string& type = "", bool children = true) const;
 
     Mixer mixer;
 
@@ -50,7 +54,8 @@ private:
         float last;
     };
     std::map<int, Burst> bursts_;  // automatic fire by source
-    std::map<int, int> engines_;  // vehicle key -> mixer handle (-1: no script)
+    std::map<long long, int> loops_;  // part key -> mixer handle (-1: no script)
+    unsigned variant_ = 0;            // rotates through a patch's variants
 };
 
 }  // namespace obf

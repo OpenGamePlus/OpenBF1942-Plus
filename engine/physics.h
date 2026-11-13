@@ -61,6 +61,7 @@ struct WeaponDef {
     int ammo_type = 0;                  // ammoType: which supply depots refill it
     float radius = 0;                   // projectile radius: explosion (material2 damage falls off to 0 at it)
     std::string end_effect;             // projectile endEffectTemplate (an EffectBundle: explosion sound, later visuals)
+    std::string projectile;             // lower-case projectile template (its sound script plays in flight)
     bool bounce = false;                // dieAfterColl 0 (grenades, mines, explosive packs)
     float near = 0;                     // explodeNearEnemyDistance (mines), 0: none
 };
@@ -150,6 +151,7 @@ public:
     bool line_of_sight(const float a[3], const float b[3], int ignore_character, int target_character, int target_vehicle,
                        int ignore_vehicle = -1) const;  // ignore_vehicle: the one the looker sits in
     void projectiles(std::vector<float>& out) const;    // position and velocity (6 floats) per live projectile
+    void projectile_ids(std::vector<int>& out) const;   // fire's id per live projectile, in the same order
 
     // Soldiers: a 1.8 m capsule (Jolt CharacterVirtual) standing at feet position (x, y, z). It walks on the terrain,
     // static meshes and vehicles, steps up 0.4 m, falls, jumps, and swims at the surface.

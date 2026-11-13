@@ -187,6 +187,17 @@ Game::Game(const Vfs& vfs_, Con& con_, const Heightmap& hm_, const TerrainInfo& 
         int n1 = static_cast<int>(std::count_if(bots.begin(), bots.end(), [](const Bot& b) { return b.team == 1; }));
         std::printf("conquest: %zu flags, tickets %.0f / %.0f; bots: %d team 1, %zu team 2; %zu spawn points; navigation %d x %d; %zu supply depots\n",
                     game.flags.size(), game.tickets[1], game.tickets[2], n1, bots.size() - static_cast<size_t>(n1), spawn_points.size(), nav.n, nav.n, depots.size());
+        // Without --cam the player starts on a spawn point its team owns, as when respawning (it used to start in the
+        // map's corner, which on Berlin is under water, out of the playing area).
+        std::vector<const SpawnPt*> own;
+        for (const SpawnPt& sp : spawn_points)
+            if (spawn_team(sp) == team) own.push_back(&sp);
+        if (cx < 0 && player >= 0 && !own.empty()) {
+            const SpawnPt* sp = own[std::uniform_int_distribution<size_t>(0, own.size() - 1)(rng)];
+            phys.place_character(player, sp->pos[0], sp->pos[1] + 0.2f, sp->pos[2]);
+            cam.yaw = sp->yaw * 3.14159265f / 180.0f;
+            std::printf("player starts on a team %d spawn point at %.0f %.0f %.0f\n", team, sp->pos[0], sp->pos[1], sp->pos[2]);
+        }
     }
     // Combat: damage tables, the soldier's kit weapon.
     damage = damage_table(con.settings["materialmanager"]);
@@ -274,7 +285,47 @@ int Game::fire(const WeaponDef& w, const float pos[3], const float vel[3], int i
         if (end_effects.size() > 4096) end_effects.clear();  // shots that ended without a hit leave entries behind
         end_effects[id] = w.end_effect;
     }
+    if (!w.projectile.empty()) {
+        auto h = has_script_.find(w.projectile);
+        if (h == has_script_.end()) {
+            auto& ts = con.templates["objecttemplate"];
+            auto t = ts.find(w.projectile);
+            bool own = t != ts.end() && std::any_of(t->second.props.begin(), t->second.props.end(),
+                                                    [](const auto& p) { return p.first == "loadsoundscript"; });
+            h = has_script_.emplace(w.projectile, own).first;
+        }
+        if (flying_.size() > 4096) flying_.clear();  // loop_sounds prunes it; runs without audio never call it
+        if (h->second) flying_[id] = w.projectile;
+    }
     return id;
+}
+
+// Footsteps of every soldier on foot (SoldierSound.inc frequencies: run 0.36 s, walk 0.66, crouch 0.5, crawl 0.6),
+// on the ground patch of the terrain material under it. shortcut: materials grouped by name (grass, gravel, rock and
+// paved roads as concrete, the rest sand); static objects underfoot count as the ground under them.
+void Game::footsteps(float t, float dt) {
+    static const int ground_patch[16] = {0, 0, 4, 4, 0, 0, 0, 0, 5, 0, 0, 0, 3, 0, 5, 3};  // terrain materials 0-15
+    auto step = [&](int ch, const float* pos, int posture, const std::string& tmpl, int source) {
+        if (ch < 0 || tmpl.empty() || !phys.character_on_ground(ch)) return;
+        Stride& s = strides_[ch];
+        float dx = pos[0] - s.pos[0], dz = pos[2] - s.pos[2], v = dt > 0 ? std::sqrt(dx * dx + dz * dz) / dt : 0.0f;
+        std::copy(pos, pos + 3, s.pos);
+        if (v < 0.5f || v > 15) return;  // standing, or a teleport (respawn)
+        if (t < s.next) return;
+        const char* script = posture == 2 ? "soldiercrawlmove.ssc" : posture == 1 ? "soldiercrouchmove.ssc" : v > 4 ? "soldierrun.ssc" : "soldierwalk.ssc";
+        s.next = t + (posture == 2 ? 0.6f : posture == 1 ? 0.5f : v > 4 ? 0.36f : 0.66f);
+        int m = ground_material(pos[0], pos[2]);
+        sounds.push_back({tmpl, {pos[0], pos[1], pos[2]}, source, false, false, script, m >= 0 && m < 16 ? ground_patch[m] : 3});
+    };
+    if (player >= 0 && cur < 0 && !player_dead) {
+        float p[3];
+        phys.character_position(player, p);
+        step(player, p, posture, soldier_tmpl, -1);
+    }
+    for (size_t i = 0; i < bots.size(); ++i) {
+        const Bot& b = bots[i];
+        if (!b.dead && b.veh < 0) step(b.ch, b.pos, b.posture, b.tmpl, static_cast<int>(i));
+    }
 }
 
 // Terrain height under (x, z), bilinear between samples.
@@ -599,21 +650,102 @@ void Game::fire(float t) {
     }
 }
 
-std::vector<Game::EngineSound> Game::engines() const {
-    std::vector<EngineSound> out;
+std::vector<Game::LoopSound> Game::loop_sounds(float dt) {
+    std::vector<LoopSound> out;
+    std::vector<int> done;
     auto add = [&](size_t vi) {
         const Veh& v = vehicles[vi];
-        if (v.wrecked) return;
-        for (const EngineSound& e : out)
-            if (e.key == v.id) return;
+        if (v.wrecked || std::find(done.begin(), done.end(), v.id) != done.end()) return;
+        done.push_back(v.id);
+        auto& parts = sound_parts_[v.name];
+        if (parts.empty()) {  // the tree in Physics' walk order, so occurrences match its joints
+            std::map<std::string, int> seen;
+            std::function<void(const std::string&, int)> walk = [&](const std::string& n, int depth) {
+                auto& ts = con.templates["objecttemplate"];
+                auto it = ts.find(lower(n));
+                if (it == ts.end() || depth > 12) return;
+                const ConObject& o = it->second;
+                std::string type = lower(o.type), name = lower(o.name);
+                int occ = seen[name]++;
+                bool own = std::any_of(o.props.begin(), o.props.end(), [](const auto& p) { return p.first == "loadsoundscript"; });
+                if (own && (type == "engine" || type == "animatedbundle" || type == "rotationalbundle" || type == "wing"))
+                    parts.push_back({name, type, occ});
+                for (auto& [k, a] : o.props)
+                    if (k == "addtemplate" && !a.empty()) walk(a[0], depth + 1);
+            };
+            walk(v.name, 0);
+            if (parts.empty()) parts.push_back({"", "", -1});  // marks "looked, none"
+        }
         Mat4 m = phys.transform(v.id);
-        // shortcut: engine load from speed (30 m/s = full; aircraft 80), until engines expose their rpm
-        float control = std::clamp(std::fabs(phys.speed(v.id)) / (v.plane ? 80.0f : 30.0f), 0.0f, 1.0f);
-        out.push_back({v.id, v.name, {m.m[12], m.m[13], m.m[14]}, control});
+        float speed = std::fabs(phys.speed(v.id)), prev = part_speed_.count(v.id) ? part_speed_[v.id] : speed;
+        float accel = dt > 0 ? (speed - prev) / dt : 0.0f;
+        part_speed_[v.id] = speed;
+        for (size_t i = 0; i < parts.size(); ++i) {
+            const SoundPart& p = parts[i];
+            if (p.tmpl.empty()) continue;
+            long long key = static_cast<long long>(v.id) * 256 + static_cast<long long>(i);
+            float control = 0;
+            if (p.type == "engine") {
+                // shortcut: engine load from speed (30 m/s = full; aircraft 80), until engines expose their rpm
+                control = std::clamp(speed / (v.plane ? 80.0f : 30.0f), 0.0f, 1.0f);
+            } else if (p.type == "rotationalbundle") {  // turning rate from the joint's rotation since the last call
+                Mat4 j = phys.joint(v.id, p.tmpl, p.occurrence);
+                auto last = part_turn_.find(key);
+                if (last != part_turn_.end() && dt > 0) {
+                    const float* a = last->second.m;
+                    float tr = a[0] * j.m[0] + a[1] * j.m[1] + a[2] * j.m[2] + a[4] * j.m[4] + a[5] * j.m[5] + a[6] * j.m[6] +
+                               a[8] * j.m[8] + a[9] * j.m[9] + a[10] * j.m[10];
+                    control = std::acos(std::clamp((tr - 1) / 2, -1.0f, 1.0f)) * 57.29578f / dt;
+                }
+                part_turn_[key] = j;
+            }
+            out.push_back({key, p.tmpl, {m.m[12], m.m[13], m.m[14]}, control, speed, accel});
+        }
     };
     if (cur >= 0 && seat == 0) add(static_cast<size_t>(cur));
     for (const Bot& b : bots)
         if (!b.dead && b.veh >= 0 && b.vseat == 0) add(static_cast<size_t>(b.veh));
+    if (!ambient_found_) {  // placed map objects whose parts loop a script of their own: flags, towers, coastline
+        ambient_found_ = true;
+        auto& ts = con.templates["objecttemplate"];
+        std::function<void(const std::string&, const float*, int)> walk = [&](const std::string& n, const float* at, int depth) {
+            auto it = ts.find(lower(n));
+            if (it == ts.end() || depth > 8) return;
+            std::string type = lower(it->second.type);
+            if (type == "objectspawner" || type == "playercontrolobject" || type == "supplydepot") return;  // vehicles; refills are events
+            bool own = std::any_of(it->second.props.begin(), it->second.props.end(), [](const auto& p) { return p.first == "loadsoundscript"; });
+            if (own && (type == "animatedbundle" || type == "bundle" || type == "areaobject" || type == "simpleobject" || type == "rotationalbundle"))
+                ambient_.push_back({lower(it->second.name), {at[0], at[1], at[2]}});
+            for (auto& [k, a] : it->second.props)
+                if (k == "addtemplate" && !a.empty()) walk(a[0], at, depth + 1);
+        };
+        for (const ConObject& inst : con.instances) {
+            float p[3] = {};
+            for (auto& [k, a] : inst.props)
+                if (k == "absoluteposition" && !a.empty()) parse_vec3(a[0], p);
+            walk(inst.name, p, 0);
+        }
+    }
+    for (size_t i = 0; i < ambient_.size(); ++i) {
+        const auto& [tmpl, at] = ambient_[i];
+        out.push_back({(1LL << 41) + static_cast<long long>(i), tmpl, {at[0], at[1], at[2]}, 0, 0, 0});
+    }
+    if (!flying_.empty()) {  // shells and rockets in flight: their projectile template's own script
+        std::vector<int> ids;
+        std::vector<float> pv;
+        phys.projectile_ids(ids);
+        phys.projectiles(pv);
+        std::map<int, std::string> live;
+        for (size_t i = 0; i < ids.size() && 6 * i + 5 < pv.size(); ++i) {
+            auto f = flying_.find(ids[i]);
+            if (f == flying_.end()) continue;
+            const float* q = &pv[6 * i];
+            float sp = std::sqrt(q[3] * q[3] + q[4] * q[4] + q[5] * q[5]);
+            out.push_back({(1LL << 40) + ids[i], f->second, {q[0], q[1], q[2]}, 0, sp, 0});
+            live.insert(*f);
+        }
+        flying_ = std::move(live);  // forget shots that ended
+    }
     return out;
 }
 
@@ -1175,6 +1307,7 @@ void Game::step(float t, float dt, const GameInput& in) {
     think(t, dt);
     phys.step(dt);
     apply_hits();
+    footsteps(t, dt);
 }
 
 void Game::demo(float sim_seconds) {

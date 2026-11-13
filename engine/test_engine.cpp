@@ -680,6 +680,21 @@ int main() {
             m2.mix(o.data(), 1, Listener{});
             assert(o[0] > 0 && o[0] < 1024.0f / 32768.0f);  // early in the sample, not 3 blocks in
         }
+        {  // Speed curve: a track loop is silent at rest and full at 10 m/s
+            files["objects/track/track.ssc"] = "newPatch\nload @ROOT/Sound/@RTD/track.wav\nloop\nbeginEffect\ncontrolDestination Volume\n"
+                                               "controlSource Speed\nenvelope Ramp\nparam 0\nparam 10\nparam 0\nparam 1\nendEffect\n";
+            SoundPatch track = ssc_parse("objects/track/track.ssc", read);
+            assert(track.layers[0].effects[0].source == SoundEffect::Speed);
+            Mixer m3(44100);
+            float here[3] = {0, 0, 0};
+            int h3 = m3.play(track, {tone}, here);
+            std::vector<float> o(2 * 64, 0.0f);
+            m3.mix(o.data(), 64, Listener{});
+            assert(std::fabs(o[0]) < 1e-9f);
+            m3.update(h3, here, 0, 10, 0);
+            m3.mix(o.data(), 64, Listener{});
+            assert(o[0] > 0.4f);
+        }
         SoundPatch loop;
         loop.layers.push_back(sp.layers[1]);
         int h = mixer.play(loop, {tone}, right_of_listener);

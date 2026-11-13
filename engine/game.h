@@ -91,14 +91,32 @@ public:
     void print_weapon() const;
 
     // The vehicle under control: its template, position and engine load 0..1; "" on foot.
-    struct EngineSound {
-        int key;           // the vehicle's physics id
-        std::string tmpl;  // its PlayerControlObject template
+    struct LoopSound {
+        long long key;     // vehicle physics id * 256 + part; 2^40 + shot id for projectiles in flight
+        std::string tmpl;  // the part's template (it has its own sound script)
         float pos[3];
-        float control;     // 0 idle .. 1 full load
+        float control;     // Engine: load 0..1; RotationalBundle: turning speed, degrees / s
+        float speed, accel;  // the vehicle's, m/s and m/s2
     };
-    // Every intact vehicle with someone in the driver's seat (the player or a bot).
-    std::vector<EngineSound> engines() const;
+    // Engine, track, turret and wing loops of every intact vehicle with someone in the driver's seat (the player or a
+    // bot), and the in-flight loop of every live projectile whose template has a script; dt: time since the last call
+    // (turning and acceleration rates).
+    std::vector<LoopSound> loop_sounds(float dt);
+    struct SoundPart {
+        std::string tmpl, type;  // lower case
+        int occurrence;          // Physics::joint's: the how-many-th part of that name in the vehicle
+    };
+    std::map<std::string, std::vector<SoundPart>> sound_parts_;  // by vehicle template
+    std::vector<std::pair<std::string, std::array<float, 3>>> ambient_;  // map objects' looping parts and positions
+    bool ambient_found_ = false;
+    std::map<long long, Mat4> part_turn_;                        // last joint matrix of each turret part
+    std::map<int, float> part_speed_;                            // last speed of each vehicle
+    struct Stride {
+        float pos[3];
+        float next = 0;  // time of its next footstep
+    };
+    std::map<int, Stride> strides_;  // by character: footsteps
+    void footsteps(float t, float dt);
 
     struct SoundEvent {
         std::string tmpl;  // FireArms template; with effect, an EffectBundle (a shot's end effect: explosions)
@@ -106,11 +124,17 @@ public:
         int source = -1;   // the shooter: -1 the player, a bot's index, 100000 + 16 * vehicle body + seat
         bool reload = false;
         bool effect = false;
+        std::string script;  // a soldier sound: the movement script ("soldierrun.ssc"), tmpl the soldier
+        int patch = 0;       // its ground patch (0 sand, 1 metal, 2 wood, 3 concrete, 4 grass, 5 gravel)
+        SoundEvent(std::string t, std::array<float, 3> p, int src = -1, bool rel = false, bool fx = false, std::string sc = "", int pa = 0)
+            : tmpl(std::move(t)), pos{p[0], p[1], p[2]}, source(src), reload(rel), effect(fx), script(std::move(sc)), patch(pa) {}
     };
     std::vector<SoundEvent> sounds;  // since the frontend last cleared it
     // phys.fire for a weapon's projectile; remembers its end effect for the sound where it ends.
     int fire(const WeaponDef& w, const float pos[3], const float vel[3], int ignore_vehicle, int ignore_character, int tag);
     std::map<int, std::string> end_effects;  // live shot id -> its projectile's endEffectTemplate
+    std::map<int, std::string> flying_;      // live shot id -> its projectile template, if that has a sound script
+    std::map<std::string, bool> has_script_;  // template -> it loads a sound script itself
     std::vector<uint8_t> material_map;       // terrain MaterialManager id per cell, row = z (info.material_size per side)
     int ground_material(float x, float z) const;
 
