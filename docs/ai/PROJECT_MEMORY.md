@@ -2,6 +2,12 @@
 
 Append-only. Newest first. At most 3 bullets per stage.
 
+## 2026-11-14 — B1: bots leave blocked cells through a visible exit
+
+- Berlin's stuck events were 83 % in cells the infantry map marks blocked (spawns inside building footprints); the planner snapped to the nearest free cell behind a wall. `Game::route` now heads first for the nearest free cell in sight (physics ray, 15 m).
+- 5-minute games: Berlin stuck 134 → 72, Stalingrad 204 → 91; 78 levels: 7,010 → 6,427, captures 51 → 54. Rejected: a 1 m grid (worse in both cities).
+- Open: Berlin and Stalingrad still capture no flag in 5 minutes.
+
 ## 2026-11-14 — back to the roadmap; collision choice re-measured
 
 - The 2026-11-10 rejection of the last collision block (El Alamein stuck 33 → 474) does not reproduce with today's engine: 5-minute games 39 → 29 there, and lower on Gazala, Battleaxe and Stalingrad; Tobruk, Wake and Berlin up 9–21 %. The last block stays; pathfinding.md and debt.md updated.

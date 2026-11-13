@@ -177,6 +177,8 @@ private:
 
     const VehicleDef* def_for(const std::string& name);
     float ground(float x, float z) const;
+    // Infantry route from pos to (gx, gz); from a blocked cell it first leaves by the nearest free cell in sight.
+    std::vector<float> route(int ch, const float pos[3], float gx, float gz) const;
     void add_vehicle(const std::string& name, Mat4 world, int team = 0);
     const ConObject* object_template(const std::string& n) const;
     float hitpoints(const std::string& n) const;

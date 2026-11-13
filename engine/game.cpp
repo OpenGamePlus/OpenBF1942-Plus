@@ -229,6 +229,32 @@ const VehicleDef* Game::def_for(const std::string& name) {
     return it->second.get();
 }
 
+// Spawn points and building interiors can lie in cells the infantry map marks blocked. Planning from the nearest
+// free cell would walk the bot into a wall, so it first heads for the nearest free cell it can see (within 15 m).
+std::vector<float> Game::route(int ch, const float pos[3], float gx, float gz) const {
+    int ix = static_cast<int>(pos[0] / nav.cell), iz = static_cast<int>(pos[2] / nav.cell);
+    if (!nav.at(ix, iz)) return nav_path(nav, pos[0], pos[2], gx, gz);
+    const float eye[3] = {pos[0], pos[1] + 1.2f, pos[2]};
+    int reach = static_cast<int>(15.0f / nav.cell);
+    for (int r = 1; r <= reach; ++r) {
+        std::vector<std::pair<int, std::pair<int, int>>> ring;  // squared distance, cell
+        for (int dz = -r; dz <= r; ++dz)
+            for (int dx = -r; dx <= r; ++dx)
+                if (std::max(std::abs(dx), std::abs(dz)) == r && !nav.at(ix + dx, iz + dz)) ring.push_back({dx * dx + dz * dz, {ix + dx, iz + dz}});
+        std::sort(ring.begin(), ring.end());
+        for (const auto& [d2, c] : ring) {
+            float x = (static_cast<float>(c.first) + 0.5f) * nav.cell, z = (static_cast<float>(c.second) + 0.5f) * nav.cell;
+            const float to[3] = {x, std::max(ground(x, z), pos[1]) + 1.2f, z};
+            if (!phys.line_of_sight(eye, to, ch, -1, -1)) continue;
+            std::vector<float> rest = nav_path(nav, x, z, gx, gz);
+            if (rest.empty()) continue;
+            rest.insert(rest.begin(), {x, z});
+            return rest;
+        }
+    }
+    return nav_path(nav, pos[0], pos[2], gx, gz);
+}
+
 // Terrain height under (x, z), bilinear between samples.
 float Game::ground(float x, float z) const {
     float cell = info.world_size / static_cast<float>(hm.n), fx = std::clamp(x / cell, 0.0f, static_cast<float>(hm.n - 1)),
@@ -1013,7 +1039,7 @@ void Game::think(float t, float step) {
             b.check_at = t + 2, b.check_pos[0] = b.pos[0], b.check_pos[1] = b.pos[2];
         }
         if (nav.n > 0 && (gi != b.path_goal || (stuck && t >= b.replan_at))) {
-            b.path = nav_path(nav, b.pos[0], b.pos[2], gpos[0], gpos[2]);
+            b.path = route(b.ch, b.pos, gpos[0], gpos[2]);
             b.waypoint = 0, b.path_goal = gi, b.replan_at = t + 5;
             stuck = stuck && b.path.empty();
         }
