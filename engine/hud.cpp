@@ -125,7 +125,7 @@ std::vector<HudQuad> hud_layout(const Font& f, const HudInfo& in, int w, int h) 
     };
     auto vsolid = [&](float x, float y, float bw, float bh, const float c[4]) { solid(x * sx, y * sy, bw * sx, bh * sy, c); };
     auto vtext = [&](const std::string& t, float x, float y, float height, const float c[4], bool right = false) {
-        float sc = height * sy / static_cast<float>(std::max(1, f.height));
+        float sc = std::max(1.0f, std::round(height * sy / static_cast<float>(std::max(1, f.height))));  // a pixel font: whole scales
         hud_text(f, t, x * sx - (right ? text_width(f, t, sc) : 0.0f), y * sy, sc, c, q);
     };
     const float frame[4] = {0.08f, 0.08f, 0.08f, 0.8f}, panel[4] = {0.18f, 0.18f, 0.18f, 0.7f};
@@ -194,13 +194,27 @@ std::vector<HudQuad> hud_layout(const Font& f, const HudInfo& in, int w, int h) 
     float fy = 40 * sy;
     for (const std::string& m : in.feed) text(m, 6 * sx, fy, white), fy += lh;
 
-    // open radio menu, left of centre: its heading, then one message per key (shortcut: plain text, the original's
-    // icons and colours in menu/RadioMenu are not drawn)
-    if (!in.radio.empty()) {
-        float ry = H / 3, rw = 0;
-        for (const std::string& m : in.radio) rw = std::max(rw, text_width(f, m, s));
-        solid(8 * s, ry - 4 * s, rw + 12 * s, lh * static_cast<float>(in.radio.size()) + 6 * s, shade);
-        for (size_t i = 0; i < in.radio.size(); ++i) text(in.radio[i], 14 * s, ry, i ? white : (in.team == 1 ? axis : ally)), ry += lh;
+    // radio bar, top left: 64 x 32-texel buttons (frame and icon) with the key written on them, labels below; key
+    // slots measured on the captures. Closed: the categories. Open: its category above its slot, its messages below,
+    // labels on two alternating lines (shortcut: all drawn lit; the original greys some, rule unread).
+    if (in.radio_bar || in.radio_open >= 0) {
+        static const float slot[8] = {31, 96, 160, 225, 331, 396, 461, 526};
+        const float bh = 27, label_h = 6.5f, key_h = 8;
+        auto button = [&](int k, float y, const HudInfo::RadioButton& b, float label_y, bool key) {
+            if (b.icon.empty()) return;
+            V(slot[k], y, 64, bh, b.icon, 0, 0, 1, 1);
+            if (key) vtext("F" + std::to_string(k + 1), slot[k] + 5, y + 4.5f, key_h, white);
+            float sc = std::max(1.0f, std::round(label_h * sy / static_cast<float>(std::max(1, f.height))));
+            if (!b.label.empty()) hud_text(f, b.label, (slot[k] + 31) * sx - text_width(f, b.label, sc) / 2, label_y * sy, sc, white, q);
+        };
+        if (in.radio_open < 0) {
+            for (size_t k = 0; k < in.radio_row.size() && k < 8; ++k) button(static_cast<int>(k), 4.4f, in.radio_row[k], 30, true);
+        } else {
+            int c = std::clamp(in.radio_open, 0, 7);
+            button(c, 3.3f, {"menu/texture/radio/icon_f" + std::to_string(c + 1), ""}, 0, false);
+            for (size_t k = 0; k < in.radio_row.size() && k < 8; ++k)
+                button(static_cast<int>(k), 29, in.radio_row[k], k % 2 ? 67 : 56, true);
+        }
     }
 
     if (in.winner) {

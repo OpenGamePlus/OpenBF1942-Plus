@@ -35,7 +35,7 @@ uint32 record count, uint32 strings per record (9 in bf1942), then UTF-16LE zero
 
 ## Radio menu (`menu/RadioMenu`, a MemeFile)
 
-Key layout from the Mac client decompilation (`Radio::handleRadioInput`; F1 as the first key is inferred). Closed, F1–F7 open a category; F8 shows / hides the category list (not drawn here). In a category, F1–F7 send:
+Key layout from the Mac client decompilation (`Radio::handleRadioInput`; F1 as the first key is inferred). Closed, F1–F7 open a category; F8 shows / hides the category list. In a category, F1–F7 send:
 
 | Category | Keys |
 |---|---|
@@ -47,16 +47,18 @@ Key layout from the Mac client decompilation (`Radio::handleRadioInput`; F1 as t
 | F6 local alarms | F1 wait, F2 fire, F3 hold fire, F4 fire in the hole, F5 medic (in a vehicle: need repairs), F6 take cover (aircraft: check your six), F7 bail out (ship: abandon ship) |
 | F7 local tactics | F1 cover me, F2 hold position, F3 go for enemy flag, F4 fall back, F5 stick together (in a vehicle: get in), F6 follow me, F7 go |
 
+The maintainer's captures of the original client show the same layout (each category opened once) and how it is drawn: a row of buttons at the top left, each a 64 × 32 texture from `menu/texture/radio/` holding the frame and icon (`icon_f1`–`icon_f8` for the categories, `icon_roger`, `icon_pickup`, `icon_controlpoint_1`–`7` and `_closest`, `icon_cancel`…), with the key ("F1") written on it and a label below (`RADIO_HEADING_<x>`; `RADIO_HEADING_ON_OFF` for F8). Closed: the eight categories in slots at x 31, 96, 160, 225, then 331, 396, 461, 526 (800 × 600 units), labels at y 30. Open: the category's button above its slot, its messages and F8 CANCEL in the row below (y 29), labels on two alternating lines (y 56, 67). Some buttons are drawn greyed; the rule is not known (we draw all lit). F8 shows or hides the closed row.
+
 Radio messages reach the whole team; local ones only teammates within 70 m (`GameServer::radioMessage`). The AI only receives (`AIRadio`); bots send nothing.
 
 ## Use in the engine
 
 A screen-space overlay drawn after the 3D scene:
 - crosshair;
-- tickets and flags per team, top centre;
+- tickets per team with their flags, above the minimap (top right);
 - health bar and weapon, bottom left;
 - the vehicle's hit points, bottom right;
-- a 6-second feed of kills, captures and destroyed vehicles, top right;
+- a 6-second feed of kills, captures and destroyed vehicles, top left;
 - VICTORY / DEFEAT.
 
 The pixel scale is height / 480, rounded. The weapon line shows rounds / spare magazines and RELOADING.

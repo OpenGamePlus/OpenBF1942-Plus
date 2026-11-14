@@ -383,6 +383,7 @@ private:
     std::vector<RadioLine> radio_items() const;  // the open category, by F-key (7); empty text: nothing there
     std::string word(const std::string& key) const;  // lexicon text, else the key
     int radio_menu_ = -1;  // open radio category, -1 closed
+    bool radio_bar_ = true;  // the radio category row shown (F8)
     float radio_until_ = 0, tickets_start_ = 0;
     void note(std::string m) {
         while (!feed.empty() && now - feed.front().first > 6) feed.erase(feed.begin());

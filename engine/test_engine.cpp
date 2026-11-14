@@ -868,6 +868,21 @@ int main() {
             assert(std::fabs(af.h - 20 * 0.8f) < 1e-4f && std::fabs(af.v0 - 44.0f / 64) < 1e-5f);  // half of 40 rows
             assert(std::fabs(af.x - (691 + 5) * 0.8f) < 1e-4f && std::fabs(af.y + af.h - (600 - 11) * 0.8f) < 1e-3f);  // setAmomBarPosX / Y
         }
+        {  // radio bar: closed, a button per key in its slot; open, the category above and the row below (empty keys skipped)
+            HudInfo r = info;
+            r.radio_bar = true;
+            for (int k = 0; k < 8; ++k) r.radio_row.push_back({"menu/texture/radio/icon_f" + std::to_string(k + 1), ""});
+            auto buttons = [](const std::vector<HudQuad>& qs) {
+                std::vector<HudQuad> b;
+                for (const HudQuad& q : qs) if (q.tex.rfind("menu/texture/radio/", 0) == 0) b.push_back(q);
+                return b;
+            };
+            std::vector<HudQuad> closed = buttons(hud_layout(f, r, 800, 600));
+            assert(closed.size() == 8 && closed[0].x == 31 && closed[4].x == 331 && std::fabs(closed[0].y - 4.4f) < 1e-4f);
+            r.radio_open = 5, r.radio_row[2].icon.clear();
+            std::vector<HudQuad> open = buttons(hud_layout(f, r, 800, 600));
+            assert(open.size() == 8 && open[0].x == 396 && open[0].tex == "menu/texture/radio/icon_f6" && open[1].y == 29);
+        }
         // minimap: frame, map (centred on the player, north up), grid lines every world / 8, markers inside its 2 x 200 m only
         info.world = 1000, info.map_x = 500, info.map_z = 400;
         MapIcon near, far;

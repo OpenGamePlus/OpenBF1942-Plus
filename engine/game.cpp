@@ -1598,6 +1598,27 @@ const std::vector<std::pair<const char*, std::vector<RadioMsg>>>& radio_menus() 
 }
 }  // namespace
 
+namespace {
+// A message's button in menu/texture/radio (icon_<name>); the lexicon key's words, shortened as the files are named.
+std::string radio_icon(const std::string& text) {
+    static const std::map<std::string, std::string> names = {
+        {"ROGER", "roger"}, {"NEGATIVE", "negative"}, {"PICKUP", "pickup"}, {"REINFORCEMENT", "reinforcement"},
+        {"ANTITANK_SUPPORT", "at_support"}, {"NAVAL_SUPPORT", "naval_support"}, {"AIR_SUPPORT", "air_support"},
+        {"ARTILLERY_READY", "art_ready"}, {"APC_SUPPORT", "apc_support"}, {"ARMOR_SPOTTED", "armor_spotted"},
+        {"INFANTRY_SPOTTED", "inf_spotted"}, {"UNIT_SPOTTED", "unit_spotted"}, {"SHIP_SPOTTED", "ship_spotted"},
+        {"SUBMARINE_SPOTTED", "sub_spotted"}, {"AIRPLANE_SPOTTED", "air_spotted"}, {"SCOUT_SPOTTED", "scout_spotted"},
+        {"LOCAL_DEFENDING", "defending"}, {"LOCAL_ATTACKING", "attacking"}, {"LOCAL_ROGER", "roger"}, {"LOCAL_NEGATIVE", "negative"},
+        {"LOCAL_WAIT", "wait"}, {"LOCAL_FIRE", "fire"}, {"LOCAL_HOLD_FIRE", "hold_fire"}, {"LOCAL_FIRE_IN_HOLE", "fire_hole"},
+        {"LOCAL_MEDIC", "medic"}, {"LOCAL_NEED_REPAIRS", "need_repairs"}, {"LOCAL_TAKE_COVER", "take_cover"},
+        {"LOCAL_CHECK_YOUR_SIX", "take_cover"}, {"LOCAL_BAIL_OUT", "bail_out"}, {"LOCAL_ABANDON_SHIP", "bail_out"},
+        {"LOCAL_COVER_ME", "cover_me"}, {"LOCAL_HOLD_POSITION", "hold"}, {"LOCAL_GO_FOR_ENEMY_FLAG", "get_enemy_flag"},
+        {"LOCAL_FALL_BACK", "fall_back"}, {"LOCAL_STICK_TOGETHER", "stick_together"}, {"LOCAL_GET_IN", "get_in"},
+        {"LOCAL_FOLLOW_ME", "follow"}, {"LOCAL_GO", "go"}};
+    auto it = names.find(text);
+    return "icon_" + (it != names.end() ? it->second : std::string("cancel"));
+}
+}  // namespace
+
 std::string Game::word(const std::string& key) const {
     auto it = words.find(key);
     return it != words.end() ? it->second : key;
@@ -1637,7 +1658,8 @@ void Game::radio(int key) {
     if (now > radio_until_) radio_menu_ = -1;  // shortcut: the menu closes after 5 s untouched (timing unread)
     if (key < 0 || player < 0 || player_dead) return;
     if (radio_menu_ < 0) {
-        if (key < 7) radio_menu_ = key, radio_until_ = now + 5;  // F8 (the category list on / off) is not drawn
+        if (key < 7) radio_menu_ = key, radio_until_ = now + 5;
+        else if (key == 7) radio_bar_ = !radio_bar_;  // F8: the category row on / off
         return;
     }
     auto items = radio_items();
@@ -2075,12 +2097,26 @@ HudInfo Game::hud_info() const {
         icon(pp[0], pp[2], cam.yaw, "menu/texture/minimap/minimap_icon_soldier_16x16", 16, me);
     }
     h.map_x = pp[0], h.map_z = pp[2];
+    h.radio_bar = radio_bar_;
     if (radio_menu_ >= 0 && now <= radio_until_) {
-        h.radio.push_back(word(std::string("RADIO_HEADING_") + radio_menus()[static_cast<size_t>(radio_menu_)].first));
+        h.radio_open = radio_menu_;
         auto items = radio_items();
-        for (size_t i = 0; i < items.size(); ++i)
-            if (!items[i].text.empty())
-                h.radio.push_back("F" + std::to_string(i + 1) + " " + word("RADIO_HEADING_" + items[i].text) + (items[i].shown.empty() ? "" : " " + items[i].shown));
+        for (size_t i = 0; i < items.size(); ++i) {
+            const RadioLine& it = items[i];
+            HudInfo::RadioButton b;
+            if (!it.text.empty()) {
+                b.label = word("RADIO_HEADING_" + it.text) + (it.shown.empty() ? "" : " " + it.shown);
+                if (radio_menu_ == 3)  // conquest points: icon_controlpoint_1-3, the closest, 5-7 by key
+                    b.label = it.shown, b.icon = std::string("menu/texture/radio/icon_controlpoint_") + (i == 3 ? "closest" : std::to_string(i + 1));
+                else b.icon = "menu/texture/radio/" + radio_icon(it.text);
+            }
+            h.radio_row.push_back(b);
+        }
+        h.radio_row.push_back({"menu/texture/radio/icon_cancel", word("RADIO_HEADING_CANCEL")});
+    } else {
+        for (size_t i = 0; i < radio_menus().size(); ++i)
+            h.radio_row.push_back({"menu/texture/radio/icon_f" + std::to_string(i + 1), word(std::string("RADIO_HEADING_") + radio_menus()[i].first)});
+        h.radio_row.push_back({"menu/texture/radio/icon_f8", word("RADIO_HEADING_ON_OFF")});
     }
     for (const auto& [t, m] : feed)
         if (now - t < 6) h.feed.push_back(m);

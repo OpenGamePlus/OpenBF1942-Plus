@@ -48,7 +48,13 @@ struct HudInfo {
     int rounds = -1, spare = 0;     // rounds -1: unlimited (not shown)
     bool reloading = false;
     std::vector<std::string> feed;  // newest last
-    std::vector<std::string> radio;  // the open radio menu: heading, then "F1 ROGER"...; empty: closed
+    // radio bar: closed, the category row (F8 shows / hides it); open, its category on top and a row of messages
+    struct RadioButton {
+        std::string icon, label;  // menu/texture/radio/icon_<x>; empty icon: nothing on that key
+    };
+    bool radio_bar = false;
+    int radio_open = -1;                  // the open category (0-6), -1 closed
+    std::vector<RadioButton> radio_row;   // 8 keys: the categories (closed) or the messages and F8 cancel (open)
     // original HUD textures (VFS paths without extension; empty: drawn as plain bars and text)
     std::string health_empty, health_full;  // menu/texture/ingame/healthbar_*_<kit>_64x64 (the vehicle's on board)
     std::string ammo_empty, ammo_full;      // the weapon's setAmmoBar / setAmmoBarFill

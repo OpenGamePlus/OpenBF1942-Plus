@@ -4,6 +4,7 @@ Append-only. Newest first. At most 3 bullets per stage.
 
 ## 2026-11-14 — C2: HUD placed as the original
 
+- The radio menu drawn as the original's button row (`menu/texture/radio/` icons, slots measured on captures of each category; F8 toggles it); the captures confirm the decompiled key layout.
 - Maintainer captures of the original client (1920 × 1080, kept out of the repository) show an 800 × 600 layout stretched per axis; health, ammunition panel and magazine (`setAmomBarPosX/Y` confirmed), tickets with flags above a top-right minimap with its grid, feed top left, measured and drawn so. Tests updated.
 
 ## 2026-11-14 — C2: health bar and magazine textures
