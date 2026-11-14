@@ -49,6 +49,11 @@ struct HudInfo {
     bool reloading = false;
     std::vector<std::string> feed;  // newest last
     std::vector<std::string> radio;  // the open radio menu: heading, then "F1 ROGER"...; empty: closed
+    // original HUD textures (VFS paths without extension; empty: drawn as plain bars and text)
+    std::string health_empty, health_full;  // menu/texture/ingame/healthbar_*_<kit>_64x64 (the vehicle's on board)
+    std::string ammo_empty, ammo_full;      // the weapon's setAmmoBar / setAmmoBarFill
+    float ammo_rows = 0;                    // setAmmoBarSize: texels of the fill, from the bottom
+    int mag = 0;                            // magSize: a full fill
     float world = 0, map_x = 0, map_z = 0;  // minimap: world size (0: none), the point it centres on
     std::vector<MapIcon> icons;
 };

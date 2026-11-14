@@ -1,6 +1,6 @@
 # HUD: fonts
 
-Status: **`.font` decoded and drawn: `font/bf1942.font` and its gray TGA, checked in a screenshot. Minimap from the colour tiles and `setMinimapIcon`. `.dif` not decoded. The original HUD layout and textures are not read: our layout is a stand-in.** Code: `engine/hud.*`, drawn by `Renderer::hud`.
+Status: **`.font` decoded and drawn: `font/bf1942.font` and its gray TGA, checked in a screenshot. Minimap from the colour tiles and `setMinimapIcon`; health bar and magazine textures. `.dif` not decoded. The original HUD layout and textures are not read: our layout is a stand-in.** Code: `engine/hud.*`, drawn by `Renderer::hud`.
 
 ## `.font` (text, CRLF)
 
@@ -60,6 +60,12 @@ A screen-space overlay drawn after the 3D scene:
 - VICTORY / DEFEAT.
 
 The pixel scale is height / 480, rounded. The weapon line shows rounds / spare magazines and RELOADING.
+
+## HUD textures (`menu/texture/ingame/`)
+
+- `healthbar_empty_<kit>_64x64` / `healthbar_full_<kit>_64x64` (`assault`, `at`, `engineer`, `medic`, `scout`): a segmented bar in columns 0–21, rows 2–61 (12 segments), and the kit's icon bottom right. We draw the empty one, then the full one's bar from the bottom up to the hit points. The kit is told by its template name (`GB_Assault`).
+- Weapons name their magazine: `setAmmoBar` / `setAmmoBarFill "Ingame/Magbar_Pistol_full_32x64.tga"` and `setAmmoBarSize` (41 for the pistol: the magazine's height in texels from the bottom, matching the art). We fill `setAmmoBarSize × rounds / magSize` rows. `setAmomBarPosX/Y` and `setAmomBarTextPosX/Y` (sic; some files spell `Ammo`) place it in the panel; not read.
+- Their placement is in `menu/InGame` (a MemeFile: `Soldier/SoldierHealthBarIcon`, `Ammo/SoldierAmmo/SoldierAmmoBar…`), not decoded. Ours: health bottom left, magazine bottom right with rounds / spare magazines beside it.
 
 ## Minimap
 

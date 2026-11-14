@@ -1092,6 +1092,10 @@ void main() { o = v_uv.x < 0.0 ? v_col : alpha_only == 1 ? vec4(v_col.rgb, v_col
             }
         }
         glBindTexture(GL_TEXTURE_2D, tex.empty() ? p.hud_tex : tex == "@minimap" ? p.minimap_tex : p.textures->get(tex));
+        if (!tex.empty() && tex != "@minimap") {  // HUD art: no wrap, or the far edge bleeds in as a thin line
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        }
         glUniform1i(u_alpha, tex.empty());  // the font's gray TGA is coverage; other textures are colour
         glBufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(v.size() * 4), v.data(), GL_STREAM_DRAW);
         glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(v.size() / 8));

@@ -2,6 +2,10 @@
 
 Append-only. Newest first. At most 3 bullets per stage.
 
+## 2026-11-14 — C2: health bar and magazine textures
+
+- The kit's `healthbar_*` texture filled from the bottom and the weapon's `setAmmoBar` magazine filled by rounds over `setAmmoBarSize` rows (the art's height, checked on the pistol: 41 rows). Placement ours (`menu/InGame` is a MemeFile). Checked on screenshots (assault BAR, engineer No4); tested.
+
 ## 2026-11-14 — C3: mesh particles, first-person muzzle flash
 
 - `Particle` templates draw their geometry (blending from its `.rs`: the flashes add). Emitters carry their view flags; the renderer spawns the held weapon's first-person emitters at its muzzle (the weapon's `setPosition` for the effect) and draws them with the arms. Checked on a screenshot (Thompson, first person); tested; Berlin 300 s identical.

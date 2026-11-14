@@ -2006,6 +2006,29 @@ HudInfo Game::hud_info() const {
     for (int t = 0; t < 2; ++t) h.tickets[t] = static_cast<int>(game.tickets[t + 1]), h.flags[t] = game.owned(t + 1);
     h.weapon = hand.name;
     if (!hand_ammo.unlimited) h.rounds = hand_ammo.rounds, h.spare = hand_ammo.spare, h.reloading = hand_ammo.reloading(now);
+    // HUD textures: the kit's health bar (by its name: GB_Assault -> assault), the weapon's magazine
+    if (auto k = kits.find({team, opt.kit}); k != kits.end()) {
+        std::string kn = lower(k->second), cls;
+        for (const char* c : {"scout", "assault", "medic", "engineer"})
+            if (kn.find(c) != std::string::npos) cls = c;
+        if (kn.find("antitank") != std::string::npos || kn.find("_at") != std::string::npos) cls = "at";
+        if (!cls.empty()) h.health_empty = "menu/texture/ingame/healthbar_empty_" + cls + "_64x64", h.health_full = "menu/texture/ingame/healthbar_full_" + cls + "_64x64";
+    }
+    if (const ConObject* w = cur < 0 ? object_template(hand.name) : nullptr)
+        for (auto& [k, a] : w->props) {
+            if (a.empty()) continue;
+            auto path = [](std::string f) {
+                f = lower(f);
+                f.erase(std::remove(f.begin(), f.end(), '"'), f.end());
+                if (auto dot = f.rfind('.'); dot != std::string::npos) f.erase(dot);
+                return "menu/texture/" + f;
+            };
+            if (k == "setammobar") h.ammo_empty = path(a[0]);
+            else if (k == "setammobarfill") h.ammo_full = path(a[0]);
+            else if (k == "setammobarsize") h.ammo_rows = std::isfinite(std::atof(a[0].c_str())) ? static_cast<float>(std::atof(a[0].c_str())) : 0.0f;
+        }
+    if (h.ammo_full.empty()) h.ammo_empty.clear();
+    h.mag = hand.mag_size;
     if (cur >= 0) {
         const Veh& v = vehicles[static_cast<size_t>(cur)];
         h.vehicle = v.name, h.vehicle_hp = static_cast<int>(std::ceil(std::max(0.0f, v.hp)));

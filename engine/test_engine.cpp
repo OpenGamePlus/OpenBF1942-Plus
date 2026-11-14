@@ -855,6 +855,16 @@ int main() {
         assert(hud_layout(f, info, 640, 480).empty());  // no player, no HUD
         info.on = true, info.hp = 50, info.feed = {"A"};
         assert(hud_layout(f, info, 640, 480).size() == 8);  // crosshair 4, tickets panel, health panel and bar, feed "A" (no digit glyphs)
+        {  // original textures: the health bar filled from the bottom, the magazine by rounds / magSize over setAmmoBarSize rows
+            HudInfo t = info;
+            t.hp = 50, t.health_empty = "he", t.health_full = "hf", t.weapon = "w", t.rounds = 5, t.spare = 2, t.mag = 10;
+            t.ammo_empty = "ae", t.ammo_full = "af", t.ammo_rows = 40;
+            std::vector<HudQuad> tq = hud_layout(f, t, 640, 480);
+            auto find = [&](const char* n) { return *std::find_if(tq.begin(), tq.end(), [&](const HudQuad& q) { return q.tex == n; }); };
+            HudQuad hf = find("hf"), af = find("af");
+            assert(std::fabs(hf.v0 - (2 + 0.5f * 59) / 64) < 1e-5f && hf.v1 == 1 && std::fabs(hf.h - (64 - 31.5f)) < 1e-4f);
+            assert(std::fabs(af.h - 20) < 1e-4f && std::fabs(af.v0 - 44.0f / 64) < 1e-5f);  // half of 40 rows
+        }
         // minimap: frame, map (centred on the player, north up), markers inside its 2 x 250 m only
         info.world = 1000, info.map_x = 500, info.map_z = 400;
         MapIcon near, far;

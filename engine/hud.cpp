@@ -124,17 +124,37 @@ std::vector<HudQuad> hud_layout(const Font& f, const HudInfo& in, int w, int h) 
 
     // health bar and weapon, bottom left; vehicle bottom right
     float by = H - 10 * s - lh;
-    solid(10 * s, by, 104 * s, lh, shade);
-    solid(12 * s, by + 2 * s, static_cast<float>(std::clamp(in.hp, 0, 100)) * s, lh - 4 * s, in.hp > 25 ? ally : axis);
-    text(std::to_string(std::max(0, in.hp)), 120 * s, by + s, white);
-    if (!in.weapon.empty()) {
+    auto tex = [&](const std::string& t, float x, float y, float tw, float th, float u0, float v0, float u1, float v1) {
+        q.push_back({x, y, tw, th, u0, v0, u1, v1, {1, 1, 1, 1}, t, 0});
+    };
+    // shortcut: placement and scale are ours (the original's are in menu/InGame, a MemeFile not decoded)
+    if (!in.health_empty.empty()) {  // 64 x 64 texels; the bar is columns 0-21, rows 2-61, filled from the bottom
+        const float px = 10 * s, py = H - 10 * s - 64 * s, top = 2 + (1 - static_cast<float>(std::clamp(in.hp, 0, 100)) / 100) * 59;
+        tex(in.health_empty, px, py, 64 * s, 64 * s, 0, 0, 1, 1);
+        tex(in.health_full, px, py + top * s, 22 * s, (64 - top) * s, 0, top / 64, 22.0f / 64, 1);
+        text(std::to_string(std::max(0, in.hp)), px + 44 * s, py + 30 * s, white);
+        by = py - 2 * s;
+    } else {
+        solid(10 * s, by, 104 * s, lh, shade);
+        solid(12 * s, by + 2 * s, static_cast<float>(std::clamp(in.hp, 0, 100)) * s, lh - 4 * s, in.hp > 25 ? ally : axis);
+        text(std::to_string(std::max(0, in.hp)), 120 * s, by + s, white);
+    }
+    if (!in.ammo_empty.empty() && in.rounds >= 0) {  // the magazine, 32 x 64 texels, filled from the bottom; numbers beside
+        const float px = W - 10 * s - 64 * s, py = H - 10 * s - 64 * s;
+        float rows = std::clamp(in.ammo_rows, 0.0f, 64.0f) * (in.mag > 0 ? std::clamp(static_cast<float>(in.rounds) / static_cast<float>(in.mag), 0.0f, 1.0f) : 1.0f);
+        tex(in.ammo_empty, px, py, 32 * s, 64 * s, 0, 0, 1, 1);
+        if (!in.reloading) tex(in.ammo_full, px, py + (64 - rows) * s, 32 * s, rows * s, 0, (64 - rows) / 64, 1, 1);
+        std::string n = in.reloading ? "RELOADING" : std::to_string(in.rounds) + " / " + std::to_string(in.spare);
+        text(n, px + 34 * s, py + 46 * s, in.rounds == 0 && in.spare == 0 && !in.reloading ? axis : white);
+        text(in.weapon, W - 10 * s - text_width(f, in.weapon, s), py - lh, white);
+    } else if (!in.weapon.empty()) {
         std::string wl = in.weapon;
         if (in.rounds >= 0) wl += "  " + std::to_string(in.rounds) + " / " + std::to_string(in.spare) + (in.reloading ? "  RELOADING" : "");
         text(wl, 10 * s, by - lh, in.rounds == 0 && in.spare == 0 && !in.reloading ? axis : white);
     }
     if (in.vehicle_hp >= 0) {
         std::string v = in.vehicle + "  " + std::to_string(in.vehicle_hp);
-        text(v, W - 10 * s - text_width(f, v, s), by, white);
+        text(v, W - 10 * s - text_width(f, v, s), in.ammo_empty.empty() ? by : H - 10 * s - 64 * s - 2 * lh, white);
     }
 
     // minimap, top left: the level's colour map 2 x 250 m around the player, north up (shortcut: the original's
