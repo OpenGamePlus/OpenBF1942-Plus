@@ -1,6 +1,6 @@
 # HUD: fonts
 
-Status: **`.font` decoded and drawn: `font/bf1942.font` and its gray TGA, checked in a screenshot. `.dif` not decoded. The original HUD layout and textures are not read: our layout is a stand-in.** Code: `engine/hud.*`, drawn by `Renderer::hud`.
+Status: **`.font` decoded and drawn: `font/bf1942.font` and its gray TGA, checked in a screenshot. Minimap from the colour tiles and `setMinimapIcon`. `.dif` not decoded. The original HUD layout and textures are not read: our layout is a stand-in.** Code: `engine/hud.*`, drawn by `Renderer::hud`.
 
 ## `.font` (text, CRLF)
 
@@ -59,4 +59,12 @@ A screen-space overlay drawn after the 3D scene:
 - a 6-second feed of kills, captures and destroyed vehicles, top right;
 - VICTORY / DEFEAT.
 
-The pixel scale is height / 480, rounded. The weapon line shows rounds / spare magazines and RELOADING. There is no minimap or radio text yet, because those systems do not exist.
+The pixel scale is height / 480, rounded. The weapon line shows rounds / spare magazines and RELOADING.
+
+## Minimap
+
+Templates name their marker with `setMinimapIcon "Minimap/minimap_icon_tank_16x16.tga"` (read as `menu/texture/minimap/<name>`, `.dds` in `menu.rfa`) and its size with `setMinimapIconSize` (16 when absent; 32 and 64 for ships). Soldier templates set their national flag (`flag_us.tga`, `menu/texture/flag_us`). `menu/texture/minimap/` also holds `map_circle`, `map_dot`, class icons and `Objectives/Objective000`–`100` (capture progress, not drawn).
+
+No level ships a map picture: the level's colour tiles are the top view. We shrink them into a 512² texture (nearest texel, as the terrain shader samples them: tile `Tx<a>x<b>` covers x from a, z from b) and tint what lies under the water level.
+
+Drawn top left, 120 px at 640 × 480, north up, 2 × 250 m around the player (shortcut: the original's frame, placement and zoom levels are not read). Markers: control points (the owner's flag, else a grey circle), vehicles with an icon turned to their heading (crew colour, empty ones grey), teammates on foot (dots), the player (yellow). Enemies are not shown.

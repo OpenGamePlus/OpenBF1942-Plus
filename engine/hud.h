@@ -25,8 +25,17 @@ std::map<std::string, std::string> lexicon_parse(const std::vector<uint8_t>& dat
 
 struct HudQuad {
     float x, y, w, h;          // pixels, top-left origin
-    float u0, v0, u1, v1;      // font texture; u0 < 0: solid colour
+    float u0, v0, u1, v1;      // texture coordinates; u0 < 0: solid colour
     float rgba[4];
+    std::string tex{};         // VFS path without extension; empty: the font; "@minimap": the level's map
+    float angle = 0;           // radians, clockwise about the centre
+};
+
+struct MapIcon {  // a minimap marker
+    float x = 0, z = 0, yaw = 0;  // world position, heading (radians, 0 = +z, clockwise)
+    std::string tex;              // VFS path without extension
+    float size = 16;              // setMinimapIconSize (texels at 640 x 480)
+    float rgba[4] = {1, 1, 1, 1};
 };
 
 // What the game shows; built by Game::hud_info.
@@ -40,6 +49,8 @@ struct HudInfo {
     bool reloading = false;
     std::vector<std::string> feed;  // newest last
     std::vector<std::string> radio;  // the open radio menu: heading, then "F1 ROGER"...; empty: closed
+    float world = 0, map_x = 0, map_z = 0;  // minimap: world size (0: none), the point it centres on
+    std::vector<MapIcon> icons;
 };
 
 float text_width(const Font& f, const std::string& s, float scale);

@@ -2,6 +2,11 @@
 
 Append-only. Newest first. At most 3 bullets per stage.
 
+## 2026-11-14 — C2: minimap
+
+- The level's colour tiles shrunk into one texture (water tinted) drawn top left, north up, 250 m around the player, with `setMinimapIcon` markers: flags by owner, vehicles turned to their heading, teammates, the player. HUD quads now carry a texture and an angle. Checked on a screenshot (El Alamein base); layout tested.
+- Open: the original HUD textures (`menu/texture/ingame/`), `.dif` fonts, capture progress icons.
+
 ## 2026-11-14 — C3: sprite effects
 
 - `engine/effects.*`: `EffectBundle` / `Emitter` / `SpriteParticle` templates parsed and simulated on the CPU (`CRD_*` values, over-time curves, colours, frame grids), drawn as sorted camera-facing sprites. Shown: muzzle flashes, shot end effects (explosions), MaterialManager impacts, `addArmorEffect` damage smoke / fire and destruction effects.

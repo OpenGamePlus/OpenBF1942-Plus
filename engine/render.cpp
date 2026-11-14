@@ -160,6 +160,7 @@ public:
     }
     GLuint get(const std::string& name) {
         std::string key = Vfs::key(name);
+        if (key.empty()) return white_;  // effect particles without a texture
         auto it = cache_.find(key);
         if (it != cache_.end()) return it->second;
         GLuint t = white_;
@@ -352,6 +353,7 @@ struct Renderer::Impl {
               const std::vector<float>& projectiles, const std::vector<SoldierView>& soldiers, const std::vector<Sprite>& sprites);
     void draw_sprites(const std::vector<Sprite>& sprites, const Camera& cam, const Mat4& vp);
     GLuint fx_prog = 0, fx_vao = 0, fx_vbo = 0;
+    GLuint minimap_tex = 0;  // the colour tiles shrunk to one texture, water tinted: row = z, column = x
 };
 
 // Effect particles: camera-facing quads, farthest first, depth-tested without writing depth; BMOne adds, the rest
@@ -480,12 +482,38 @@ Renderer::Impl::Impl(const Vfs& vfs_, Con& con, const Heightmap& hm, const Terra
         glTexImage3D(GL_TEXTURE_2D_ARRAY, 0, GL_RGBA8, first.w, first.h, ntiles * ntiles, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
     // shortcut: missing tiles are drawn neutral grey; what the original engine shows there is unverified.
     std::vector<uint8_t> grey(first.rgba.size(), 110);
+    const int mm_n = 512;  // minimap texels per side
+    std::vector<uint8_t> mm(static_cast<size_t>(mm_n) * mm_n * 4, 110);
     for (int a = 0; a < ntiles; ++a)
         for (int b = 0; b < ntiles; ++b) {
             Image img = vfs.has(tile(a, b)) ? dds_decode(vfs.read(tile(a, b))) : Image{first.w, first.h, grey};
             if (img.w != first.w || img.h != first.h) throw std::runtime_error("colour tiles differ in size: " + tile(a, b));
             glTexSubImage3D(GL_TEXTURE_2D_ARRAY, 0, 0, 0, a * ntiles + b, img.w, img.h, 1, GL_RGBA, GL_UNSIGNED_BYTE, img.rgba.data());
+            // the tile's share of the minimap, nearest texel (u along x, v along z as the terrain shader samples)
+            for (int i = a * mm_n / ntiles; i < (a + 1) * mm_n / ntiles; ++i)
+                for (int j = b * mm_n / ntiles; j < (b + 1) * mm_n / ntiles; ++j) {
+                    float fu = (static_cast<float>(i) + 0.5f) * static_cast<float>(ntiles) / mm_n - static_cast<float>(a);
+                    float fv = (static_cast<float>(j) + 0.5f) * static_cast<float>(ntiles) / mm_n - static_cast<float>(b);
+                    int px = std::clamp(static_cast<int>(fu * static_cast<float>(img.w)), 0, img.w - 1);
+                    int py = std::clamp(static_cast<int>(fv * static_cast<float>(img.h)), 0, img.h - 1);
+                    std::copy_n(&img.rgba[(static_cast<size_t>(py) * img.w + px) * 4], 4, &mm[(static_cast<size_t>(j) * mm_n + i) * 4]);
+                }
         }
+    if (hm.n > 0 && info.world_size > 0)  // under water: tinted as the water plane is drawn
+        for (int j = 0; j < mm_n; ++j)
+            for (int i = 0; i < mm_n; ++i) {
+                int row = std::min(hm.n - 1, j * hm.n / mm_n), col = std::min(hm.n - 1, i * hm.n / mm_n);
+                if (hm.height(row, col) >= info.water_level) continue;
+                uint8_t* c = &mm[(static_cast<size_t>(j) * mm_n + i) * 4];
+                const float w[3] = {0.12f, 0.30f, 0.45f};
+                for (int k = 0; k < 3; ++k) c[k] = static_cast<uint8_t>(static_cast<float>(c[k]) * 0.25f + w[k] * 255 * 0.75f);
+            }
+    for (size_t k = 3; k < mm.size(); k += 4) mm[k] = 255;
+    glActiveTexture(GL_TEXTURE0);
+    minimap_tex = upload_texture(Image{mm_n, mm_n, mm});
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glActiveTexture(GL_TEXTURE1);
     glGenerateMipmap(GL_TEXTURE_2D_ARRAY);
     glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
     anisotropic(GL_TEXTURE_2D_ARRAY);
@@ -950,8 +978,8 @@ layout(location = 0) in vec2 pos; layout(location = 1) in vec2 uv; layout(locati
 uniform vec2 screen; out vec2 v_uv; out vec4 v_col;
 void main() { gl_Position = vec4(pos.x / screen.x * 2.0 - 1.0, 1.0 - pos.y / screen.y * 2.0, 0.0, 1.0); v_uv = uv; v_col = col; })";
         static const char* fs = R"(#version 330 core
-in vec2 v_uv; in vec4 v_col; uniform sampler2D font; out vec4 o;
-void main() { o = v_uv.x < 0.0 ? v_col : vec4(v_col.rgb, v_col.a * texture(font, v_uv).a); })";
+in vec2 v_uv; in vec4 v_col; uniform sampler2D font; uniform int alpha_only; out vec4 o;
+void main() { o = v_uv.x < 0.0 ? v_col : alpha_only == 1 ? vec4(v_col.rgb, v_col.a * texture(font, v_uv).a) : v_col * texture(font, v_uv); })";
         p.hud_prog = glCreateProgram();
         glAttachShader(p.hud_prog, compile(GL_VERTEX_SHADER, vs));
         glAttachShader(p.hud_prog, compile(GL_FRAGMENT_SHADER, fs));
@@ -980,28 +1008,36 @@ void main() { o = v_uv.x < 0.0 ? v_col : vec4(v_col.rgb, v_col.a * texture(font,
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);  // pixel font, integer scales
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     }
-    std::vector<float> v;
-    v.reserve(quads.size() * 48);
-    for (const HudQuad& q : quads) {
-        float x[2] = {q.x, q.x + q.w}, y[2] = {q.y, q.y + q.h}, u[2] = {q.u0, q.u1}, t[2] = {q.v0, q.v1};
-        for (int c : {0, 1, 2, 2, 1, 3}) {
-            int i = c & 1, j = c >> 1;
-            v.insert(v.end(), {x[i], y[j], q.u0 < 0 ? -1.0f : u[i], t[j], q.rgba[0], q.rgba[1], q.rgba[2], q.rgba[3]});
-        }
-    }
-    if (v.empty()) return;
+    if (quads.empty()) return;
     glDisable(GL_DEPTH_TEST);
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     glUseProgram(p.hud_prog);
     glUniform2f(glGetUniformLocation(p.hud_prog, "screen"), static_cast<float>(w), static_cast<float>(h));
     glUniform1i(glGetUniformLocation(p.hud_prog, "font"), 0);
+    GLint u_alpha = glGetUniformLocation(p.hud_prog, "alpha_only");
     glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, p.hud_tex);
     glBindVertexArray(p.hud_vao);
     glBindBuffer(GL_ARRAY_BUFFER, p.hud_vbo);
-    glBufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(v.size() * 4), v.data(), GL_STREAM_DRAW);
-    glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(v.size() / 8));
+    std::vector<float> v;
+    for (size_t k = 0; k < quads.size();) {  // runs of one texture, in order
+        const std::string& tex = quads[k].tex;
+        v.clear();
+        for (; k < quads.size() && quads[k].tex == tex; ++k) {
+            const HudQuad& q = quads[k];
+            float hw = q.w / 2, hh = q.h / 2, cx = q.x + hw, cy = q.y + hh, ca = std::cos(q.angle), sa = std::sin(q.angle);
+            float x[2] = {-hw, hw}, y[2] = {-hh, hh}, u[2] = {q.u0, q.u1}, t[2] = {q.v0, q.v1};
+            for (int c : {0, 1, 2, 2, 1, 3}) {
+                int i = c & 1, j = c >> 1;
+                v.insert(v.end(), {cx + x[i] * ca - y[j] * sa, cy + x[i] * sa + y[j] * ca, q.u0 < 0 ? -1.0f : u[i], t[j],
+                                   q.rgba[0], q.rgba[1], q.rgba[2], q.rgba[3]});
+            }
+        }
+        glBindTexture(GL_TEXTURE_2D, tex.empty() ? p.hud_tex : tex == "@minimap" ? p.minimap_tex : p.textures->get(tex));
+        glUniform1i(u_alpha, tex.empty());  // the font's gray TGA is coverage; other textures are colour
+        glBufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(v.size() * 4), v.data(), GL_STREAM_DRAW);
+        glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(v.size() / 8));
+    }
     glDisable(GL_BLEND);
     glEnable(GL_DEPTH_TEST);
     glUseProgram(p.prog);

@@ -844,6 +844,17 @@ int main() {
         assert(hud_layout(f, info, 640, 480).empty());  // no player, no HUD
         info.on = true, info.hp = 50, info.feed = {"A"};
         assert(hud_layout(f, info, 640, 480).size() == 8);  // crosshair 4, tickets panel, health panel and bar, feed "A" (no digit glyphs)
+        // minimap: frame, map (centred on the player, north up), markers inside its 2 x 250 m only
+        info.world = 1000, info.map_x = 500, info.map_z = 400;
+        MapIcon near, far;
+        near.x = 625, near.z = 400, near.tex = "menu/texture/minimap/map_dot", far.x = 900, far.z = 400;
+        info.icons = {near, far};
+        std::vector<HudQuad> mq = hud_layout(f, info, 640, 480);
+        assert(mq.size() == 11);
+        auto map = std::find_if(mq.begin(), mq.end(), [](const HudQuad& q) { return q.tex == "@minimap"; });
+        assert(map != mq.end() && std::fabs(map->u0 - 0.25f) < 1e-6f && std::fabs(map->u1 - 0.75f) < 1e-6f && map->v0 > map->v1);
+        const HudQuad& dot = *std::find_if(mq.begin(), mq.end(), [&](const HudQuad& q) { return q.tex == near.tex; });  // 125 m east: 3/4 across
+        assert(dot.tex == near.tex && std::fabs(dot.x + dot.w / 2 - (map->x + map->w * 0.75f)) < 1e-3f);
         std::vector<uint8_t> gray(18 + 4, 0);
         gray[2] = 3, gray[12] = 2, gray[14] = 2, gray[16] = 8, gray[17] = 0x20, gray[18] = 200;
         assert(tga_decode(gray).rgba[3] == 200 && tga_decode(gray).rgba[0] == 200);

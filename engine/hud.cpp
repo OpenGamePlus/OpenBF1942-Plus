@@ -137,6 +137,20 @@ std::vector<HudQuad> hud_layout(const Font& f, const HudInfo& in, int w, int h) 
         text(v, W - 10 * s - text_width(f, v, s), by, white);
     }
 
+    // minimap, top left: the level's colour map 2 x 250 m around the player, north up (shortcut: the original's
+    // zoom levels, frame and placement are not read), with its markers
+    if (in.world > 0) {
+        const float ms = 120 * s, mx = 10 * s, my = 10 * s, r = 250;
+        solid(mx - s, my - s, ms + 2 * s, ms + 2 * s, shade);
+        q.push_back({mx, my, ms, ms, (in.map_x - r) / in.world, (in.map_z + r) / in.world, (in.map_x + r) / in.world, (in.map_z - r) / in.world,
+                     {1, 1, 1, 1}, "@minimap", 0});
+        for (const MapIcon& ic : in.icons) {
+            float ix = mx + (ic.x - in.map_x + r) / (2 * r) * ms, iy = my + (in.map_z + r - ic.z) / (2 * r) * ms, sz = ic.size * 0.5f * s;
+            if (ix < mx || iy < my || ix > mx + ms || iy > my + ms) continue;
+            q.push_back({ix - sz / 2, iy - sz / 2, sz, sz, 0, 0, 1, 1, {ic.rgba[0], ic.rgba[1], ic.rgba[2], ic.rgba[3]}, ic.tex, ic.yaw});
+        }
+    }
+
     // kill / capture feed, top right, newest at the bottom
     float fy = 6 * s;
     for (const std::string& m : in.feed) text(m, W - 10 * s - text_width(f, m, s), fy, white), fy += lh;

@@ -297,6 +297,8 @@ private:
     void take_seat(int s);
     size_t sol_first = 0, sol_parts = 0;
     std::map<int, std::string> team_skins;
+    // setMinimapIcon / setMinimapIconSize of a template: "Minimap/x.tga" as menu/texture/minimap/x; empty: none
+    std::string minimap_icon(const std::string& tmpl, float* size) const;
     std::map<std::pair<int, int>, std::string> kits;
     std::string soldier_tmpl, weapon_name = "M1Garand", lower_state = "lb_stand";
     float move_f = 0, move_r = 0;

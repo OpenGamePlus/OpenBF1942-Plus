@@ -1936,6 +1936,24 @@ void Game::pose() {
     }
 }
 
+std::string Game::minimap_icon(const std::string& tmpl, float* size) const {
+    std::string tex;
+    if (const ConObject* t = object_template(tmpl))
+        for (auto& [k, a] : t->props) {
+            if (a.empty()) continue;
+            if (k == "setminimapicon") {
+                std::string f = lower(a[0]);
+                f.erase(std::remove(f.begin(), f.end(), '"'), f.end());
+                if (auto dot = f.rfind('.'); dot != std::string::npos) f.erase(dot);
+                tex = "menu/texture/" + f;
+            } else if (k == "setminimapiconsize" && size) {
+                float v = static_cast<float>(std::atof(a[0].c_str()));
+                if (std::isfinite(v) && v > 0 && v <= 128) *size = v;
+            }
+        }
+    return tex;
+}
+
 HudInfo Game::hud_info() const {
     HudInfo h;
     if (player < 0) return h;
@@ -1951,6 +1969,42 @@ HudInfo Game::hud_info() const {
         h.weapon = v.seats[static_cast<size_t>(seat)].weapon.name, h.rounds = -1, h.reloading = false;
         if (v.seats.size() > 1) h.vehicle += "  seat " + std::to_string(seat + 1) + "/" + std::to_string(v.seats.size());
     }
+    // minimap: flags (the owner's national flag, else a grey circle), vehicles with an icon (crew team colour,
+    // empty ones grey), teammates on foot, and the player in yellow (shortcut: enemies are never shown)
+    h.world = info.world_size;
+    const float ally[4] = {0.55f, 0.75f, 1, 1}, axis[4] = {1, 0.55f, 0.45f, 1}, grey[4] = {0.85f, 0.85f, 0.85f, 1}, me[4] = {1, 0.9f, 0.2f, 1}, white[4] = {1, 1, 1, 1};
+    auto colour = [&](int t) { return t == 1 ? axis : t == 2 ? ally : grey; };
+    auto icon = [&](float x, float z, float yaw, const std::string& tex, float size, const float* c) {
+        MapIcon ic;
+        ic.x = x, ic.z = z, ic.yaw = yaw, ic.tex = tex, ic.size = size;
+        std::copy(c, c + 4, ic.rgba);
+        h.icons.push_back(ic);
+    };
+    for (const ConquestFlag& f : game.flags) {
+        float size = 16;
+        std::string tex = f.team && team_skins.count(f.team) ? minimap_icon(team_skins.at(f.team), &size) : "";
+        if (tex.empty()) icon(f.pos[0], f.pos[2], 0, "menu/texture/minimap/map_circle", 16, colour(f.team));
+        else icon(f.pos[0], f.pos[2], 0, tex, 16, white);
+    }
+    for (size_t vi = 0; vi < vehicles.size(); ++vi) {
+        const Veh& v = vehicles[vi];
+        float size = 16;
+        std::string tex = minimap_icon(v.name, &size);
+        if (v.wrecked || tex.empty() || (v.team && v.team != team)) continue;
+        Mat4 m = phys.transform(v.id);
+        icon(m.m[12], m.m[14], std::atan2(m.m[8], m.m[10]), tex, size, static_cast<int>(vi) == cur ? me : colour(v.team));
+    }
+    for (const Bot& b : bots)
+        if (!b.dead && b.veh < 0 && b.team == team) icon(b.pos[0], b.pos[2], 0, "menu/texture/minimap/map_dot", 8, colour(team));
+    float pp[3] = {cam.x, cam.y, cam.z};
+    if (cur >= 0) {
+        Mat4 m = phys.transform(vehicles[static_cast<size_t>(cur)].id);
+        pp[0] = m.m[12], pp[2] = m.m[14];
+    } else if (!player_dead) {
+        phys.character_position(player, pp);
+        icon(pp[0], pp[2], cam.yaw, "menu/texture/minimap/minimap_icon_soldier_16x16", 16, me);
+    }
+    h.map_x = pp[0], h.map_z = pp[2];
     if (radio_menu_ >= 0 && now <= radio_until_) {
         h.radio.push_back(word(std::string("RADIO_HEADING_") + radio_menus()[static_cast<size_t>(radio_menu_)].first));
         auto items = radio_items();
