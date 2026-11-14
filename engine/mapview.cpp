@@ -1,5 +1,6 @@
 // Map viewer and game window: arguments, window, input; the game is engine/game.*, drawing engine/render.*.
 // Usage in docs/ai/SYSTEM_SUMMARY.md.
+#define SDL_MAIN_HANDLED  // plain main() on Windows too; no SDL2main to link
 #include <SDL.h>
 
 #include <algorithm>
@@ -16,7 +17,7 @@
 
 #include "con.h"
 #include "game.h"
-#include "math.h"
+#include "mat.h"
 #include "render.h"
 #include "scene.h"
 #include "sound.h"
@@ -112,6 +113,7 @@ int run(int argc, char** argv) {
     Game game(vfs, con, hm, info, scene, spawns, opt, Camera{cx, cy, cz, yaw, pitch}, objects);
     for (auto& [why, n] : game.skipped) skipped[why] += n;
 
+    SDL_SetMainReady();
     if (SDL_Init(SDL_INIT_VIDEO) != 0) throw std::runtime_error(SDL_GetError());
     // Sound: the game adds voices, SDL's audio thread mixes them; without a device the game runs silent.
     Sounds sounds(vfs, con, 44100);  // the mixer locks its voice list itself; files load outside that lock

@@ -6,7 +6,7 @@
 #include <vector>
 
 #include "con.h"
-#include "math.h"
+#include "mat.h"
 
 namespace obf {
 

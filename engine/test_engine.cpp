@@ -18,7 +18,7 @@
 #include "damage.h"
 #include "game.h"
 #include "dds.h"
-#include "math.h"
+#include "mat.h"
 #include "nav.h"
 #include "physics.h"
 #include "scene.h"

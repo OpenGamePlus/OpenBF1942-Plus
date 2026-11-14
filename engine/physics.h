@@ -7,7 +7,7 @@
 #include <string>
 #include <vector>
 #include "con.h"
-#include "math.h"
+#include "mat.h"
 #include "scene.h"
 #include "sm.h"
 #include "terrain.h"

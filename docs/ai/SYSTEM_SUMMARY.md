@@ -10,7 +10,7 @@ CMakeLists.txt       engine build (libraries obf, obf_render; obf_mapview, obf_s
 .github/workflows/   CI: build, engine tests, tool tests, doc checks
 README.md            English; README.{es,pt,fr,de,ru}.md translations; LICENSE AGPL-3.0
 docs/                formats/, architecture/adr/, roadmap/, ai/
-engine/              C++ engine: rfa, vfs, dds, terrain, con, sm, tm, anim, scene, physics, damage, conquest, nav, audio, sound, hud, game, render, math.h, mapview.cpp, sim.cpp, test_engine.cpp
+engine/              C++ engine: rfa, vfs, dds, terrain, con, sm, tm, anim, scene, physics, damage, conquest, nav, audio, sound, hud, game, render, mat.h, mapview.cpp, sim.cpp, test_engine.cpp
 tools/rfa.py         RFA archive reader (list, extract)
 tools/con.py         CON interpreter + virtual file system (mod/level loader)
 tools/sm.py          static mesh reader, .rs shader parser, OBJ export
@@ -50,6 +50,7 @@ tools/test_*.py      unit tests (synthetic data only)
 | Tests | `python3 -m unittest discover tools` |
 | Build engine | `cmake -S . -B build && cmake --build build -j` |
 | Engine tests | `ctest --test-dir build` |
+| Build engine (Windows) | MSVC x64 prompt (VS 2019+ Build Tools) and vcpkg: `vcpkg install sdl2 libepoxy pkgconf --triplet x64-windows`, then `cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_TOOLCHAIN_FILE=<vcpkg>/scripts/buildsystems/vcpkg.cmake -DPKG_CONFIG_EXECUTABLE=<vcpkg>/installed/x64-windows/tools/pkgconf/pkgconf.exe && cmake --build build` (DLLs copied next to the exes) |
 | Map viewer | `build/obf_mapview <BF1942_DIR> <mod> <level> [--shot out.ppm] [--cam x y z yaw pitch] [--mode conquest|ctf|tdm|coop] [--soldier <template>] [--drive <vehicle>] [--play <team or soldier>] [--kit 0-4] [--sim s] [--fire-ahead] [--collision] [--no-objects]` |
 | Headless game run | `build/obf_sim <BF1942_DIR> <mod> <level> (--play <team or soldier> [--kit 0-4] \| --drive <vehicle> [--fire-ahead]) [--cam x y z yaw pitch] [--sim s]` — the `--shot` demo without a window |
 | Doc checks | `python3 tools/check_docs.py` |

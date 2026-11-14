@@ -6,7 +6,7 @@
 #include <unordered_map>
 #include <vector>
 
-#include "math.h"
+#include "mat.h"
 
 namespace obf {
 

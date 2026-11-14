@@ -12,7 +12,7 @@
 | `engine/sm.*` | static meshes, `.rs` shaders | `con` (`lower`) |
 | `engine/tm.*` | tree meshes | std only |
 | `engine/anim.*` | skeletons, skins, animations, pose, skinning | `math` |
-| `engine/math.h` | 4x4 matrices, game rotation convention | std only |
+| `engine/mat.h` | 4x4 matrices, game rotation convention | std only |
 | `engine/scene.*` | instances → mesh paths + world matrices | `con`, `vfs`, `math` |
 | `engine/damage.*` | MaterialManager damage table | std only |
 | `engine/conquest.*` | flags and tickets | `con` |

@@ -15,7 +15,7 @@
 
 #include "anim.h"
 #include "dds.h"
-#include "math.h"
+#include "mat.h"
 #include "sm.h"
 #include "tm.h"
 

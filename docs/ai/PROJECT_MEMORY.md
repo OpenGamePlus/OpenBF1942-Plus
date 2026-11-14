@@ -2,6 +2,12 @@
 
 Append-only. Newest first. At most 3 bullets per stage.
 
+## 2026-11-14 — native Windows build
+
+- The engine builds with MSVC 14.29 and vcpkg (SDL2, libepoxy, pkgconf); engine tests pass on Windows. Command in SYSTEM_SUMMARY.
+- Fixes: the matrix header renamed from `math.h` to `engine/mat.h` (MSVC's `<cmath>` picked ours up through `-I engine`); Jolt on the `/MD` runtime like SDL2; `SDL_MAIN_HANDLED` so no SDL2main.
+- Open: the maintainer listening to audio on the native build (WSLg stalls check).
+
 ## 2026-11-14 — audio stalls traced to WSLg's device
 
 - The maintainer heard stutter again after minutes. A per-5-s `timing` log showed our callback under 2 ms while the gap between callbacks grew from 23 ms to 3.7 s; not changed by 512 / 1,024 frames or 44.1 / 48 kHz. Confirmed outside the engine: a bare SDL device with no window feeding silence stalls the same way (0.9 s at 75 s, 4.9 s at 3 minutes).

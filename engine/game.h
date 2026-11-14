@@ -13,7 +13,7 @@
 #include "conquest.h"
 #include "damage.h"
 #include "hud.h"
-#include "math.h"
+#include "mat.h"
 #include "nav.h"
 #include "physics.h"
 #include "scene.h"
