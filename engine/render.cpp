@@ -179,7 +179,7 @@ public:
             }
             break;
         }
-        if (t == white_) ++missing;
+        if (t == white_) ++missing, std::fprintf(stderr, "texture %s: not found (drawn white)\n", key.c_str());
         return cache_[key] = t;
     }
     int missing = 0, failed = 0;
