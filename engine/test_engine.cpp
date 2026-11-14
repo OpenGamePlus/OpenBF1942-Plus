@@ -16,6 +16,7 @@
 #include "con.h"
 #include "conquest.h"
 #include "damage.h"
+#include "effects.h"
 #include "game.h"
 #include "dds.h"
 #include "mat.h"
@@ -654,6 +655,46 @@ int main() {
         assert(t.damage(236, 52) == 40 && t.damage(52, 236) == 0 && t.damage(999, 52) == 0);
         assert(std::fabs(t.damage(7, 52) - 0.4f) < 1e-6f);  // shared attGroup; "0.1.0" reads as 0.1
         assert(t.effect(236, 52) == "e_explsmall2" && t.effect(7, 52) == "e_explsmall2" && t.effect(52, 236).empty());
+    }
+
+    {  // effects: CRD values, curves, a bundle's emitter spawning sprite particles that rise, grow and fade
+        std::mt19937 rng(1);
+        Crd c = crd_parse("CRD_UNIFORM/2/0.8/0");
+        for (int i = 0; i < 50; ++i) {
+            float v = c.sample(rng);
+            assert(v >= 0.8f && v <= 2);
+        }
+        assert(crd_parse("CRD_NONE/1.5/9/0").sample(rng) == 1.5f);
+        Curve k = curve_parse("0/1|50/3|100/2");
+        assert(k.at(0) == 1 && std::fabs(k.at(0.25f) - 2) < 1e-5f && k.at(1) == 2 && Curve{}.at(0.3f) == 1);
+        Vfs vfs;
+        std::string fx = "ObjectTemplate.create EffectBundle e_T\nObjectTemplate.addTemplate em_T\nObjectTemplate.setPosition 0/1/0\n"
+                         "ObjectTemplate.timeToLive CRD_NONE/1/0/0\n"
+                         "ObjectTemplate.create Emitter em_T\nObjectTemplate.template fx_T\nObjectTemplate.timeToLive CRD_NONE/0.1/0/0\n"
+                         "ObjectTemplate.intensity CRD_NONE/20/0/0\n"
+                         "ObjectTemplate.create SpriteParticle fx_T\nObjectTemplate.timeToLive CRD_NONE/0.5/0/0\n"
+                         "ObjectTemplate.size CRD_NONE/2/0/0\nObjectTemplate.sizeOverTime 0/1|100/3\nObjectTemplate.gravityModifier CRD_NONE/-1/0/0\n"
+                         "ObjectTemplate.texture e_Smoke5\nObjectTemplate.destBlendMode BMOne\n"
+                         "ObjectTemplate.colorRGBAOverTime 0/255/255/255/255|100/255/255/255/0\n"
+                         "ObjectTemplate.create Emitter em_Mesh\nObjectTemplate.template fx_Mesh\n"
+                         "ObjectTemplate.create Particle fx_Mesh\nObjectTemplate.geometry m\n";
+        vfs.add("objects/effects/t/effects.con", std::vector<uint8_t>(fx.begin(), fx.end()));
+        Con con(vfs);
+        con.run("objects/effects/t/effects.con");
+        Effects e(con);
+        assert(e.spawn("em_Mesh", Mat4::identity()) < 0 && e.spawn("nothing", Mat4::identity()) < 0);  // mesh particles: none
+        int id = e.spawn("e_T", translate(10, 0, 0));
+        assert(id >= 0);
+        for (int i = 0; i < 6; ++i) e.step(1 / 60.0f);
+        std::vector<Sprite> sp = e.sprites();
+        assert(e.particles() == 2 && sp.size() == 2);  // 0.1 s x 20 per s, from 0.5 owed: two by 0.1 s
+        assert(std::fabs(sp[0].pos[0] - 10) < 1e-4f && sp[0].pos[1] > 1 && sp[0].additive && *sp[0].texture == "texture/e_smoke5");
+        float y0 = sp[0].pos[1], s0 = sp[0].size, a0 = sp[0].rgba[3];
+        for (int i = 0; i < 12; ++i) e.step(1 / 60.0f);
+        sp = e.sprites();
+        assert(!sp.empty() && sp[0].pos[1] > y0 && sp[0].size > s0 && sp[0].rgba[3] < a0);  // rises, grows, fades
+        for (int i = 0; i < 120; ++i) e.step(1 / 60.0f);
+        assert(e.particles() == 0 && e.running() == 0);  // the bundle's 1 s and the particles' 0.5 s are over
     }
 
     {  // audio: wav, sound script, mixer

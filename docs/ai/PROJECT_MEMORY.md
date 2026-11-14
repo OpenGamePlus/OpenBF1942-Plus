@@ -2,6 +2,12 @@
 
 Append-only. Newest first. At most 3 bullets per stage.
 
+## 2026-11-14 — C3: sprite effects
+
+- `engine/effects.*`: `EffectBundle` / `Emitter` / `SpriteParticle` templates parsed and simulated on the CPU (`CRD_*` values, over-time curves, colours, frame grids), drawn as sorted camera-facing sprites. Shown: muzzle flashes, shot end effects (explosions), MaterialManager impacts, `addArmorEffect` damage smoke / fire and destruction effects.
+- Checked on screenshots (a Sherman's shell exploding ahead; a damaged Sherman smoking and burning); synthetic test; Berlin 300 s identical (effects use their own random generator).
+- Open: mesh particles, first-person muzzle flash, dust and wakes.
+
 ## 2026-11-14 — B2: bots use pistols, mines and packs
 
 - A bot whose primary has no round and no magazine fires its kit's pistol (drawn and animated as it); engineers lay mines near flags their team holds and drop packs by enemy-crewed vehicles, set off once out of the blast. Placed charges now record their owner, so the player's detonator sets off only the player's packs. Rules guessed.

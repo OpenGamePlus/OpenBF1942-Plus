@@ -349,8 +349,80 @@ struct Renderer::Impl {
         return an;
     }
     void draw(const std::vector<DrawItem>& scene, const Camera& cam, int W, int H, float seconds, bool show_collision,
-              const std::vector<float>& projectiles, const std::vector<SoldierView>& soldiers);
+              const std::vector<float>& projectiles, const std::vector<SoldierView>& soldiers, const std::vector<Sprite>& sprites);
+    void draw_sprites(const std::vector<Sprite>& sprites, const Camera& cam, const Mat4& vp);
+    GLuint fx_prog = 0, fx_vao = 0, fx_vbo = 0;
 };
+
+// Effect particles: camera-facing quads, farthest first, depth-tested without writing depth; BMOne adds, the rest
+// blends by alpha. A texture of numAnimationFrames is read as a square grid of frames, row by row (unverified).
+void Renderer::Impl::draw_sprites(const std::vector<Sprite>& sprites, const Camera& cam, const Mat4& vp) {
+    if (sprites.empty()) return;
+    if (!fx_prog) {
+        static const char* vs = R"(#version 330 core
+layout(location = 0) in vec3 pos; layout(location = 1) in vec2 uv; layout(location = 2) in vec4 col;
+uniform mat4 vp; out vec2 v_uv; out vec4 v_col;
+void main() { gl_Position = vp * vec4(pos, 1.0); v_uv = uv; v_col = col; })";
+        static const char* fs = R"(#version 330 core
+in vec2 v_uv; in vec4 v_col; uniform sampler2D tex; out vec4 o;
+void main() { o = texture(tex, v_uv) * v_col; })";
+        fx_prog = glCreateProgram();
+        glAttachShader(fx_prog, compile(GL_VERTEX_SHADER, vs));
+        glAttachShader(fx_prog, compile(GL_FRAGMENT_SHADER, fs));
+        glLinkProgram(fx_prog);
+        glGenVertexArrays(1, &fx_vao);
+        glBindVertexArray(fx_vao);
+        glGenBuffers(1, &fx_vbo);
+        glBindBuffer(GL_ARRAY_BUFFER, fx_vbo);
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 36, nullptr);
+        glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 36, reinterpret_cast<void*>(12));
+        glVertexAttribPointer(2, 4, GL_FLOAT, GL_FALSE, 36, reinterpret_cast<void*>(20));
+        for (GLuint a = 0; a < 3; ++a) glEnableVertexAttribArray(a);
+    }
+    float cy = std::cos(cam.yaw), sy = std::sin(cam.yaw), cp = std::cos(cam.pitch), sp = std::sin(cam.pitch);
+    float fwd[3] = {sy * cp, sp, cy * cp}, right[3] = {cy, 0, -sy};
+    float up[3] = {fwd[1] * right[2] - fwd[2] * right[1], fwd[2] * right[0] - fwd[0] * right[2], fwd[0] * right[1] - fwd[1] * right[0]};
+    std::vector<std::pair<float, const Sprite*>> order;
+    order.reserve(sprites.size());
+    for (const Sprite& s : sprites) {
+        float d = (s.pos[0] - cam.x) * fwd[0] + (s.pos[1] - cam.y) * fwd[1] + (s.pos[2] - cam.z) * fwd[2];
+        if (d > 0.1f) order.push_back({d, &s});
+    }
+    std::sort(order.begin(), order.end(), [](const auto& a, const auto& b) { return a.first > b.first; });
+    glUseProgram(fx_prog);
+    glUniformMatrix4fv(glGetUniformLocation(fx_prog, "vp"), 1, GL_FALSE, vp.m);
+    glUniform1i(glGetUniformLocation(fx_prog, "tex"), 0);
+    glActiveTexture(GL_TEXTURE0);
+    glBindVertexArray(fx_vao);
+    glBindBuffer(GL_ARRAY_BUFFER, fx_vbo);
+    glEnable(GL_BLEND);
+    glDepthMask(GL_FALSE);
+    std::vector<float> v;
+    for (size_t i = 0; i < order.size();) {  // runs of one texture and blend mode
+        const Sprite& first = *order[i].second;
+        v.clear();
+        for (; i < order.size() && *order[i].second->texture == *first.texture && order[i].second->additive == first.additive; ++i) {
+            const Sprite& s = *order[i].second;
+            int n = std::max(1, static_cast<int>(std::lround(std::sqrt(static_cast<float>(s.frames)))));
+            float nf = static_cast<float>(n), u0 = static_cast<float>(s.frame % n) / nf, v0 = static_cast<float>((s.frame / n) % n) / nf, du = 1.0f / nf;
+            float h = s.size * 0.5f, w = h * (s.ratio > 0 ? s.ratio : 1.0f), a = s.rotation * 3.14159265f / 180, ca = std::cos(a), sa = std::sin(a);
+            float cx[4] = {-w, w, -w, w}, cyy[4] = {-h, -h, h, h}, uu[4] = {u0, u0 + du, u0, u0 + du}, vv[4] = {v0 + du, v0 + du, v0, v0};
+            for (int c : {0, 1, 2, 2, 1, 3}) {
+                float x = cx[c] * ca - cyy[c] * sa, y = cx[c] * sa + cyy[c] * ca;
+                v.insert(v.end(), {s.pos[0] + right[0] * x + up[0] * y, s.pos[1] + right[1] * x + up[1] * y, s.pos[2] + right[2] * x + up[2] * y,
+                                   uu[c], vv[c], s.rgba[0], s.rgba[1], s.rgba[2], s.rgba[3]});
+            }
+        }
+        glBlendFunc(GL_SRC_ALPHA, first.additive ? GL_ONE : GL_ONE_MINUS_SRC_ALPHA);
+        glBindTexture(GL_TEXTURE_2D, textures->get(*first.texture));
+        glBufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(v.size() * 4), v.data(), GL_STREAM_DRAW);
+        glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(v.size() / 9));
+    }
+    glDepthMask(GL_TRUE);
+    glDisable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glUseProgram(prog);
+}
 
 Renderer::Impl::Impl(const Vfs& vfs_, Con& con, const Heightmap& hm, const TerrainInfo& info, const std::vector<DrawItem>& scene, bool objects)
     : vfs(vfs_) {
@@ -643,7 +715,7 @@ Renderer::Impl::Impl(const Vfs& vfs_, Con& con, const Heightmap& hm, const Terra
 }
 
 void Renderer::Impl::draw(const std::vector<DrawItem>& scene, const Camera& cam, int W, int H, float seconds, bool show_collision,
-                          const std::vector<float>& projectiles, const std::vector<SoldierView>& soldiers) {
+                          const std::vector<float>& projectiles, const std::vector<SoldierView>& soldiers, const std::vector<Sprite>& sprites) {
     const Mat4 identity = Mat4::identity();
         glViewport(0, 0, W, H);
         glClearColor(fogc[0], fogc[1], fogc[2], 1);
@@ -846,6 +918,8 @@ void Renderer::Impl::draw(const std::vector<DrawItem>& scene, const Camera& cam,
                 glDrawArrays(GL_LINES, 0, static_cast<GLsizei>(lines.size() / 10));
             }
         }
+        draw_sprites(sprites, cam, vp);
+        glBindVertexArray(vao);
         if (fov1p > 0) {  // the 1p rig sits 0.2-0.5 m from the eye: a near plane of 5 cm, depth cleared
             glClear(GL_DEPTH_BUFFER_BIT);
             Mat4 vp1 = perspective(fov1p, static_cast<float>(W) / static_cast<float>(H), 0.05f, 50.0f) * view(cam.x, cam.y, cam.z, cam.yaw, cam.pitch);
@@ -862,8 +936,8 @@ Renderer::Renderer(const Vfs& vfs, Con& con, const Heightmap& hm, const TerrainI
 Renderer::~Renderer() = default;
 
 void Renderer::draw(const std::vector<DrawItem>& scene, const Camera& cam, int w, int h, float seconds, bool show_collision,
-                    const std::vector<float>& projectiles, const std::vector<SoldierView>& soldiers) {
-    p_->draw(scene, cam, w, h, seconds, show_collision, projectiles, soldiers);
+                    const std::vector<float>& projectiles, const std::vector<SoldierView>& soldiers, const std::vector<Sprite>& sprites) {
+    p_->draw(scene, cam, w, h, seconds, show_collision, projectiles, soldiers, sprites);
 }
 
 const float* Renderer::clear_colour() const { return p_->fogc; }

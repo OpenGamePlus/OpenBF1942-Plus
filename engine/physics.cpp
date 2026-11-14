@@ -317,6 +317,8 @@ WeaponDef weapon_def(const Con& con, const std::string& name) {
         else if (k == "fireonce") wd.fire_once = std::atoi(a[0].c_str()) != 0;
         else if (k == "ammotype") wd.ammo_type = std::atoi(a[0].c_str());
         else if (k == "magtype") wd.heals = std::atoi(a[0].c_str()) == 1;
+        else if (k == "addtemplate" && wd.muzzle.empty())  // its EffectBundle child: the muzzle flash (e_MuzzGun)
+            if (const ConObject* c = find(con, a[0]); c && lower(c->type) == "effectbundle" && lower(a[0]).find("muzz") != std::string::npos) wd.muzzle = lower(a[0]);
     }
     if (wd.heals) return wd.name = lower(name), wd;  // a medic pack: no projectile
     const ConObject* p = proj.empty() ? nullptr : find(con, proj);

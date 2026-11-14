@@ -19,9 +19,9 @@ public:
     // Uploads everything the scene uses; scene items must not be added or removed afterwards.
     Renderer(const Vfs& vfs, Con& con, const Heightmap& hm, const TerrainInfo& info, const std::vector<DrawItem>& scene, bool objects);
     ~Renderer();
-    // seconds: animation clock; projectiles: 6 floats each (position, velocity), drawn as tracers.
+    // seconds: animation clock; projectiles: 6 floats each (position, velocity), drawn as tracers; sprites: effects.
     void draw(const std::vector<DrawItem>& scene, const Camera& cam, int w, int h, float seconds, bool show_collision,
-              const std::vector<float>& projectiles, const std::vector<SoldierView>& soldiers);
+              const std::vector<float>& projectiles, const std::vector<SoldierView>& soldiers, const std::vector<Sprite>& sprites = {});
     // Screen-space quads over the frame; font_texture: VFS path of the font image (loaded once).
     void hud(const std::vector<HudQuad>& quads, int w, int h, const std::string& font_texture);
     void save_ppm(const std::string& path, int w, int h) const;

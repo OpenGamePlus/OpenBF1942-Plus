@@ -11,6 +11,7 @@
 
 #include "con.h"
 #include "conquest.h"
+#include "effects.h"
 #include "damage.h"
 #include "hud.h"
 #include "mat.h"
@@ -88,6 +89,7 @@ public:
     void step(float t, float dt, const GameInput& in);  // live play: t is the wall clock in seconds
     void demo(float sim_seconds);                        // --shot: the scripted run for --play or --drive
     void pose();                                         // scene matrices, soldier views, camera
+    std::vector<Sprite> effect_sprites() const { return effects.sprites(); }
     bool controls_camera() const { return cur >= 0 || player >= 0; }
     HudInfo hud_info() const;                            // what the on-screen HUD shows now
     void print_weapon() const;
@@ -189,6 +191,14 @@ private:
         Mat4 start;  // where it was placed
         bool gear_down = true;  // aircraft landing gear
         float gear_moving = 0;  // seconds of gear travel left
+        struct ArmorFx {  // addArmorEffect <hp> <effect> <pos>: running while hp is below <hp>; 0: on destruction
+            float below = 0;
+            std::string effect;
+            float pos[3] = {};
+            int id = -1;
+        };
+        std::vector<ArmorFx> armor_fx;
+        float wrecked_at = 0;
     };
     // LandingGear settings of an aircraft (its first LandingGear part), defaults as the Mac client's template;
     // travel = setMaxRotation / setMaxSpeed (shortcut: the original stops the sound when the rotation stops).
@@ -270,6 +280,9 @@ private:
 
     const Vfs& vfs;
     Con& con;
+    Effects effects{con};  // smoke, fire, explosions, muzzle flashes (visual only)
+    void effect(const std::string& name, const float pos[3], const float dir[3] = nullptr, bool sound = true);
+    void armor_effects();
     const Heightmap& hm;
     const TerrainInfo& info;
     std::vector<DrawItem>& scene;

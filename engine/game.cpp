@@ -464,6 +464,14 @@ void Game::add_vehicle(const std::string& name, Mat4 world, int team_on) {
     for (DrawItem& item : build_object(con, vfs, name, Mat4::identity(), skipped, nullptr, nullptr, true))
         ++v.wreck_parts, scene.push_back(std::move(item));
     v.hp = def->hitpoints, v.material = def->material;
+    if (const ConObject* t = object_template(name))
+        for (auto& [k, a] : t->props)
+            if (k == "addarmoreffect" && a.size() >= 3) {
+                Veh::ArmorFx fx;
+                fx.below = static_cast<float>(std::atof(a[0].c_str())), fx.effect = a[1];
+                parse_vec3(a[2], fx.pos);
+                if (std::isfinite(fx.below) && fx.below >= 0) v.armor_fx.push_back(fx);  // -1: in water (not drawn)
+            }
     for (const SeatDef& sd : def->seats) {
         Seat st;
         st.weapon = sd.weapon;
@@ -749,6 +757,7 @@ void Game::fire(float t) {
         float pos[3], vel[3];
         for (int i = 0; i < 3; ++i) d[i] /= l, pos[i] = m.m[12 + i] + d[i] * (st.has_muzzle ? 1.0f : v.len), vel[i] = d[i] * w.velocity;
         fire(w, pos, vel, v.id, -1, team);
+        effect(w.muzzle, pos, d, false);
         sounds.push_back({w.name, {pos[0], pos[1], pos[2]}, 100000 + 16 * v.id + seat});
     } else if (player >= 0 && hand.heals) {
         heal(t);
@@ -759,6 +768,7 @@ void Game::fire(float t) {
         for (int i = 0; i < 3; ++i) pos[i] = p[i] + (i == 1 ? eye_height() : 0.0f) + d[i] * 0.6f, vel[i] = d[i] * hand.velocity;
         int id = fire(hand, pos, vel, -1, player, team);
         last_shot = t;
+        if (!first_person) effect(hand.muzzle, pos, d, false);  // shortcut: none in first person (the 1p gun is drawn apart)
         if (id >= 0 && hand.bounce && hand.ttl > 60) placed.push_back({id, hand.near, -1, hand.radius, t});  // not a grenade: waits for a trigger
         sounds.push_back({hand.name, {pos[0], pos[1], pos[2]}, -1});
     }
@@ -1036,7 +1046,15 @@ void Game::apply_hits() {
         static_cast<void>(armour);
 #endif
         if (v.hp > 0) return;
-        v.wrecked = true, ++wrecks;
+        v.wrecked = true, v.wrecked_at = now, ++wrecks;
+        {
+            Mat4 m = phys.transform(v.id);
+            for (const Veh::ArmorFx& fx : v.armor_fx)
+                if (fx.below == 0) {
+                    float at[3] = {m.m[12], m.m[13], m.m[14]};
+                    effect(fx.effect, at);
+                }
+        }
         std::printf("%s destroyed\n", v.name.c_str());
         for (Seat& st : v.seats)
             if (st.who >= 0) {
@@ -1050,7 +1068,7 @@ void Game::apply_hits() {
     };
     for (const Physics::Hit& h : phys.take_hits()) {
         if (auto fx = end_effects.find(h.shot); fx != end_effects.end()) {
-            sounds.push_back({fx->second, {h.pos[0], h.pos[1], h.pos[2]}, -1, false, true});
+            effect(fx->second, h.pos);
             end_effects.erase(fx);
         } else {  // the MaterialManager's effect for what it hit: ricochets, blood, shell explosions
             // shortcut: a static object counts as the ground material under it (hits do not carry the face material)
@@ -1059,7 +1077,7 @@ void Game::apply_hits() {
                 if (h.vehicle >= 0 && v.id == h.vehicle) target = h.armor >= 0 ? h.armor : v.material;
             std::string fx2 = damage.effect(h.material, target);
             if (fx2.empty() && h.material2 >= 0) fx2 = damage.effect(h.material2, target);
-            if (!fx2.empty()) sounds.push_back({fx2, {h.pos[0], h.pos[1], h.pos[2]}, -1, false, true});
+            if (!fx2.empty()) effect(fx2, h.pos);
         }
         bool splash = h.radius > 0 && h.material2 >= 0;
         auto direct = [&](int target) {
@@ -1422,6 +1440,7 @@ void Game::think(float t, float step) {
                 float l = std::sqrt(dir[0] * dir[0] + dir[1] * dir[1] + dir[2] * dir[2]), pos[3], vel[3];
                 for (int i = 0; i < 3; ++i) pos[i] = eye[i] + dir[i] / l * 0.6f, vel[i] = dir[i] / l * gun.velocity;
                 fire(gun, pos, vel, -1, b.ch, b.team);
+                effect(gun.muzzle, pos, dir, false);
                 b.last_shot = t;
                 sounds.push_back({gun.name, {pos[0], pos[1], pos[2]}, static_cast<int>(bi)});
             }
@@ -1673,6 +1692,46 @@ void Game::step(float t, float dt, const GameInput& in) {
     apply_hits();
     footsteps(t, dt);
     landing_gear(dt);
+    armor_effects();
+    effects.step(dt);
+}
+
+// An effect at pos with its z axis ("Dof") along dir; without one, up (shortcut: impacts face up, not along the hit
+// surface's normal, which hits do not carry). sound: also its sound script (EffectBundle loadSoundScript).
+void Game::effect(const std::string& name, const float pos[3], const float dir[3], bool sound) {
+    if (name.empty()) return;
+    if (sound) sounds.push_back({name, {pos[0], pos[1], pos[2]}, -1, false, true});
+    float z[3] = {0, 1, 0};
+    if (dir) {
+        float l = std::sqrt(dir[0] * dir[0] + dir[1] * dir[1] + dir[2] * dir[2]);
+        if (l > 1e-6f) z[0] = dir[0] / l, z[1] = dir[1] / l, z[2] = dir[2] / l;
+    }
+    float ref[3] = {0, 1, 0};
+    if (std::fabs(z[1]) > 0.9f) ref[1] = 0, ref[2] = 1;
+    float x[3] = {ref[1] * z[2] - ref[2] * z[1], ref[2] * z[0] - ref[0] * z[2], ref[0] * z[1] - ref[1] * z[0]};
+    float xl = std::sqrt(x[0] * x[0] + x[1] * x[1] + x[2] * x[2]);
+    for (float& c : x) c /= xl;
+    float y[3] = {z[1] * x[2] - z[2] * x[1], z[2] * x[0] - z[0] * x[2], z[0] * x[1] - z[1] * x[0]};
+    Mat4 m = Mat4::identity();
+    for (int i = 0; i < 3; ++i) m.m[i] = x[i], m.m[4 + i] = y[i], m.m[8 + i] = z[i], m.m[12 + i] = pos[i];
+    effects.spawn(name, m);
+}
+
+// Damage smoke and fire (addArmorEffect) while a vehicle's hit points are below their mark, on its body; a wreck
+// burns on for 30 s (guessed: the original wreck's lifetime is unread).
+void Game::armor_effects() {
+    for (Veh& v : vehicles) {
+        if (v.armor_fx.empty()) continue;
+        Mat4 m = phys.transform(v.id);
+        for (Veh::ArmorFx& fx : v.armor_fx) {
+            if (fx.below <= 0) continue;
+            bool want = v.hp < fx.below && !(v.wrecked && now - v.wrecked_at > 30);
+            Mat4 at = m * translate(fx.pos[0], fx.pos[1], fx.pos[2]);
+            if (want && (fx.id < 0 || !effects.alive(fx.id))) fx.id = effects.spawn(fx.effect, at);  // again if it ran out
+            else if (want) effects.move(fx.id, at);
+            else if (fx.id >= 0) effects.stop(fx.id), fx.id = -1;
+        }
+    }
 }
 
 void Game::demo(float sim_seconds) {
@@ -1690,6 +1749,8 @@ void Game::demo_play(float sim_seconds) {
         think(now, 1.0f / 60);
         phys.step(1.0f / 60);
         apply_hits();
+        armor_effects();
+        effects.step(1.0f / 60);
         now += 1.0f / 60;
     };
     auto track = [&](const char* what) {
@@ -1759,6 +1820,8 @@ void Game::demo_vehicle() {
         if (i >= 120 && i % 20 == 0) fire(static_cast<float>(i) / 60.0f);
         phys.step(1.0f / 60);
         apply_hits();
+        armor_effects();
+        effects.step(1.0f / 60);
         Mat4 t = phys.transform(v.id);
         if (i % 30 == 29) std::printf("t %.1f s: pos %.1f %.1f %.1f, up %.2f %.2f %.2f, speed %.1f m/s\n", (i + 1) / 60.0, t.m[12], t.m[13], t.m[14], t.m[4], t.m[5], t.m[6], phys.speed(v.id));
     }
