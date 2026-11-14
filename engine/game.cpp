@@ -493,7 +493,7 @@ void Game::add_vehicle(const std::string& name, Mat4 world, int team_on) {
     }
     for (const SeatDef& sd : def->seats) {
         Seat st;
-        st.weapon = sd.weapon;
+        st.weapon = sd.weapon, st.pco = sd.name;
         std::copy(sd.exit, sd.exit + 3, st.exit), std::copy(sd.pos, sd.pos + 3, st.pos);
         st.at = sd.at, st.show = sd.show;
         // Seat poses (animationStatesVehicle.con): a seat's own states, else sitting / standing by its flags.
@@ -2054,6 +2054,38 @@ HudInfo Game::hud_info() const {
     if (h.ammo_full.empty()) h.ammo_empty.clear();
     for (int t = 1; t <= 2; ++t)
         if (team_skins.count(t)) h.flag_tex[t - 1] = minimap_icon(team_skins.at(t), nullptr);
+    if (cur >= 0) {  // the seat's HUD: setVehicleIcon, setVehicleIconPos, its weapons' icons and bar kinds
+        const Veh& v = vehicles[static_cast<size_t>(cur)];
+        float full = 0;
+        if (const ConObject* t = object_template(v.name))
+            for (auto& [k, a] : t->props)
+                if ((k == "maxhitpoints" || (k == "hitpoints" && full <= 0)) && !a.empty()) full = static_cast<float>(std::atof(a[0].c_str()));
+        h.vehicle_frac = std::clamp(v.hp / (std::isfinite(full) && full > 0 ? full : 100.0f), 0.0f, 1.0f);
+        auto path = [](std::string f) {
+            f = lower(f);
+            f.erase(std::remove(f.begin(), f.end(), '"'), f.end());
+            if (auto dot = f.rfind('.'); dot != std::string::npos) f.erase(dot);
+            return "menu/texture/" + f;
+        };
+        int n = 2;
+        std::string icon[2], bar[2];
+        if (const ConObject* t = object_template(v.seats[static_cast<size_t>(seat)].pco))
+            for (auto& [k, a] : t->props) {
+                if (a.empty()) continue;
+                if (k == "setvehicleicon") h.vehicle_icon = path(a[0]);
+                else if (k == "setvehicleiconpos") {
+                    float p[3] = {};
+                    parse_vec3(a[0], p);
+                    h.seat_x = p[0], h.seat_y = p[1];
+                } else if (k == "setnumberofweaponicons") n = std::clamp(std::atoi(a[0].c_str()), 0, 2);
+                else if (k == "setprimaryammoicon") icon[0] = path(a[0]);
+                else if (k == "setsecondaryammoicon") icon[1] = path(a[0]);
+                else if (k == "setprimaryammobar") bar[0] = lower(a[0]);
+                else if (k == "setsecondaryammobar") bar[1] = lower(a[0]);
+            }
+        for (int i = 0; i < n; ++i)
+            if (!icon[i].empty()) h.vehicle_weapons.push_back({icon[i], bar[i].find("reload") != std::string::npos ? 1 : bar[i].find("heat") != std::string::npos ? 2 : 0});
+    }
     h.mag = hand.mag_size;
     if (cur >= 0) {
         const Veh& v = vehicles[static_cast<size_t>(cur)];

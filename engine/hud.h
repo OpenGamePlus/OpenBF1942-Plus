@@ -60,7 +60,15 @@ struct HudInfo {
     std::string ammo_empty, ammo_full;      // the weapon's setAmmoBar / setAmmoBarFill
     float ammo_rows = 0;                    // setAmmoBarSize: texels of the fill, from the bottom
     float ammo_x = 5, ammo_y = -11;         // setAmomBarPosX / PosY (sic): from the panel's left, the screen's bottom
-    std::string flag_tex[2];                // teams 1, 2: their soldiers' setMinimapIcon (national flag)
+    std::string flag_tex[2];
+    // in a vehicle: its picture (128 x 128) and the seat's spot on it, its hit points, the seat's weapons
+    std::string vehicle_icon;
+    float seat_x = -1, seat_y = -1, vehicle_frac = 1;
+    struct VehicleWeapon {
+        std::string icon;  // setPrimaryAmmoIcon / setSecondaryAmmoIcon
+        int bar = 0;       // setPrimaryAmmoBar: 1 ABAmmoBarReloadBar, 2 ABAmmoBarHeatBar, 0 none
+    };
+    std::vector<VehicleWeapon> vehicle_weapons;                // teams 1, 2: their soldiers' setMinimapIcon (national flag)
     int mag = 0;                            // magSize: a full fill
     float world = 0, map_x = 0, map_z = 0;  // minimap: world size (0: none), the point it centres on
     std::vector<MapIcon> icons;

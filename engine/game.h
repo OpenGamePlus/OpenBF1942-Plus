@@ -179,6 +179,7 @@ private:
         int show = 0;                // as SeatDef::show
         std::string lower, upper;    // the seated soldier's animation states
         int who = -2;  // -2 empty, -1 the player, else a bot
+        std::string pco;  // its PlayerControlObject template (HUD icons)
     };
     struct Veh {
         int id = -1;

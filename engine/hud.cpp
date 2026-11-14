@@ -161,12 +161,34 @@ std::vector<HudQuad> hud_layout(const Font& f, const HudInfo& in, int w, int h) 
         if (!in.reloading) V(mx, my + 64 - rows, 32, rows, in.ammo_full, 0, (64 - rows) / 64, 1, 1);
         vtext(std::to_string(in.rounds), px + 38, 530, 12, in.rounds == 0 && in.spare == 0 && !in.reloading ? axis : white, true);
         vtext(std::to_string(in.spare), px + 56, 575, 10, white, true);
-    } else if (!in.weapon.empty()) {
+    } else if (!in.weapon.empty() && in.vehicle_icon.empty()) {
         std::string wl = in.weapon;
         if (in.rounds >= 0) wl += "  " + std::to_string(in.rounds) + " / " + std::to_string(in.spare) + (in.reloading ? "  RELOADING" : "");
         text(wl, 10 * s, by - lh, in.rounds == 0 && in.spare == 0 && !in.reloading ? axis : white);
     }
-    if (in.vehicle_hp >= 0) {
+    if (!in.vehicle_icon.empty()) {
+        // vehicle: its green health bar (32 x 64 at 174, 525.5), its picture (128 x 128 at 199, 450) with the seat's
+        // dot at setVehicleIconPos, and per weapon (primary at 550, secondary at 670; one icon: the right slot) a
+        // small reload / heat bar, the ammunition bar and a panel with the weapon's icon (shortcut: vehicle guns
+        // have no ammunition count here, so the bars stay full and no number is drawn)
+        const float rows = 64 * in.vehicle_frac;
+        V(174, 525.5f, 32, 64, "menu/texture/ingame/vehicle_healthbar_empty_32x64", 0, 0, 1, 1);
+        V(174, 525.5f + 64 - rows, 32, rows, "menu/texture/ingame/vehicle_healthbar_full_32x64", 0, (64 - rows) / 64, 1, 1);
+        V(199, 450, 128, 128, in.vehicle_icon, 0, 0, 1, 1);
+        const float dot[4] = {0.2f, 0.45f, 1, 1};
+        if (in.seat_x >= 0) V(199 + in.seat_x - 3, 450 + in.seat_y - 3, 6, 6, "menu/texture/minimap/map_dot", 0, 0, 1, 1, dot);
+        size_t n = in.vehicle_weapons.size();
+        for (size_t i = 0; i < n; ++i) {
+            const HudInfo::VehicleWeapon& vw = in.vehicle_weapons[i];
+            float x = (n == 1 || i == 1) ? 670 : 550;
+            // reload bar: green and segmented in the capture (the vehicle health bar's art, shrunk); heat: the empty heat bar
+            if (vw.bar == 1) V(x, 547, 24.4f, 41, "menu/texture/ingame/vehicle_healthbar_full_32x64", 0, 0, 1, 1);
+            else if (vw.bar == 2) V(x, 545, 32, 64, "menu/texture/ingame/heatbar_empty_32x64", 0, 0, 1, 1);
+            V(x + 19, 525.5f, 32, 64, "menu/texture/ingame/ammobar_full_32x64", 0, 0, 1, 1);
+            V(x + 40, 525.5f, 64, 64, "menu/texture/ingame/ammobar_vehicle_panel_64x64", 0, 0, 1, 1);
+            V(x + 40, 525.5f, 64, 64, vw.icon, 0, 0, 1, 1);
+        }
+    } else if (in.vehicle_hp >= 0) {
         std::string v = in.vehicle + "  " + std::to_string(in.vehicle_hp);
         text(v, W - 10 * s - text_width(f, v, s), in.ammo_empty.empty() ? by : 527 * sy - lh, white);
     }

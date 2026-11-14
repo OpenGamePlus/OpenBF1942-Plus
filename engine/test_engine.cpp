@@ -868,6 +868,16 @@ int main() {
             assert(std::fabs(af.h - 20 * 0.8f) < 1e-4f && std::fabs(af.v0 - 44.0f / 64) < 1e-5f);  // half of 40 rows
             assert(std::fabs(af.x - (691 + 5) * 0.8f) < 1e-4f && std::fabs(af.y + af.h - (600 - 11) * 0.8f) < 1e-3f);  // setAmomBarPosX / Y
         }
+        {  // vehicle: health bar filled by hit points, the picture with the seat dot, one weapon icon in the right slot
+            HudInfo v = info;
+            v.vehicle_icon = "vi", v.seat_x = 54, v.seat_y = 103, v.vehicle_frac = 0.5f, v.vehicle_weapons = {{"wi", 1}};
+            std::vector<HudQuad> vq = hud_layout(f, v, 800, 600);
+            auto find = [&](const std::string& n) { return *std::find_if(vq.begin(), vq.end(), [&](const HudQuad& q) { return q.tex == n; }); };
+            assert(find("vi").x == 199 && find("vi").w == 128);
+            assert(find("menu/texture/minimap/map_dot").x == 199 + 54 - 3);
+            assert(find("menu/texture/ingame/vehicle_healthbar_full_32x64").h == 32);  // half of 64 rows (the first: health)
+            assert(find("wi").x == 710);
+        }
         {  // radio bar: closed, a button per key in its slot; open, the category above and the row below (empty keys skipped)
             HudInfo r = info;
             r.radio_bar = true;
