@@ -11,7 +11,7 @@ Effects are object templates in `objects/effects/<name>/effects.con` (202 folder
 | `EffectBundle` | 71 | an effect: `addTemplate` children (emitters), each placed by the `setPosition` / `setRotation` that follow it; `timeToLive` (`-1`: until stopped); `loadSoundScript` (its sound, [sound.md](sound.md)); `addWorkOnMaterial <n>` (only over terrain material `n`; `1` read as water) |
 | `Emitter` | 111 | `template <particle>`; emits for `timeToLive` seconds at `intensity` particles per second, after `delay`; `looping 1` repeats |
 | `SpriteParticle` | 84 | a camera-facing textured quad |
-| `Particle` | 17 | a mesh particle (`geometry`): 3p muzzle flashes, debris; **not drawn** |
+| `Particle` | 17 | a mesh particle (`geometry`, a `GeometryTemplate` whose `file` names `standardmesh/<file>.sm`): muzzle flashes, ricochet glints, debris |
 | `SimpleObject` | 23 | geometry used by the above |
 
 ## Values
@@ -27,13 +27,16 @@ Effects are object templates in `objects/effects/<name>/effects.con` (202 folder
 | `relativePositionIn{Right,Up,Dof}` | start offset in the emitter's frame (x, y, z) |
 | `positionalSpeedIn{Right,Up,Dof}` | start velocity in the emitter's frame |
 | `addEmitterSpeed`, `emitterSpeedScale` | adds the carrier's velocity, scaled |
-| `showInFirstPerson` / `showInThirdPerson` | first-person-only emitters are left out |
+| `showInFirstPerson` / `showInThirdPerson` | the world shows emitters without `showInFirstPerson` or with both; the first-person view those with `showInFirstPerson` or neither |
 | `IntensityAtSpeed` | full intensity from this carrier speed (m/s), proportionally less below |
 | `moveToWaterSurface` | particles start at the water level |
 
 Not read: `startRotation`, `rotationalSpeedIn*`, `hasOverDamage`, `startProbability`, `moveToWaterSurface`, `lodDistance`.
 
 ## Particle fields we read
+
+Mesh particles take the emitter's axes when emitted, turned about its z by `initRotation` / `rotationSpeed`, scaled by `size` × `sizeOverTime` (1 when absent), tinted by `colorRGBAOverTime`; their `.rs` blending applies (`transparent true`, `blendDest one`: added without writing depth; the muzzle flashes), others are drawn opaque, unlit.
+
 
 `timeToLive`, `size` (quad edge in metres), `sizeOverTime`, `gravityModifier` (× 9.81 m/s² downwards; negative rises) and its curve, `drag` (velocity loss per second), `initRotation` and `rotationSpeed` (degrees, degrees per second) and its curve, `XYSizeRatio`, `colorRGBAOverTime`, `alphaOverTime`, `texture` (`texture/<name>`), `destBlendMode` (`BMOne` adds; otherwise alpha blending), `numAnimationFrames` (a square grid of frames, row by row), `initAnimationFrame`, `animationSpeed` (frames per second).
 
@@ -43,7 +46,7 @@ Not read: `srcBlendMode`, `hasStaticColor`, `animationSpeedOverTime`, `dragOverT
 
 | Source | Field | Shown |
 |---|---|---|
-| Hand and vehicle weapons | an `EffectBundle` child whose name has `muzz` (`e_MuzzGun`) | at the muzzle on each shot, facing the shot; none for the player in first person |
+| Hand and vehicle weapons | an `EffectBundle` child whose name has `muzz` (`e_MuzzGun`), placed by its `setPosition` | at the muzzle on each shot, facing the shot; in first person the renderer shows the 1p emitters at that point of the 1p weapon (on its main bone, turned as the weapon) and draws them with the arms |
 | Projectiles | `endEffectTemplate` | where the shot ends |
 | Hits without one | the MaterialManager's effect for the pair ([weapons.md](weapons.md)) | ricochets, blood, sand |
 | Vehicle parts | an `EffectBundle` child anywhere in the vehicle tree, outside its weapons (`e_wdustPanz` on track wheels, `e_ExFumePanz`, `e_WaterFrontBig`) | while the vehicle has a driver and is not wrecked, at the part's rest position, over its listed materials and within 1.5 m of that ground or the water |
@@ -53,4 +56,4 @@ Impacts face up (hits do not carry the surface normal). A wreck's damage effects
 
 ## Use in the engine
 
-`engine/effects.*` (game library, no GL) parses the templates on first use and simulates particles on the CPU; `Game` spawns them and the renderer draws `Game::effect_sprites()` after the world and before the first-person weapon, farthest first, depth-tested without writing depth. A cap of 400 particles per emitter (guessed). Tested on a synthetic bundle in `test_engine`.
+`engine/effects.*` (game library, no GL) parses the templates on first use and simulates particles on the CPU; `Game` spawns them and the renderer draws `Game::effect_sprites()` after the world and before the first-person weapon, farthest first, depth-tested without writing depth. A cap of 400 particles per emitter (guessed). An emitter's first particle leaves at once (a flash cannot wait for its rate), the rest at `intensity` per second. Tested on a synthetic bundle in `test_engine`.

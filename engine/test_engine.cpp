@@ -677,7 +677,12 @@ int main() {
                          "ObjectTemplate.texture e_Smoke5\nObjectTemplate.destBlendMode BMOne\n"
                          "ObjectTemplate.colorRGBAOverTime 0/255/255/255/255|100/255/255/255/0\n"
                          "ObjectTemplate.create Emitter em_Mesh\nObjectTemplate.template fx_Mesh\n"
-                         "ObjectTemplate.create Particle fx_Mesh\nObjectTemplate.geometry m\n";
+                         "ObjectTemplate.create Particle fx_Mesh\nObjectTemplate.geometry m\n"
+                         "GeometryTemplate.create StandardMesh g_M\nGeometryTemplate.file M_m1\n"
+                         "ObjectTemplate.create EffectBundle e_P\nObjectTemplate.addTemplate em_P1\n"
+                         "ObjectTemplate.create Emitter em_P1\nObjectTemplate.template fx_P\nObjectTemplate.timeToLive CRD_NONE/0.1/0/0\n"
+                         "ObjectTemplate.intensity CRD_NONE/10/0/0\nObjectTemplate.showInFirstPerson 1\n"
+                         "ObjectTemplate.create Particle fx_P\nObjectTemplate.geometry g_M\nObjectTemplate.size CRD_NONE/0.2/0/0\n";
         vfs.add("objects/effects/t/effects.con", std::vector<uint8_t>(fx.begin(), fx.end()));
         Con con(vfs);
         con.run("objects/effects/t/effects.con");
@@ -687,7 +692,7 @@ int main() {
         assert(id >= 0);
         for (int i = 0; i < 6; ++i) e.step(1 / 60.0f);
         std::vector<Sprite> sp = e.sprites();
-        assert(e.particles() == 2 && sp.size() == 2);  // 0.1 s x 20 per s, from 0.5 owed: two by 0.1 s
+        assert(e.particles() >= 2 && e.particles() <= 3 && sp.size() == e.particles());  // one at once, then 0.1 s x 20 per s
         assert(std::fabs(sp[0].pos[0] - 10) < 1e-4f && sp[0].pos[1] > 1 && sp[0].additive && *sp[0].texture == "texture/e_smoke5");
         float y0 = sp[0].pos[1], s0 = sp[0].size, a0 = sp[0].rgba[3];
         for (int i = 0; i < 12; ++i) e.step(1 / 60.0f);
@@ -695,6 +700,12 @@ int main() {
         assert(!sp.empty() && sp[0].pos[1] > y0 && sp[0].size > s0 && sp[0].rgba[3] < a0);  // rises, grows, fades
         for (int i = 0; i < 120; ++i) e.step(1 / 60.0f);
         assert(e.particles() == 0 && e.running() == 0);  // the bundle's 1 s and the particles' 0.5 s are over
+        // a first-person-only emitter of mesh particles: none in the world's view; in the 1p view, its geometry's file
+        assert(e.spawn("e_P", Mat4::identity()) < 0 && e.spawn("e_P", translate(0, 2, 0), nullptr, 1) >= 0);
+        e.step(1 / 60.0f);  // the first particle leaves at once
+        std::vector<MeshParticle> mp = e.meshes();
+        assert(mp.size() == 1 && e.sprites().empty() && *mp[0].mesh == "standardmesh/m_m1.sm");
+        assert(std::fabs(mp[0].world.m[13] - 2) < 1e-4f && std::fabs(std::sqrt(mp[0].world.m[8] * mp[0].world.m[8] + mp[0].world.m[9] * mp[0].world.m[9] + mp[0].world.m[10] * mp[0].world.m[10]) - 0.2f) < 1e-4f);
     }
 
     {  // audio: wav, sound script, mixer

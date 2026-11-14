@@ -2,6 +2,10 @@
 
 Append-only. Newest first. At most 3 bullets per stage.
 
+## 2026-11-14 — C3: mesh particles, first-person muzzle flash
+
+- `Particle` templates draw their geometry (blending from its `.rs`: the flashes add). Emitters carry their view flags; the renderer spawns the held weapon's first-person emitters at its muzzle (the weapon's `setPosition` for the effect) and draws them with the arms. Checked on a screenshot (Thompson, first person); tested; Berlin 300 s identical.
+
 ## 2026-11-14 — C3: dust, exhaust and wakes
 
 - Effects on vehicle parts (track and wheel dust, exhaust, bow waves, plane water touch) run while driven, over the materials their bundle lists (`addWorkOnMaterial`, 1 = water) and scaled by `IntensityAtSpeed`. Checked on a driven Sherman (the material-10 dust variant emits; the other stays off); Berlin 300 s identical.

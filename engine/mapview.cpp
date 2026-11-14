@@ -276,7 +276,7 @@ int run(int argc, char** argv) {
         game.phys.projectiles(projectiles);
         // shortcut: the .baf frame rate is a guess; --shot renders at t = 1 s so captures are repeatable.
         float seconds = shot.empty() ? static_cast<float>(SDL_GetTicks()) / 1000.0f : 1.0f;
-        renderer.draw(scene, cam, W, H, seconds, show_collision, projectiles, game.soldiers, game.effect_sprites());
+        renderer.draw(scene, cam, W, H, seconds, show_collision, projectiles, game.soldiers, game.effect_sprites(), game.effect_meshes());
         if (has_font) renderer.hud(hud_layout(font, game.hud_info(), W, H), W, H, font.texture);
         if (!shot.empty()) {
             renderer.save_ppm(shot, W, H);

@@ -60,6 +60,9 @@ struct SoldierView {
     std::string weapon;                      // state animating the held weapon's skeleton (WeaponReloadThompson)
     float weapon_hold = -1;                  // as upper_hold, for the weapon state
     float lower_hold = -1;                   // >= 0: the lower state plays once from this time (jumps)
+    std::string muzzle;                      // first person: the held weapon's muzzle effect (e_MuzzGun)
+    float muzzle_pos[3] = {};                //   its place on the weapon (the weapon template's setPosition)
+    float shot = -1;                         //   the last shot's game time: a new one shows the effect
 };
 
 // Rounds in the weapon and spare magazines. numOfMag read as all magazines, the loaded one included (unverified).
@@ -90,6 +93,7 @@ public:
     void demo(float sim_seconds);                        // --shot: the scripted run for --play or --drive
     void pose();                                         // scene matrices, soldier views, camera
     std::vector<Sprite> effect_sprites() const { return effects.sprites(); }
+    std::vector<MeshParticle> effect_meshes() const { return effects.meshes(); }
     bool controls_camera() const { return cur >= 0 || player >= 0; }
     HudInfo hud_info() const;                            // what the on-screen HUD shows now
     void print_weapon() const;

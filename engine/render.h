@@ -21,7 +21,8 @@ public:
     ~Renderer();
     // seconds: animation clock; projectiles: 6 floats each (position, velocity), drawn as tracers; sprites: effects.
     void draw(const std::vector<DrawItem>& scene, const Camera& cam, int w, int h, float seconds, bool show_collision,
-              const std::vector<float>& projectiles, const std::vector<SoldierView>& soldiers, const std::vector<Sprite>& sprites = {});
+              const std::vector<float>& projectiles, const std::vector<SoldierView>& soldiers, const std::vector<Sprite>& sprites = {},
+              const std::vector<MeshParticle>& fx_meshes = {});
     // Screen-space quads over the frame; font_texture: VFS path of the font image (loaded once).
     void hud(const std::vector<HudQuad>& quads, int w, int h, const std::string& font_texture);
     void save_ppm(const std::string& path, int w, int h) const;

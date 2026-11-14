@@ -67,6 +67,7 @@ struct WeaponDef {
     float near = 0;                     // explodeNearEnemyDistance (mines), 0: none
     bool heals = false;                 // magType 1: a medic pack ("healing type"), fires no projectile
     std::string muzzle;                 // its EffectBundle child (e_MuzzGun): shown at the muzzle on each shot
+    float muzzle_pos[3] = {};           // that child's setPosition on the weapon
 };
 
 // A crew position: the vehicle's own PlayerControlObject (seat 0, the driver) or one nested in it (gunners, passengers).

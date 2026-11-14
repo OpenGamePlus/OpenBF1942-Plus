@@ -73,14 +73,20 @@ std::shared_ptr<const ParticleDef> Effects::particle(const std::string& name) {
     if (it != particles_.end()) return it->second;
     std::shared_ptr<ParticleDef> p;
     const ConObject* t = find(con_, name);
-    // shortcut: mesh particles (Particle with a geometry: 3p muzzle flashes, debris) are not drawn
-    if (t && low(t->type) == "spriteparticle") {
+    std::string type = t ? low(t->type) : "";
+    if (type == "spriteparticle" || type == "particle") {
         p = std::make_shared<ParticleDef>();
         p->ttl.a = p->ttl.b = 1, p->size.a = p->size.b = 1, p->ratio.a = p->ratio.b = 1;
         for (auto& [k, a] : t->props) {
             if (a.empty()) continue;
             const std::string& v = a[0];
             if (k == "texture") p->texture = "texture/" + low(v);
+            else if (k == "geometry" && type == "particle") {  // GeometryTemplate <name>: its file
+                if (auto gs = con_.templates.find("geometrytemplate"); gs != con_.templates.end())
+                    if (auto g = gs->second.find(low(v)); g != gs->second.end())
+                        for (auto& [gk, ga] : g->second.props)
+                            if (gk == "file" && !ga.empty()) p->mesh = "standardmesh/" + low(ga[0]) + ".sm";
+            }
             else if (k == "timetolive") p->ttl = crd_parse(v);
             else if (k == "size") p->size = crd_parse(v);
             else if (k == "gravitymodifier") p->gravity = crd_parse(v);
@@ -101,6 +107,7 @@ std::shared_ptr<const ParticleDef> Effects::particle(const std::string& name) {
                     if (auto c = split(key, '/'); c.size() >= 5) p->color.push_back({num(c[0]), num(c[1]), num(c[2]), num(c[3]), num(c[4])});
         }
         std::sort(p->color.begin(), p->color.end());
+        if (type == "particle" && p->mesh.empty()) p = nullptr;
     }
     return particles_[low(name)] = p;
 }
@@ -115,7 +122,7 @@ const EffectDef* Effects::def(const std::string& name) {
             if (!e || low(e->type) != "emitter") return;
             EmitterDef ed;
             ed.local = local, ed.ttl.a = ed.ttl.b = -1;
-            bool first_only = false, third = false;
+
             for (auto& [k, a] : e->props) {
                 if (a.empty()) continue;
                 const std::string& v = a[0];
@@ -134,11 +141,10 @@ const EffectDef* Effects::def(const std::string& name) {
                 else if (k == "positionalspeedindof") ed.speed[2] = crd_parse(v);
                 else if (k == "intensityatspeed") ed.at_speed = std::max(0.0f, num(v));
                 else if (k == "movetowatersurface") ed.to_water = num(v) != 0;
-                else if (k == "showinfirstperson") first_only = num(v) != 0;
-                else if (k == "showinthirdperson") third = num(v) != 0;
+                else if (k == "showinfirstperson") ed.first = num(v) != 0;
+                else if (k == "showinthirdperson") ed.third = num(v) != 0;
             }
-            // shortcut: first-person-only emitters (the 1p muzzle flash) are left out: effects are drawn in the world
-            if (ed.particle && !(first_only && !third)) d->emitters.push_back(std::move(ed));
+            if (ed.particle) d->emitters.push_back(std::move(ed));
         };
         if (low(t->type) == "emitter") emitter(name, Mat4::identity());
         // children: addTemplate, then setPosition / setRotation for the one just added
@@ -157,13 +163,16 @@ const EffectDef* Effects::def(const std::string& name) {
     return (defs_[low(name)] = d).get();
 }
 
-int Effects::spawn(const std::string& name, const Mat4& at, const float vel[3]) {
+int Effects::spawn(const std::string& name, const Mat4& at, const float vel[3], int view) {
     const EffectDef* d = name.empty() ? nullptr : def(name);
     if (!d) return -1;
     Run r;
     r.def = defs_[low(name)], r.at = at;
     if (vel) std::copy(vel, vel + 3, r.vel);
-    for (const EmitterDef& e : d->emitters) r.emitters.push_back({&e, e.ttl.sample(rng_), e.delay.sample(rng_), 0.5f, {}});
+    for (const EmitterDef& e : d->emitters)
+        if (view == 1 ? e.first || !e.third : !(e.first && !e.third))
+            r.emitters.push_back({&e, e.ttl.sample(rng_), e.delay.sample(rng_), 1, {}});
+    if (r.emitters.empty()) return -1;
     live_[next_] = std::move(r);
     return next_++;
 }
@@ -204,6 +213,7 @@ void Effects::step(float dt) {
                         p.vel[i] = m.m[i] * s[0] + m.m[4 + i] * s[1] + m.m[8 + i] * s[2] + (e.add_speed ? r.vel[i] * e.speed_scale : 0.0f);
                     }
                     if (e.to_water) p.pos[1] = water_level;
+                    for (int i = 0; i < 3; ++i) p.axes[i] = m.m[i], p.axes[3 + i] = m.m[4 + i], p.axes[6 + i] = m.m[8 + i];
                     p.ttl = std::max(0.01f, pd.ttl.sample(rng_)), p.size = pd.size.sample(rng_), p.gravity = pd.gravity.sample(rng_);
                     p.drag = pd.drag.sample(rng_), p.rot = pd.rotation.sample(rng_), p.rot_speed = pd.rotation_speed.sample(rng_);
                     p.frame = pd.frame.sample(rng_), p.anim_speed = pd.anim_speed.sample(rng_), p.ratio = pd.ratio.sample(rng_);
@@ -230,6 +240,7 @@ std::vector<Sprite> Effects::sprites() const {
     for (auto& [id, r] : live_)
         for (const EmitterRun& er : r.emitters) {
             const ParticleDef& pd = *er.def->particle;
+            if (!pd.mesh.empty()) continue;
             for (const Particle& p : er.ps) {
                 float f = std::clamp(p.age / p.ttl, 0.0f, 1.0f) * 100;
                 float c[4] = {255, 255, 255, 255};
@@ -250,6 +261,38 @@ std::vector<Sprite> Effects::sprites() const {
                 s.frame = static_cast<int>(std::floor(p.frame)) % pd.frames;
                 if (s.frame < 0) s.frame += pd.frames;
                 if (s.size > 0 && s.rgba[3] > 0) out.push_back(s);
+            }
+        }
+    return out;
+}
+
+// Mesh particles: the emitter's axes at emission, turned about its z ("Dof") by the particle's rotation, scaled by
+// size x sizeOverTime (unverified); coloured by colorRGBAOverTime when it has one.
+std::vector<MeshParticle> Effects::meshes() const {
+    std::vector<MeshParticle> out;
+    for (auto& [id, r] : live_)
+        for (const EmitterRun& er : r.emitters) {
+            const ParticleDef& pd = *er.def->particle;
+            if (pd.mesh.empty()) continue;
+            for (const Particle& p : er.ps) {
+                float f = std::clamp(p.age / p.ttl, 0.0f, 1.0f);
+                float sz = p.size * pd.size_over.at(f), a = p.rot * 3.14159265f / 180, ca = std::cos(a), sa = std::sin(a);
+                MeshParticle mp{};
+                mp.world = Mat4::identity();
+                for (int i = 0; i < 3; ++i) {
+                    float x = p.axes[i], y = p.axes[3 + i];
+                    mp.world.m[i] = (x * ca + y * sa) * sz, mp.world.m[4 + i] = (y * ca - x * sa) * sz;
+                    mp.world.m[8 + i] = p.axes[6 + i] * sz, mp.world.m[12 + i] = p.pos[i];
+                }
+                mp.mesh = &pd.mesh;
+                for (float& c : mp.rgba) c = 1;
+                if (!pd.color.empty()) {
+                    size_t i = 0;
+                    while (i + 1 < pd.color.size() && pd.color[i + 1][0] < f * 100) ++i;
+                    for (int j = 0; j < 4; ++j) mp.rgba[j] = std::clamp(pd.color[i][1 + j] / 255, 0.0f, 1.0f);
+                }
+                mp.rgba[3] *= std::clamp(pd.alpha_t.at(f), 0.0f, 1.0f);
+                if (sz > 0) out.push_back(mp);
             }
         }
     return out;

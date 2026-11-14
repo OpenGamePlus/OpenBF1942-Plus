@@ -1933,6 +1933,8 @@ void Game::pose() {
         if (fp) {
             SoldierView mine = me;
             mine.first = fp_first, mine.parts = fp_parts, mine.first_person = true, mine.fov = 0.75f;
+            mine.muzzle = hand.muzzle, mine.shot = last_shot;
+            std::copy(hand.muzzle_pos, hand.muzzle_pos + 3, mine.muzzle_pos);
             soldiers.push_back(mine);
         } else {
             soldiers.push_back(me);

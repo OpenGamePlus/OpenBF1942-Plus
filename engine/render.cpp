@@ -64,7 +64,8 @@ uniform sampler2DArray tiles;
 uniform sampler2D tex;
 uniform int ntiles;
 uniform float world;
-uniform int mode;  // 0 terrain, 1 water, 2 mesh, 3 skinned mesh, 4 sky, 5 collision lines
+uniform int mode;  // 0 terrain, 1 water, 2 mesh, 3 skinned mesh, 4 sky, 5 collision lines, 6 effect mesh
+uniform vec4 tint;  // mode 6: the particle's colour
 uniform vec3 sun_dir;    // towards the sun
 uniform vec3 ambient;
 uniform vec3 diffuse;
@@ -80,6 +81,7 @@ vec4 fogged(vec4 c) {
 void main() {
     if (mode == 4) { color = vec4(mix(texture(tex, tuv).rgb, fog_color, sky_fog), 1.0); return; }
     if (mode == 5) { color = vec4(1.0, 0.15, 0.1, 1.0); return; }
+    if (mode == 6) { color = fogged(texture(tex, tuv) * tint); return; }  // unlit
     if (mode == 1) { color = fogged(vec4(0.12, 0.30, 0.45, 0.75)); return; }
     vec4 base;
     if (mode >= 2) {
@@ -200,6 +202,7 @@ struct GpuMesh {
         GLuint tex;
         GLsizei count;
         size_t offset;  // bytes into the index buffer
+        bool blend = false, additive = false;  // .rs transparent; blendDest one (effect meshes only)
     };
     std::vector<Part> parts;
 };
@@ -243,7 +246,9 @@ std::unique_ptr<GpuMesh> upload_sm(const SmMesh& m, const std::string& path, con
         for (uint32_t i : sm_triangles(mat)) idx.push_back(base + i);
         auto s = shaders.find(lower(mat.name));
         GLuint t = s != shaders.end() && s->second.count("texture") ? tex.get(s->second.at("texture")) : tex.get("");
-        g->parts.push_back({t, static_cast<GLsizei>(idx.size() - first), first * 4});
+        bool blend = s != shaders.end() && s->second.count("transparent") && lower(s->second.at("transparent")) == "true";
+        bool add = blend && s->second.count("blenddest") && lower(s->second.at("blenddest")) == "one";
+        g->parts.push_back({t, static_cast<GLsizei>(idx.size() - first), first * 4, blend, add});
     }
     upload_buffers(*g, verts, idx);
     if (keep_vertices) *keep_vertices = std::move(verts);
@@ -293,7 +298,7 @@ std::unique_ptr<GpuMesh> upload_tm(const TmMesh& m, Textures& tex) {
         for (auto& p : m.groups[gi]) {
             size_t count = static_cast<size_t>(p.count) * kTmIndicesPer[gi];
             if (p.first + count > idx.size()) throw std::runtime_error("TM: part outside index buffer");
-            g->parts.push_back({tex.get(p.texture), static_cast<GLsizei>(count), static_cast<size_t>(p.first) * 4});
+            g->parts.push_back({tex.get(p.texture), static_cast<GLsizei>(count), static_cast<size_t>(p.first) * 4, false, false});
         }
     upload_buffers(*g, m.vertices, idx);
     return g;
@@ -350,11 +355,47 @@ struct Renderer::Impl {
         return an;
     }
     void draw(const std::vector<DrawItem>& scene, const Camera& cam, int W, int H, float seconds, bool show_collision,
-              const std::vector<float>& projectiles, const std::vector<SoldierView>& soldiers, const std::vector<Sprite>& sprites);
+              const std::vector<float>& projectiles, const std::vector<SoldierView>& soldiers, const std::vector<Sprite>& sprites,
+              const std::vector<MeshParticle>& fx_meshes);
     void draw_sprites(const std::vector<Sprite>& sprites, const Camera& cam, const Mat4& vp);
+    void draw_meshes(const std::vector<MeshParticle>& ms);
     GLuint fx_prog = 0, fx_vao = 0, fx_vbo = 0;
+    std::unique_ptr<Effects> fx1p;  // the first-person muzzle flash, at the 1p weapon (drawn with the arms)
+    float fx1p_shot = -1, fx1p_clock = -1;
     GLuint minimap_tex = 0;  // the colour tiles shrunk to one texture, water tinted: row = z, column = x
 };
+
+// Mesh particles (muzzle flashes, debris): their .rs says how they blend (the flashes add, without writing depth);
+// loaded on first use. Drawn with the main program, current view-projection.
+void Renderer::Impl::draw_meshes(const std::vector<MeshParticle>& ms) {
+    if (ms.empty()) return;
+    GLint u_tint = glGetUniformLocation(prog, "tint");
+    glUniform1i(u_mode, 6);
+    glUniform1i(u_sprite, 0);
+    glUniform1i(u_has_lm, 0);
+    for (const MeshParticle& mp : ms) {
+        auto& g = meshes[*mp.mesh];
+        if (!g) {
+            try {
+                g = upload_sm(sm_parse(vfs.read(*mp.mesh)), *mp.mesh, vfs, *textures);
+            } catch (const std::exception& e) {
+                std::fprintf(stderr, "mesh %s: %s\n", mp.mesh->c_str(), e.what());
+                g = std::make_unique<GpuMesh>();
+            }
+        }
+        if (!g->vao) continue;
+        glUniformMatrix4fv(u_model, 1, GL_FALSE, mp.world.m);
+        glUniform4f(u_tint, mp.rgba[0], mp.rgba[1], mp.rgba[2], mp.rgba[3]);
+        glBindVertexArray(g->vao);
+        for (auto& p : g->parts) {
+            if (p.blend) glEnable(GL_BLEND), glDepthMask(GL_FALSE), glBlendFunc(GL_SRC_ALPHA, p.additive ? GL_ONE : GL_ONE_MINUS_SRC_ALPHA);
+            glBindTexture(GL_TEXTURE_2D, p.tex);
+            glDrawElements(GL_TRIANGLES, p.count, GL_UNSIGNED_INT, reinterpret_cast<void*>(p.offset));
+            if (p.blend) glDisable(GL_BLEND), glDepthMask(GL_TRUE), glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+        }
+    }
+    glUniform1i(u_mode, 2);
+}
 
 // Effect particles: camera-facing quads, farthest first, depth-tested without writing depth; BMOne adds, the rest
 // blends by alpha. A texture of numAnimationFrames is read as a square grid of frames, row by row (unverified).
@@ -618,6 +659,7 @@ Renderer::Impl::Impl(const Vfs& vfs_, Con& con, const Heightmap& hm, const Terra
             }
         }
     }
+    fx1p = std::make_unique<Effects>(con);
     item_mesh.assign(scene.size(), nullptr);
     anim_of_item.assign(scene.size(), -1);
     std::map<std::string, std::shared_ptr<Skin>> skins;
@@ -743,8 +785,11 @@ Renderer::Impl::Impl(const Vfs& vfs_, Con& con, const Heightmap& hm, const Terra
 }
 
 void Renderer::Impl::draw(const std::vector<DrawItem>& scene, const Camera& cam, int W, int H, float seconds, bool show_collision,
-                          const std::vector<float>& projectiles, const std::vector<SoldierView>& soldiers, const std::vector<Sprite>& sprites) {
+                          const std::vector<float>& projectiles, const std::vector<SoldierView>& soldiers, const std::vector<Sprite>& sprites,
+                          const std::vector<MeshParticle>& fx_meshes) {
     const Mat4 identity = Mat4::identity();
+    fx1p->step(fx1p_clock < 0 ? 0.0f : std::clamp(seconds - fx1p_clock, 0.0f, 0.1f));
+    fx1p_clock = seconds;
         glViewport(0, 0, W, H);
         glClearColor(fogc[0], fogc[1], fogc[2], 1);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -877,6 +922,14 @@ void Renderer::Impl::draw(const std::vector<DrawItem>& scene, const Camera& cam,
                 // The turn applies to the meshes, not to the bone offsets: turned with them, the Colt's slide sat
                 // 4 cm behind the frame and the MP40's magazine under the pistol grip.
                 held[i] = at_hand * (*ws)[1].local * rigid_inverse(wp[1]) * wp[bi] * rotation_ypr(180, 0, 0);
+                // a new shot: the weapon's first-person muzzle emitters at its muzzle (the template's setPosition
+                // for the effect, on the main bone's mesh frame), facing along the barrel
+                if (sv.first_person && i == sv.held_first && sv.shot >= 0 && sv.shot != fx1p_shot && !sv.muzzle.empty()) {
+                    fx1p_shot = sv.shot;
+                    fx1p->spawn(sv.muzzle, at_hand * (*ws)[1].local * rotation_ypr(180, 0, 0) * translate(sv.muzzle_pos[0], sv.muzzle_pos[1], sv.muzzle_pos[2]),
+                                nullptr, 1);
+                    fx1p->step(1e-4f);  // its first particles, this frame
+                }
             }
         }
 
@@ -946,6 +999,7 @@ void Renderer::Impl::draw(const std::vector<DrawItem>& scene, const Camera& cam,
                 glDrawArrays(GL_LINES, 0, static_cast<GLsizei>(lines.size() / 10));
             }
         }
+        draw_meshes(fx_meshes);
         draw_sprites(sprites, cam, vp);
         glBindVertexArray(vao);
         if (fov1p > 0) {  // the 1p rig sits 0.2-0.5 m from the eye: a near plane of 5 cm, depth cleared
@@ -954,6 +1008,9 @@ void Renderer::Impl::draw(const std::vector<DrawItem>& scene, const Camera& cam,
             glUniformMatrix4fv(u_vp, 1, GL_FALSE, vp1.m);
             for (size_t i = 0; i < scene.size(); ++i)
                 if (overlay[i]) draw_item(i);
+            draw_meshes(fx1p->meshes());
+            draw_sprites(fx1p->sprites(), cam, vp1);
+            glBindVertexArray(vao);
             glUniformMatrix4fv(u_vp, 1, GL_FALSE, vp.m);
         }
 }
@@ -964,8 +1021,9 @@ Renderer::Renderer(const Vfs& vfs, Con& con, const Heightmap& hm, const TerrainI
 Renderer::~Renderer() = default;
 
 void Renderer::draw(const std::vector<DrawItem>& scene, const Camera& cam, int w, int h, float seconds, bool show_collision,
-                    const std::vector<float>& projectiles, const std::vector<SoldierView>& soldiers, const std::vector<Sprite>& sprites) {
-    p_->draw(scene, cam, w, h, seconds, show_collision, projectiles, soldiers, sprites);
+                    const std::vector<float>& projectiles, const std::vector<SoldierView>& soldiers, const std::vector<Sprite>& sprites,
+                    const std::vector<MeshParticle>& fx_meshes) {
+    p_->draw(scene, cam, w, h, seconds, show_collision, projectiles, soldiers, sprites, fx_meshes);
 }
 
 const float* Renderer::clear_colour() const { return p_->fogc; }
