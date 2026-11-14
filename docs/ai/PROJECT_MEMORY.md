@@ -2,6 +2,10 @@
 
 Append-only. Newest first. At most 3 bullets per stage.
 
+## 2026-11-14 — Held weapon parts placed on their bones
+
+- The maintainer's screenshot showed the Colt's slide always back: the 180° turn on held weapons was applied before each part's bone offset, mirroring it. Turning the meshes after the offsets puts the slide over the barrel and the MP40's magazine in its well (checked against mesh bounds).
+
 ## 2026-11-14 — B2: movement animations; legs at their own speed
 
 - Swim, ladder (up, down backwards, idle), free fall, parachute and jump states replace walking, hiding the weapon where the state does; `pose()` plays negative speeds backwards (tested), and legs now run at their own state's speed (`Lb_RunBackward` had been playing forwards).

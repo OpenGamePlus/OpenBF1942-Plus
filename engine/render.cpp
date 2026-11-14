@@ -771,7 +771,9 @@ void Renderer::Impl::draw(const std::vector<DrawItem>& scene, const Camera& cam,
                 size_t bi = 1;
                 for (size_t b = 0; b < ws->size(); ++b)
                     if (lower((*ws)[b].name) == it.bone) bi = b;
-                held[i] = at_hand * (*ws)[1].local * rotation_ypr(180, 0, 0) * rigid_inverse(wp[1]) * wp[bi];
+                // The turn applies to the meshes, not to the bone offsets: turned with them, the Colt's slide sat
+                // 4 cm behind the frame and the MP40's magazine under the pistol grip.
+                held[i] = at_hand * (*ws)[1].local * rigid_inverse(wp[1]) * wp[bi] * rotation_ypr(180, 0, 0);
             }
         }
 
