@@ -796,7 +796,11 @@ void Game::apply_hits() {
     auto hurt_vehicle = [&](size_t i, float d, int armour, int tag) {
         Veh& v = vehicles[i];
         v.hp -= d;
+#ifndef NDEBUG  // Debug builds only: hundreds of hits per battle flood the console
         std::printf("hit %s (armour %d): %.1f damage, %.1f hp left\n", v.name.c_str(), armour, d, std::max(0.0f, v.hp));
+#else
+        static_cast<void>(armour);
+#endif
         if (v.hp > 0) return;
         v.wrecked = true, ++wrecks;
         std::printf("%s destroyed\n", v.name.c_str());
