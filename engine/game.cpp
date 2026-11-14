@@ -324,25 +324,32 @@ void Game::footsteps(float t, float dt) {
         unsigned jumps, landings;
         phys.character_steps(ch, jumps, landings);
         if (seen && !teleport && jumps != s.jumps) play("soldierjump.ssc", 0);
-        if (seen && !teleport && landings != s.landings) play("soldierjumpland.ssc", ground);
+        if (seen && !teleport && landings != s.landings && t - s.landed >= 1) play("soldierjumpland.ssc", ground), s.landed = t;  // 1 s cooldown (Mac client SoldierSound)
         s.jumps = jumps, s.landings = landings;
         bool chute = phys.parachute_open(ch);
         if (chute && !s.chute) play("soldieropenparachute.ssc", 0);
         s.chute = chute;
-        // Swimming: SoldierToSwim's splash going in, SoldierSwimStand coming out (no SoldierFromSwim in the
-        // archives), a SoldierSwim stroke every setSwimFrequency (1 s) while moving.
+        // Stopping: the original's animation states trigger SoldierStop entering Lb_Stand and SoldierSwimStand entering
+        // Lb_Floating (animations/AnimationStates*.con setSoundTrigger); here when a soldier that moved stands still.
+        bool moving = v >= 0.5f && v <= 15, stopped = s.moving && !moving && !teleport;
+        s.moving = moving;
+        // Swimming: SoldierToSwim's splash going in (coming out is SoldierFromSwim, which the archives lack), a
+        // SoldierSwim stroke every setSwimFrequency (1 s) while moving.
         bool swim = phys.character_swimming(ch);
-        // shortcut: what starts the original's SoldierFallingHigh is unread; here a free fall past 10 m/s (about 5 m)
+        // shortcut: the original forces Lb_ParachuteFall (trigger FallingHigh) from code, condition unread; here a
+        // free fall past 10 m/s (about 5 m)
         if (phys.character_on_ground(ch) || chute || swim) s.falling = false;
         else if (vy < -10 && !teleport) s.falling = true;
-        if (seen && !teleport && swim != s.swim) play(swim ? "soldiertoswim.ssc" : "soldierswimstand.ssc", 0);
+        if (seen && !teleport && swim && !s.swim) play("soldiertoswim.ssc", 0);
         s.swim = swim;
         if (swim) {
-            if (v > 0.5f && v < 15 && t >= s.next) s.next = t + 1, play("soldierswim.ssc", 0);
+            if (moving && t >= s.next) s.next = t + 1, play("soldierswim.ssc", 0);
+            if (stopped) play("soldierswimstand.ssc", 0);
             return;
         }
         if (!phys.character_on_ground(ch)) return;
-        if (v < 0.5f || v > 15) return;  // standing, or a teleport (respawn)
+        if (stopped && posture == 0) play("soldierstop.ssc", ground);  // crouched and prone stops have no trigger
+        if (!moving) return;  // standing, or a teleport (respawn)
         if (t < s.next) return;
         const char* script = posture == 2 ? "soldiercrawlmove.ssc" : posture == 1 ? "soldiercrouchmove.ssc" : v > 4 ? "soldierrun.ssc" : "soldierwalk.ssc";
         s.next = t + (posture == 2 ? 0.6f : posture == 1 ? 0.5f : v > 4 ? 0.36f : 0.66f);

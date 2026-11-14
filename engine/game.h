@@ -123,6 +123,8 @@ public:
         unsigned jumps = 0, landings = 0;  // physics counts last seen
         bool chute = false;  // parachute open
         bool swim = false;   // swimming
+        bool moving = false; // above 0.5 m/s last frame
+        float landed = -10;  // time of its last landing sound
         bool falling = false;  // free fall above 10 m/s, until ground, parachute or water: SoldierFallingHigh
         bool active = false;   // stepped this frame (alive, on foot)
         std::string tmpl;      // its soldier template

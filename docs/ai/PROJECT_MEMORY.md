@@ -2,6 +2,11 @@
 
 Append-only. Newest first. At most 3 bullets per stage.
 
+## 2026-11-14 — C1: soldier sound triggers read from the animation states
+
+- `animations/AnimationStates*.con` name each state's sound (`setSoundTrigger`, 72). No state uses Charge, so bf1942 never plays `SoldierCharge`; `SoldierSwimStand` is floating, not leaving the water. Added `SoldierStop` and floating; landing sounds have the original's 1 s cooldown.
+- Our soldiers still start these from physics events, not state machines. Berlin 300 s identical. C1 is complete for bf1942 except ladders, which need ladders (B2).
+
 ## 2026-11-14 — C1: radio, gear, medic checked against the Mac client
 
 - The decompiled Mac client gave the radio key layout (local confirm sits on F3–F6, vehicle swaps by kind, conquest page by control point with attack / defend by owner), TicketLow at 20 %, gear defaults 30 / 20 m and 0.65 / 0.85 with patch 0 going up, and the medic healing the first hurt teammate in range. All applied; Berlin 300 s identical.
