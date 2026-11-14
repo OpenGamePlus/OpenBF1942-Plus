@@ -4,13 +4,13 @@
 
 ![Status: early prototype](https://img.shields.io/badge/status-early%20prototype-orange)
 ![License: AGPL-3.0](https://img.shields.io/badge/license-AGPL--3.0-blue)
-![Platform: Linux](https://img.shields.io/badge/platform-Linux-lightgrey)
+![Platform: Linux | Windows](https://img.shields.io/badge/platform-Linux%20%7C%20Windows-lightgrey)
 ![C++17 | OpenGL 3.3](https://img.shields.io/badge/C%2B%2B17-OpenGL%203.3-lightgrey)
 ![Battlefield 1942](https://img.shields.io/badge/Battlefield-1942-8a7a52)
 
 [Español](README.es.md) · **English** · [Português](README.pt.md) · [Français](README.fr.md) · [Deutsch](README.de.md) · [Русский](README.ru.md)
 
-**Battlefield 1942 on a new engine.** OpenBF1942-Plus is a clean-room reimplementation of Refractor 1, the engine of Battlefield 1942, written from scratch: it reads the game's own files from your installation and runs them on modern systems. The goal is to play with and against the original game: original clients on our server, our client on original servers.
+**Battlefield 1942 on a new engine.** OpenBF1942-Plus is an independent reimplementation of Refractor 1, the engine of Battlefield 1942, written from scratch: it reads the game's own files from your installation and runs them on modern systems. The goal is to play with and against the original game: original clients on our server, our client on original servers.
 
 <table>
   <tr>
@@ -25,15 +25,15 @@
 
 ## What works today
 
-- **Every level of Battlefield 1942, Road to Rome and Secret Weapons of WWII loads and renders**: terrain, buildings, trees, water, sky, fog and lighting from each level's own settings.
-- **A conquest round against bots** on any level: flags, tickets, kits, magazines and reloads, grenades, mines and explosive packs, supply depots, crouch and prone, parachutes, first and third person.
-- **Vehicles**: cars, tanks, aircraft and boats you can drive, with seats for gunners and passengers; bots drive and gun land vehicles and landing craft.
-- **Sound and HUD** from the game's sound scripts and fonts.
-- **Compared with the original client** at the same spots on Berlin and El Alamein: buildings, haze, sky, vehicles and sand within about 15 %.
-- **Network research**: an original client/server session recorded; the server query protocol documented.
+- **All 78 levels of Battlefield 1942, Road to Rome and Secret Weapons of WWII load and render**: terrain, buildings, trees, water, sky, fog and lighting from each level's own settings.
+- **Conquest against bots** on any level: flags, tickets, the five kits with magazines and reloads, pistols, grenades, mines, explosive packs and medic packs, supply depots, crouch and prone, ladders, swimming and parachutes, in first and third person with the game's animations.
+- **Vehicles**: cars, tanks, aircraft and boats to drive, with seats for gunners and passengers, landing gear, guns with limited ammunition rearmed at vehicle depots, and wrecks. Bots follow each level's path-finding maps, crew tanks and landing craft, throw grenades, lay mines and fall back to their pistols.
+- **Effects, sound and HUD from the game's own data**: muzzle flashes, explosions, impacts, smoke and fire on damaged vehicles, burning wrecks, dust, exhaust and wakes; weapons, engines, footsteps, voices, radio and ambient sound; a HUD laid out as the original's (health and magazine, tickets, minimap, kill messages, radio buttons, vehicle panels).
+- **Compared with the original client** at the same spots on Berlin and El Alamein: buildings, haze, sky, vehicles and sand within about 15 %; the HUD measured on captures of the original.
+- **Network research**: two sessions between an original client and server recorded; transport, server query, master server, 51 game events and 97 % of object updates decoded ([network.md](docs/formats/network.md)).
 
 > [!NOTE]
-> **Early prototype.** Only small parts have been tried by a person, many rules are guesses and nothing is calibrated. There are no menus, no multiplayer yet, and Berlin's streets are still darker than in the original.
+> **Early prototype.** Only parts have been tried by a person, many rules are guesses and nothing is calibrated: handling, damage and timings are estimates. There are no menus, no multiplayer and no bot pilots yet, and Berlin's streets are still darker than in the original.
 
 > [!IMPORTANT]
 > **No game content is included — bring your own data.** This repository is source code only: no executables, archives, maps, models, textures or sounds. The engine reads them from a copy of Battlefield 1942 that **you legally own**, referred to here as `<BF1942_DIR>`.
@@ -55,7 +55,7 @@ build/obf_sim "<BF1942_DIR>" bf1942 El_Alamein --play 2 --sim 600 # headless: 10
 | Weapons | left mouse fires, R reloads, 1–9 kit weapons, G detonates explosive packs |
 | Posture, view | left ctrl crouches, Z lies down, V first / third person |
 | Vehicles | E gets in / out, 1–8 change seat, WASD drives, mouse aims turrets |
-| Radio | F1–F7 opens a menu, then F1–F7 sends a message |
+| Radio | F1–F7 opens a menu, then F1–F7 sends a message; F8 shows or hides the radio buttons |
 | Aircraft | W / S throttle, arrows pitch and roll, A / D rudder |
 | Free camera | right mouse looks, WASD / QE move, shift fast; C shows collision meshes; Esc quits |
 
@@ -64,9 +64,9 @@ build/obf_sim "<BF1942_DIR>" bf1942 El_Alamein --play 2 --sim 600 # headless: 10
 The order, with the reasons and exit checks, is in [docs/roadmap/roadmap.md](docs/roadmap/roadmap.md):
 
 1. **Consolidate** (done): the game as a library, a renderer and thin executables; CI.
-2. **Network protocol research** (one session recorded): decode the original client/server traffic, alongside the steps below.
-3. **AI navigation**, **audio**, **HUD** (first parts done).
-4. **Complete soldiers and weapons** (mostly done), **vehicle crews** (land and sea done, pilots open), **effects**.
+2. **Network protocol research** (two sessions recorded, most of the traffic decoded): alongside the steps below.
+3. **AI navigation** (in place, weak in cities), **audio** (most sounds in), **HUD** (laid out as the original; a few pieces open).
+4. **Complete soldiers and weapons** (mostly done), **vehicle crews** (land and sea done, pilots open), **effects** (particles and burning wrecks done).
 5. **Fidelity**: measure the original and calibrate.
 6. **Game modes**, **menus**.
 7. **Network**: our own server and client, then play together with the original.
@@ -86,6 +86,8 @@ cmake -S . -B build && cmake --build build -j
 ctest --test-dir build
 # -> build/obf_mapview (window), build/obf_sim (headless)
 ```
+
+On Windows: MSVC (Visual Studio 2019 Build Tools or later) with vcpkg; the exact commands are in [SYSTEM_SUMMARY](docs/ai/SYSTEM_SUMMARY.md#commands).
 
 <details>
 <summary><b>Python tools</b></summary>
@@ -121,7 +123,7 @@ python3 tools/check_docs.py            # documentation checks
 
 - **Who maintains this:** OpenGamePlus. I like old games, and I want to keep playing Battlefield 1942 with friends on today's systems, with an open engine the community can keep alive.
 - **How the work is done:** I work with [Claude Code](https://claude.com/claude-code), Anthropic's coding assistant. The code and documentation, this README and its translations included, are written with its help. Commits made this way carry a `Co-Authored-By: Claude` line in their message, so they can be identified in the history with `git log`.
-- **Clean room:** no code of the original engine is used or decompiled. The engine is written from the game's data files and from observing the original game run.
+- **Original code:** no code of the original engine is copied into this repository. The engine is written from the game's data files, from observing the original game run, and from facts read in third-party research, including published decompilations of the Linux dedicated server and the Mac client, read for facts and never copied ([references](docs/references.md)).
 - **What it is not:** it is not an official project and is not affiliated with Electronic Arts or DICE. It contains no game files.
 
 ## Notice

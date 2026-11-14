@@ -4,13 +4,13 @@
 
 ![Status: early prototype](https://img.shields.io/badge/status-early%20prototype-orange)
 ![License: AGPL-3.0](https://img.shields.io/badge/license-AGPL--3.0-blue)
-![Platform: Linux](https://img.shields.io/badge/platform-Linux-lightgrey)
+![Platform: Linux | Windows](https://img.shields.io/badge/platform-Linux%20%7C%20Windows-lightgrey)
 ![C++17 | OpenGL 3.3](https://img.shields.io/badge/C%2B%2B17-OpenGL%203.3-lightgrey)
 ![Battlefield 1942](https://img.shields.io/badge/Battlefield-1942-8a7a52)
 
 [Español](README.es.md) · [English](README.md) · **Português** · [Français](README.fr.md) · [Deutsch](README.de.md) · [Русский](README.ru.md)
 
-**Battlefield 1942 em um motor novo.** OpenBF1942-Plus é uma reimplementação clean-room do Refractor 1, o motor do Battlefield 1942, escrita do zero: ela lê os arquivos do próprio jogo a partir da sua instalação e os executa em sistemas modernos. O objetivo é jogar com e contra o jogo original: clientes originais no nosso servidor, nosso cliente em servidores originais.
+**Battlefield 1942 em um motor novo.** OpenBF1942-Plus é uma reimplementação independente do Refractor 1, o motor do Battlefield 1942, escrita do zero: ela lê os arquivos do próprio jogo a partir da sua instalação e os executa em sistemas modernos. O objetivo é jogar com e contra o jogo original: clientes originais no nosso servidor, nosso cliente em servidores originais.
 
 <table>
   <tr>
@@ -25,15 +25,15 @@
 
 ## O que funciona hoje
 
-- **Todos os mapas de Battlefield 1942, Road to Rome e Secret Weapons of WWII carregam e são renderizados**: terreno, construções, árvores, água, céu, neblina e iluminação conforme as configurações de cada mapa.
-- **Uma rodada de conquista contra bots** em qualquer mapa: bandeiras, tickets, kits, carregadores e recargas, granadas, minas e cargas explosivas, depósitos de suprimentos, agachar e deitar, paraquedas, primeira e terceira pessoa.
-- **Veículos**: carros, tanques, aviões e barcos que você pode pilotar, com assentos para artilheiros e passageiros; os bots dirigem e atiram com veículos terrestres e lanchas de desembarque.
-- **Som e HUD** a partir dos scripts de som e das fontes do jogo.
-- **Comparado com o cliente original** nos mesmos pontos de Berlim e El Alamein: construções, névoa, céu, veículos e areia dentro de cerca de 15 %.
-- **Pesquisa de rede**: uma sessão cliente/servidor original gravada; o protocolo de consulta do servidor documentado.
+- **Os 78 mapas de Battlefield 1942, Road to Rome e Secret Weapons of WWII carregam e são renderizados**: terreno, construções, árvores, água, céu, neblina e iluminação conforme as configurações de cada mapa.
+- **Conquista contra bots** em qualquer mapa: bandeiras, tickets, os cinco kits com carregadores e recargas, pistolas, granadas, minas, cargas explosivas e kits médicos, depósitos de suprimentos, agachar e deitar, escadas, natação e paraquedas, em primeira e terceira pessoa com as animações do jogo.
+- **Veículos**: carros, tanques, aviões e barcos que você pode pilotar, com assentos para artilheiros e passageiros, trem de pouso, armas com munição limitada reabastecidas nos depósitos de veículos, e destroços. Os bots seguem os mapas de navegação de cada nível, tripulam tanques e lanchas de desembarque, lançam granadas, colocam minas e recorrem à pistola.
+- **Efeitos, som e HUD a partir dos dados do jogo**: clarões de disparo, explosões, impactos, fumaça e fogo em veículos danificados, destroços em chamas, poeira, escapamento e esteiras; armas, motores, passos, vozes, rádio e som ambiente; um HUD disposto como o original (vida e carregador, tickets, minimapa, mensagens de abates, botões de rádio, painéis de veículo).
+- **Comparado com o cliente original** nos mesmos pontos de Berlim e El Alamein: construções, névoa, céu, veículos e areia dentro de cerca de 15 %; o HUD medido em capturas do original.
+- **Pesquisa de rede**: duas sessões entre cliente e servidor originais gravadas; transporte, consulta do servidor, servidor mestre, 51 eventos de jogo e 97 % das atualizações de objetos decodificados ([network.md](docs/formats/network.md)).
 
 > [!NOTE]
-> **Protótipo inicial.** Só pequenas partes foram testadas por uma pessoa, muitas regras são suposições e nada está calibrado. Ainda não há menus nem multijogador, e as ruas de Berlim continuam mais escuras que no original.
+> **Protótipo inicial.** Só partes foram testadas por uma pessoa, muitas regras são suposições e nada está calibrado: dirigibilidade, dano e tempos são estimativas. Ainda não há menus, multijogador nem bots pilotos, e as ruas de Berlim continuam mais escuras que no original.
 
 > [!IMPORTANT]
 > **Nenhum conteúdo do jogo está incluído: traga seus próprios dados.** Este repositório é só código-fonte: sem executáveis, arquivos compactados, mapas, modelos, texturas ou sons. O motor os lê de uma cópia do Battlefield 1942 que **você possui legalmente**, chamada aqui de `<BF1942_DIR>`.
@@ -55,7 +55,7 @@ build/obf_sim "<BF1942_DIR>" bf1942 El_Alamein --play 2 --sim 600 # sem janela: 
 | Armas | botão esquerdo atira, R recarrega, 1–9 armas do kit, G detona as cargas explosivas |
 | Postura, visão | ctrl esquerdo agacha, Z deita, V primeira / terceira pessoa |
 | Veículos | E entra / sai, 1–8 troca de assento, WASD dirige, o mouse mira as torres |
-| Rádio | F1–F7 abre um menu, depois F1–F7 envia uma mensagem |
+| Rádio | F1–F7 abre um menu, depois F1–F7 envia uma mensagem; F8 mostra ou oculta os botões de rádio |
 | Aviões | W / S acelerador, setas arfagem e rolagem, A / D leme |
 | Câmera livre | botão direito olha, WASD / QE movem, shift rápido; C mostra as malhas de colisão; Esc sai |
 
@@ -64,9 +64,9 @@ build/obf_sim "<BF1942_DIR>" bf1942 El_Alamein --play 2 --sim 600 # sem janela: 
 A ordem, com os motivos e os critérios de saída, está em [docs/roadmap/roadmap.md](docs/roadmap/roadmap.md):
 
 1. **Consolidar** (feito): o jogo como biblioteca, um renderizador e executáveis enxutos; CI.
-2. **Pesquisa do protocolo de rede** (uma sessão gravada): decodificar o tráfego entre cliente e servidor originais, em paralelo com as etapas abaixo.
-3. **Navegação da IA**, **áudio**, **HUD** (primeiras partes feitas).
-4. **Soldados e armas completos** (quase feito), **tripulações de veículos** (terra e mar feitos, pilotos pendentes), **efeitos**.
+2. **Pesquisa do protocolo de rede** (duas sessões gravadas, a maior parte do tráfego decodificada): em paralelo com as etapas abaixo.
+3. **Navegação da IA** (funciona, fraca em cidades), **áudio** (quase todos os sons), **HUD** (disposto como o original; faltam algumas peças).
+4. **Soldados e armas completos** (quase feito), **tripulações de veículos** (terra e mar feitos, pilotos pendentes), **efeitos** (partículas e destroços em chamas feitos).
 5. **Fidelidade**: medir o original e calibrar.
 6. **Modos de jogo**, **menus**.
 7. **Rede**: servidor e cliente próprios, depois jogar junto com o original.
@@ -86,6 +86,8 @@ cmake -S . -B build && cmake --build build -j
 ctest --test-dir build
 # -> build/obf_mapview (janela), build/obf_sim (sem janela)
 ```
+
+No Windows: MSVC (Visual Studio 2019 Build Tools ou posterior) com vcpkg; os comandos exatos estão no [SYSTEM_SUMMARY](docs/ai/SYSTEM_SUMMARY.md#commands).
 
 <details>
 <summary><b>Ferramentas em Python</b></summary>
@@ -121,7 +123,7 @@ python3 tools/check_docs.py            # verificações da documentação
 
 - **Quem mantém:** OpenGamePlus. Gosto de jogos antigos e quero continuar jogando Battlefield 1942 com amigos nos sistemas de hoje, com um motor aberto que a comunidade possa manter vivo.
 - **Como o trabalho é feito:** trabalho com o [Claude Code](https://claude.com/claude-code), o assistente de programação da Anthropic. O código e a documentação, incluindo este README e suas traduções, são escritos com a ajuda dele. Os commits feitos assim levam uma linha `Co-Authored-By: Claude` na mensagem, para que possam ser identificados no histórico com `git log`.
-- **Clean room:** nenhum código do motor original é usado ou descompilado. O motor é escrito a partir dos arquivos de dados do jogo e da observação do jogo original em execução.
+- **Código original:** nenhum código do motor original é copiado para este repositório. O motor é escrito a partir dos arquivos de dados do jogo, da observação do jogo original em execução e de fatos lidos em pesquisas de terceiros, incluindo as descompilações publicadas do servidor dedicado de Linux e do cliente de Mac, lidas para extrair fatos e nunca copiadas ([referências](docs/references.md)).
 - **O que não é:** não é um projeto oficial e não é afiliado à Electronic Arts nem à DICE. Não contém arquivos do jogo.
 
 ## Aviso
