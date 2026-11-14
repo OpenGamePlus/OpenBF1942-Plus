@@ -509,8 +509,9 @@ std::vector<std::string> Game::kit_weapons(int tm, int kt) const {
 }
 
 std::string Game::primary(int tm, int kt) const {  // the kit's first weapon with a projectile
-    auto w = kit_weapons(tm, kt);
-    return w.empty() ? "" : w[0];
+    for (const std::string& w : kit_weapons(tm, kt))
+        if (!weapon_def(con, w).heals) return w;
+    return "";
 }
 
 void Game::select(size_t i) {
@@ -714,6 +715,8 @@ void Game::fire(float t) {
         for (int i = 0; i < 3; ++i) d[i] /= l, pos[i] = m.m[12 + i] + d[i] * (st.has_muzzle ? 1.0f : v.len), vel[i] = d[i] * w.velocity;
         fire(w, pos, vel, v.id, -1, team);
         sounds.push_back({w.name, {pos[0], pos[1], pos[2]}, 100000 + 16 * v.id + seat});
+    } else if (player >= 0 && hand.heals) {
+        heal(t);
     } else if (player >= 0 && !hand.name.empty() && t >= hand_next && hand_ammo.take(t)) {
         hand_next = t + hand.interval;
         float p[3], d[3] = {std::sin(cam.yaw) * std::cos(cam.pitch), std::sin(cam.pitch), std::cos(cam.yaw) * std::cos(cam.pitch)}, pos[3], vel[3];
@@ -724,6 +727,42 @@ void Game::fire(float t) {
         if (id >= 0 && hand.bounce && hand.ttl > 60) placed.push_back({id, hand.near});  // not a grenade: waits for a trigger
         sounds.push_back({hand.name, {pos[0], pos[1], pos[2]}, -1});
     }
+}
+
+// Medic pack: each round (roundOfFire) heals the hurt teammate aimed at within healDistance by healFactor, else the
+// medic itself by selfHealFactor (the soldier template's, CommonSoldierData.inc: 10 m, 0.25, 0.15). shortcut: read
+// as hit points per round and an aim cone of about 25 degrees; units and targeting unverified. The healed soldier
+// plays SoldierHealedByMedic, at most once a second.
+void Game::heal(float t) {
+    if (t < hand_next || cur >= 0 || player_dead) return;
+    float dist = 10, other = 0.25f, self = 0.15f;
+    if (const ConObject* o = object_template(soldier_tmpl))
+        for (auto& [k, a] : o->props) {
+            float x = a.empty() ? 0.0f : static_cast<float>(std::atof(a[0].c_str()));
+            if (!std::isfinite(x) || x < 0) continue;
+            if (k == "healdistance") dist = x;
+            else if (k == "healfactor") other = x;
+            else if (k == "selfhealfactor") self = x;
+        }
+    float p[3], d[3] = {std::sin(cam.yaw) * std::cos(cam.pitch), std::sin(cam.pitch), std::cos(cam.yaw) * std::cos(cam.pitch)};
+    phys.character_position(player, p);
+    Bot* best = nullptr;
+    float bd = dist;
+    for (Bot& b : bots) {
+        if (b.dead || b.veh >= 0 || b.team != team || b.hp >= hitpoints(b.tmpl)) continue;
+        float v[3] = {b.pos[0] - p[0], b.pos[1] + 1 - p[1] - eye_height(), b.pos[2] - p[2]}, l = std::sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]);
+        if (l < bd && (l < 1.5f || (v[0] * d[0] + v[1] * d[1] + v[2] * d[2]) / l > 0.9f)) best = &b, bd = l;
+    }
+    float full = hitpoints(soldier_tmpl);
+    if (!best && player_hp >= full) return;  // nobody to heal: the pack is not used
+    if (!hand_ammo.take(t)) return;
+    hand_next = t + hand.interval, last_shot = t;
+    if (best) best->hp = std::min(hitpoints(best->tmpl), best->hp + other);
+    else player_hp = std::min(full, player_hp + self);
+    if (t - healed_sound_ < 1) return;
+    healed_sound_ = t;
+    const float* at = best ? best->pos : p;
+    sounds.push_back({best ? best->tmpl : soldier_tmpl, {at[0], at[1] + 1, at[2]}, best ? static_cast<int>(best - bots.data()) : -1, false, false, "soldierhealedbymedic.ssc", 0});
 }
 
 std::vector<Game::LoopSound> Game::loop_sounds(float dt) {

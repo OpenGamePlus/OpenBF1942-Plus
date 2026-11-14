@@ -23,6 +23,8 @@ Kits: the player carries every kit weapon that fires (e.g. Allied assault: BAR 1
 
 Supply depots (`SupplyDepot`, under placed objects such as `Ammobox`, `mediclocker`, the airfield ammo; 1,567 over the 78 levels): `radius`, `team` (0 both), `workOnSoldiers` / `workOnVehicles`, `addAmmoType <type> -1 <rate> 0` (Ammobox: type 1 at 15), `setHealth -1 <rate> 0` (medic locker 4.0). We read the rates as rounds and hit points per second (unverified). Soldiers in range get spare magazines and health; bots out of spare magazines walk to the nearest depot of their team that stocks their ammunition and wait there until full.
 
+Medic pack (`MedPack`, a `HandFireArms` with `magType 1`, "healing type"; `magSize 1800`, `numOfMag 1`, `roundOfFire 10`, no projectile): each round heals the hurt teammate aimed at within the soldier's `healDistance` (10, CommonSoldierData.inc) by `healFactor` (0.25), else the medic itself by `selfHealFactor` (0.15). We read them as hit points per round, about 25° of aim (unverified: units and targeting); a full soldier (30) heals itself 10 → 24 in 10 s. With nobody hurt the pack is not used. Kits list it among their weapons; bots keep their first weapon with a projectile.
+
 `Projectile`: `material` (hit), `material2` (explosion; the damage file calls it splash damage), `timeToLive CRD_NONE/<s>/…`, `damageType`.
 
 The engine fires a vehicle's first `FireArms` with a projectile from that part's posed transform (turret and gun pitch included), along its local +z. Projectiles fly with full gravity and no drag (unverified).

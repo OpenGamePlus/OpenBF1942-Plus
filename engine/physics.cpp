@@ -316,7 +316,9 @@ WeaponDef weapon_def(const Con& con, const std::string& name) {
         else if (k == "reloadtime") wd.reload = std::clamp(num(a), 0.0f, 30.0f);
         else if (k == "fireonce") wd.fire_once = std::atoi(a[0].c_str()) != 0;
         else if (k == "ammotype") wd.ammo_type = std::atoi(a[0].c_str());
+        else if (k == "magtype") wd.heals = std::atoi(a[0].c_str()) == 1;
     }
+    if (wd.heals) return wd.name = lower(name), wd;  // a medic pack: no projectile
     const ConObject* p = proj.empty() ? nullptr : find(con, proj);
     if (!p || !(wd.velocity > 0)) return WeaponDef{};
     wd.name = lower(name);

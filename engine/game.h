@@ -246,7 +246,7 @@ private:
     const ConObject* object_template(const std::string& n) const;
     float hitpoints(const std::string& n) const;
     std::string primary(int tm, int kt) const;
-    std::vector<std::string> kit_weapons(int tm, int kt) const;  // kit order, those with a projectile
+    std::vector<std::string> kit_weapons(int tm, int kt) const;  // kit order, those with a projectile and medic packs
     int spawn_team(const SpawnPt& sp) const;
     void get_in_out();
     void walk(float forward, float right, bool jump, bool slow);
@@ -330,6 +330,8 @@ private:
     bool player_dead = false;
     std::vector<std::pair<float, std::string>> feed;  // (game time, message): kills, captures, destroyed vehicles
     void announce(int patch);  // a GamePlay.ssc announcement to the player, in its language
+    void heal(float t);        // the player's medic pack in use
+    float healed_sound_ = -10;
     void radio(int key);
     std::vector<int> radio_items() const;  // indices into the open menu's messages, by key
     std::string word(const std::string& key) const;  // lexicon text, else the key

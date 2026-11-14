@@ -2,6 +2,12 @@
 
 Append-only. Newest first. At most 3 bullets per stage.
 
+## 2026-11-14 — B2 / C1: medic pack heals
+
+- `MedPack` (`magType 1`) is now a kit weapon: rounds heal the teammate aimed at within `healDistance`, else the medic (`healFactor` / `selfHealFactor` as hit points per round, unverified), with `SoldierHealedByMedic`. Headless: 10 → 24 of 30 hit points in 10 s, 10 heal sounds.
+- Bots keep their first weapon with a projectile (`primary` skips packs); Berlin 300 s identical.
+- Open in C1: `SoldierCharge`, bots on the radio. Bots do not heal yet.
+
 ## 2026-11-14 — C1: radio and announcements
 
 - Radio menu from `menu/RadioMenu`'s strings: F1–F7 categories, F1–F8 messages, drawn in the HUD with `lexiconAll.dat` texts (parser tested); team messages crackle and play `MenuRadioSound`, local ones `SoldierVoice`. Key order per message unverified. All 45 messages play existing files (headless run).

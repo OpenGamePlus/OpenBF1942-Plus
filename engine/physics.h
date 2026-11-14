@@ -64,6 +64,7 @@ struct WeaponDef {
     std::string projectile;             // lower-case projectile template (its sound script plays in flight)
     bool bounce = false;                // dieAfterColl 0 (grenades, mines, explosive packs)
     float near = 0;                     // explodeNearEnemyDistance (mines), 0: none
+    bool heals = false;                 // magType 1: a medic pack ("healing type"), fires no projectile
 };
 
 // A crew position: the vehicle's own PlayerControlObject (seat 0, the driver) or one nested in it (gunners, passengers).
