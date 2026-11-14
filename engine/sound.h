@@ -30,6 +30,8 @@ public:
         std::string tmpl;
         float pos[3];
         float control, speed, accel;  // curve sources Default, Speed (m/s), Acceleration (m/s2)
+        int patch = -1;  // only that patch of the script (landing gear: 0 down, 1 up); -1 all
+        std::string script{};  // a soldier's SoldierSound.inc script ("soldierfallinghigh.ssc"), tmpl the soldier
     };
     void loops(const std::vector<Running>& running);
     // Script path of a template, or (children) of its first child (addTemplate, depth-first) of the given type; "" if none.
@@ -40,6 +42,7 @@ public:
 private:
     const SoundPatch* patch(const std::string& path);
     std::string language(const std::string& tmpl) const;
+    SoundPatch soldier_patch(const std::string& script, int patch, const std::string& tmpl);
     const SoundPatch* weapon_patch(const std::string& tmpl, size_t index);
     int play_patch(const SoundPatch& p, const float pos[3], float control, bool once);
     int play(const std::string& path, const float pos[3], float control);

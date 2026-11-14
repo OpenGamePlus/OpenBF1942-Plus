@@ -130,7 +130,7 @@ std::string Sounds::language(const std::string& tmpl) const {
     return "english";
 }
 
-void Sounds::soldier(const std::string& script, int patch, const float pos[3], const std::string& tmpl) {
+SoundPatch Sounds::soldier_patch(const std::string& script, int patch, const std::string& tmpl) {
     // shortcut: the soldiers' shared script folder, where SoldierSound.inc's relative names point
     const std::string key = "objects/soldiers/common/sounds/" + script;
     auto it = weapon_.find(key);
@@ -142,11 +142,13 @@ void Sounds::soldier(const std::string& script, int patch, const float pos[3], c
         };
         it = weapon_.emplace(key, vfs_.has(key) ? ssc_patches(key, read) : std::vector<SoundPatch>{}).first;
     }
-    if (patch < 0 || static_cast<size_t>(patch) >= it->second.size() || it->second[static_cast<size_t>(patch)].layers.empty()) return;
-    const SoundPatch& all = it->second[static_cast<size_t>(patch)];
-    // A patch whose layers chain by trigger (posture changes) plays whole; otherwise its layers are variants.
     SoundPatch one;
-    if (std::any_of(all.layers.begin(), all.layers.end(), [](const SoundLayer& l) { return l.trigger; })) one = all;
+    if (patch < 0 || static_cast<size_t>(patch) >= it->second.size() || it->second[static_cast<size_t>(patch)].layers.empty()) return one;
+    const SoundPatch& all = it->second[static_cast<size_t>(patch)];
+    // A patch mixing triggered and untriggered layers is a chain (posture changes, the fall's wind): it plays whole.
+    // Otherwise its layers are variants (footsteps; the fall's screams, all triggered at 3.3 s): the next one plays.
+    auto triggered = std::count_if(all.layers.begin(), all.layers.end(), [](const SoundLayer& l) { return l.trigger; });
+    if (triggered > 0 && static_cast<size_t>(triggered) < all.layers.size()) one = all;
     else one.layers.push_back(all.layers[variant_++ % all.layers.size()]);
     // Voices: @Language is the soldier's radio language folder; one the archives lack (Canadian) falls back to English.
     for (SoundLayer& l : one.layers)
@@ -155,7 +157,12 @@ void Sounds::soldier(const std::string& script, int patch, const float pos[3], c
             l.wav.replace(at, 9, language(tmpl));
             if (!vfs_.has(l.wav)) l.wav = wav.replace(at, 9, "english");
         }
-    play_patch(one, pos, 0, true);
+    return one;
+}
+
+void Sounds::soldier(const std::string& script, int patch, const float pos[3], const std::string& tmpl) {
+    SoundPatch one = soldier_patch(script, patch, tmpl);
+    if (!one.layers.empty()) play_patch(one, pos, 0, true);
 }
 
 void Sounds::tick(float now) {
@@ -181,7 +188,15 @@ void Sounds::loops(const std::vector<Running>& running) {
             auto key = r.tmpl + "\n own";
             auto sc = scripts_.find(key);
             if (sc == scripts_.end()) sc = scripts_.emplace(key, script(r.tmpl, "", false)).first;
-            int h = play(sc->second, r.pos, r.control);
+            int h = -1;
+            if (!r.script.empty()) {  // a soldier's (falling): that patch of its SoldierSound.inc script
+                SoundPatch one = soldier_patch(r.script, r.patch, r.tmpl);
+                if (!one.layers.empty()) h = play_patch(one, r.pos, r.control, false);
+            } else if (r.patch >= 0) {
+                if (const SoundPatch* one = weapon_patch(r.tmpl, static_cast<size_t>(r.patch))) h = play_patch(*one, r.pos, r.control, false);
+            } else {
+                h = play(sc->second, r.pos, r.control);
+            }
             if (h >= 0) mixer.update(h, r.pos, r.control, r.speed, r.accel);
             next[r.key] = h;
         } else {

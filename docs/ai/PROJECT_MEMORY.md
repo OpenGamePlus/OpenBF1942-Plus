@@ -2,6 +2,12 @@
 
 Append-only. Newest first. At most 3 bullets per stage.
 
+## 2026-11-14 — C1: landing gear, swimming, falls
+
+- Aircraft gear goes up and down by its `setGear*` values (rule guessed) and plays its `LandingGear` patch while moving; the mixer gained `trigger Release` (tested). A headless flight: gear up at 25 m on full throttle, 2 s of gear sound.
+- Swimming state in physics (tested: floats 1.4 m deep), with splash in / out and strokes; free falls past 10 m/s loop `SoldierFallingHigh` until ground, parachute or water (bail-out at 87 m: wind from 1 s, ended on landing). Soldier patches play whole only when they mix triggered and untriggered layers.
+- Berlin 300 s identical. Open in C1: radio and callouts, charge, medic healing.
+
 ## 2026-11-14 — C1: voices, parachute, depot refills
 
 - Hurt soldiers say `SoldierHitDamage` (once a second at most), dying ones `SoldierKilled`, in the template's `setRadioLanguage` (`@Language` folder; Canadian falls back to English). The earlier note that these scripts are empty at HIGH was wrong: their voices sit under `sound/<rate>/<language>/`.

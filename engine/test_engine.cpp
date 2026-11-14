@@ -440,6 +440,14 @@ int main() {
         for (int i = 0; i < 60; ++i) phys.step(1.0f / 60);
         phys.character_steps(ch, jumps, landings);
         assert(phys.character_on_ground(ch) && jumps == 1 && landings == 2);
+        {  // Swimming: dropped into 5 m of water, the soldier floats with its feet about 1.4 m under the surface
+            Physics wet(hm, 128, 5);
+            int sw = wet.add_character(64, 6, 64);
+            for (int i = 0; i < 300; ++i) wet.step(1.0f / 60);
+            wet.character_position(sw, p);
+            assert(wet.character_swimming(sw) && p[1] > 3.3f && p[1] < 3.9f);
+            assert(!phys.character_swimming(ch));
+        }
         // Hull parts: a 20 x 20 m deck 1 m high with a 10 m tower is a compound; a soldier lands on the deck, not on the
         // single convex hull's slope up to the tower top.
         VehicleDef ship;
@@ -686,6 +694,20 @@ int main() {
             std::fill(o.begin(), o.end(), 0.0f);
             m2.mix(o.data(), 1, Listener{});
             assert(o[0] > 0 && o[0] < 1024.0f / 32768.0f);  // early in the sample, not 3 blocks in
+        }
+        {  // trigger Release: silent until the patch is released (landing gear's stop clunk), then plays once
+            files["objects/gear/gear.ssc"] = "newPatch\nload @ROOT/Sound/@RTD/stop.wav\ntrigger Release\n";
+            SoundPatch gear = ssc_parse("objects/gear/gear.ssc", read);
+            assert(gear.layers.size() == 1 && gear.layers[0].on_release && !gear.layers[0].trigger);
+            Mixer m4(44100);
+            float here[3] = {0, 0, 0};
+            int h4 = m4.play(gear, {tone}, here);
+            std::vector<float> o(2 * 64, 0.0f);
+            m4.mix(o.data(), 64, Listener{});
+            assert(std::fabs(o[0]) < 1e-9f && m4.voices() == 1);
+            m4.release(h4);
+            m4.mix(o.data(), 64, Listener{});
+            assert(std::fabs(o[2 * 63]) > 1e-6f);
         }
         {  // Speed curve: a track loop is silent at rest and full at 10 m/s
             files["objects/track/track.ssc"] = "newPatch\nload @ROOT/Sound/@RTD/track.wav\nloop\nbeginEffect\ncontrolDestination Volume\n"

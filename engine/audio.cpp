@@ -128,7 +128,7 @@ void parse_into(std::vector<SoundPatch>& patches, const std::string& path, const
             if (p.rfind("@root/", 0) == 0) p = p.substr(6);
             else p = join(dir_of(path), p);
             for (size_t r; (r = p.find("@rtd")) != std::string::npos;) p.replace(r, 4, "44khz");
-            patch.layers.push_back({p, false, false, false, false, 1, 1, {}});
+            patch.layers.push_back({p, false, false, false, false, false, 1, 1, {}});
             fx = nullptr;
         } else if (!layer) {
             continue;
@@ -139,7 +139,7 @@ void parse_into(std::vector<SoundPatch>& patches, const std::string& path, const
         } else if (k == "stereo") {
             layer->stereo = true;
         } else if (k == "trigger") {
-            layer->trigger = lowered(arg) == "volume";
+            layer->trigger = lowered(arg) == "volume", layer->on_release = lowered(arg) == "release";
         } else if (k == "volume") {
             layer->volume = v;
         } else if (k == "mindistance") {
@@ -252,8 +252,8 @@ void Mixer::mix(float* out, int frames, const Listener& l) {
             float pan = dist > 1e-3f ? std::clamp((d[0] * l.right[0] + d[1] * l.right[1] + d[2] * l.right[2]) / dist, -1.0f, 1.0f) : 0.0f;
             lg = std::sqrt((1 - pan) / 2) * 1.41421356f, rg = std::sqrt((1 + pan) / 2) * 1.41421356f;
         }
-        if (v.layer.trigger && !v.started) {  // waits silent, without reading its sample, until its moment
-            if (timed <= 1e-4f) {
+        if ((v.layer.trigger || v.layer.on_release) && !v.started) {  // waits silent, without reading its sample, until its moment
+            if (v.layer.on_release ? v.release_time < 0 : timed <= 1e-4f) {
                 v.time += dt;
                 continue;
             }

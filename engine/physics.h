@@ -169,6 +169,7 @@ public:
     bool parachute_open(int character) const;
     float take_landing(int character);  // downward speed of the last landing (m/s), then 0
     void character_steps(int character, unsigned& jumps, unsigned& landings) const;  // running counts (landings above 3 m/s)
+    bool character_swimming(int character) const;  // in water deep enough to swim
     bool character_on_ground(int character) const;
 
 private:

@@ -92,11 +92,15 @@ public:
 
     // The vehicle under control: its template, position and engine load 0..1; "" on foot.
     struct LoopSound {
-        long long key;     // vehicle physics id * 256 + part; 2^40 + shot id for projectiles in flight
+        // vehicle id * 256 + part; 2^40 + shot id (projectiles in flight); 2^41 + ambient object; 2^42 + 2 * character
+        // + patch (falling soldiers)
+        long long key;
         std::string tmpl;  // the part's template (it has its own sound script)
         float pos[3];
         float control;     // Engine: load 0..1; RotationalBundle: turning speed, degrees / s
         float speed, accel;  // the vehicle's, m/s and m/s2
+        int patch = -1;      // one patch of the script (LandingGear: 0 going down, 1 going up); -1 all of it
+        std::string script{};  // set: a soldier sound script ("soldierfallinghigh.ssc"), tmpl the soldier
     };
     // Engine, track, turret and wing loops of every intact vehicle with someone in the driver's seat (the player or a
     // bot), and the in-flight loop of every live projectile whose template has a script; dt: time since the last call
@@ -117,6 +121,10 @@ public:
         int posture = -1;  // last seen; -1 not seen yet
         unsigned jumps = 0, landings = 0;  // physics counts last seen
         bool chute = false;  // parachute open
+        bool swim = false;   // swimming
+        bool falling = false;  // free fall above 10 m/s, until ground, parachute or water: SoldierFallingHigh
+        bool active = false;   // stepped this frame (alive, on foot)
+        std::string tmpl;      // its soldier template
         float voiced = -10;  // time of its last hit voice
     };
     std::map<int, Stride> strides_;  // by character: footsteps
@@ -172,7 +180,18 @@ private:
         size_t wreck_first = 0, wreck_parts = 0;  // the wreck detail level, drawn once destroyed
         std::vector<Seat> seats;                  // [0] the driver
         Mat4 start;  // where it was placed
+        bool gear_down = true;  // aircraft landing gear
+        float gear_moving = 0;  // seconds of gear travel left
     };
+    // LandingGear settings of an aircraft (its first LandingGear part). shortcut: when the original raises and lowers
+    // the gear is unread; here up above setGearUpHeight with throttle at setGearUpEngineInput, down below
+    // setGearDownHeight with throttle at most setGearDownEngineInput; travel = setMaxRotation / setMaxSpeed.
+    struct Gear {
+        bool has = false;
+        float down_height = 25, up_height = 25, down_input = 0.55f, up_input = 0.8f, travel = 1;
+    };
+    std::map<std::string, Gear> gears_;  // by vehicle template
+    void landing_gear(float dt);
 
     struct Depot {  // SupplyDepot working on soldiers (ammo boxes, medic lockers, half-tracks are not placed by levels)
         float pos[3] = {}, radius = 0, health = 0;  // health: hit points per second (setHealth second value; unverified)

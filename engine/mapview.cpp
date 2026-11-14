@@ -251,7 +251,7 @@ int run(int argc, char** argv) {
             sounds.tick(now_s);
             std::vector<Sounds::Running> running;
             for (const Game::LoopSound& e : game.loop_sounds(dt))
-                running.push_back({e.key, e.tmpl, {e.pos[0], e.pos[1], e.pos[2]}, e.control, e.speed, e.accel});
+                running.push_back({e.key, e.tmpl, {e.pos[0], e.pos[1], e.pos[2]}, e.control, e.speed, e.accel, e.patch, e.script});
             sounds.loops(running);
         }
 

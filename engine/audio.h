@@ -32,6 +32,7 @@ struct SoundLayer {
     bool loop = false, stereo = false;  // stereo: not positioned (first-person sounds)
     bool finish = false;                // stop FinishSample: a released loop plays its pass to the end
     bool trigger = false;               // trigger Volume: starts when its time / control volume first rises above 0
+    bool on_release = false;            // trigger Release: starts when the patch is released (gear stops)
     float volume = 1, min_distance = 1;
     std::vector<SoundEffect> effects;
 };

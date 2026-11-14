@@ -436,6 +436,7 @@ struct Physics::Impl {
         float fall = 0;     // downward speed last step in the air
         float landing = 0;  // downward speed at the last touch-down
         unsigned jumps = 0, landings = 0;  // counts, for sounds: jumps taken, touch-downs above 3 m/s
+        bool swimming = false;  // head held at the surface
     };
     std::vector<Soldier> soldiers;
     void soldier(Soldier& s);
@@ -989,6 +990,7 @@ void Physics::Impl::soldier(Soldier& s) {
         s.fall = std::max(0.0f, -v.GetY());
     }
     float feet = static_cast<float>(ch.GetPosition().GetY());
+    s.swimming = feet < water - (s.swimming ? 1.1f : 1.3f);  // around the 1.4 m hold depth, with a margin against flicker
     if (feet < water - 1.4f) v.SetY(std::max(v.GetY(), (water - 1.4f - feet) * 2.0f)), s.fall = 0, s.chute = 0;  // swim: head above the surface
     s.jump = false;
     ch.SetLinearVelocity(v + s.want);
@@ -1005,6 +1007,7 @@ Ref<Shape> soldier_shape(int posture) {  // a capsule of radius 0.3 standing on 
 
 void Physics::open_parachute(int character, float k) { p_->soldiers.at(static_cast<size_t>(character)).chute = std::max(0.0f, k); }
 bool Physics::parachute_open(int character) const { return p_->soldiers.at(static_cast<size_t>(character)).chute > 0; }
+bool Physics::character_swimming(int character) const { return p_->soldiers.at(static_cast<size_t>(character)).swimming; }
 void Physics::character_steps(int character, unsigned& jumps, unsigned& landings) const {
     const auto& s = p_->soldiers.at(static_cast<size_t>(character));
     jumps = s.jumps, landings = s.landings;

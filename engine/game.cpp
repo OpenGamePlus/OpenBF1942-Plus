@@ -305,6 +305,7 @@ int Game::fire(const WeaponDef& w, const float pos[3], const float vel[3], int i
 // posture changes. shortcut: materials grouped by name (grass, gravel, rock and paved roads as concrete, the rest
 // sand); static objects underfoot count as the ground under them.
 void Game::footsteps(float t, float dt) {
+    for (auto& [ch, s] : strides_) s.active = false;
     static const int ground_patch[16] = {0, 0, 4, 4, 0, 0, 0, 0, 5, 0, 0, 0, 3, 0, 5, 3};  // terrain materials 0-15
     auto step = [&](int ch, const float* pos, int posture, const std::string& tmpl, int source) {
         if (ch < 0 || tmpl.empty()) return;
@@ -312,7 +313,8 @@ void Game::footsteps(float t, float dt) {
         auto play = [&](const char* script, int patch) { sounds.push_back({tmpl, {pos[0], pos[1], pos[2]}, source, false, false, script, patch}); };
         int m = ground_material(pos[0], pos[2]), ground = m >= 0 && m < 16 ? ground_patch[m] : 3;
         float dx = pos[0] - s.pos[0], dy = pos[1] - s.pos[1], dz = pos[2] - s.pos[2];
-        float v = dt > 0 ? std::sqrt(dx * dx + dz * dz) / dt : 0.0f;
+        float v = dt > 0 ? std::sqrt(dx * dx + dz * dz) / dt : 0.0f, vy = dt > 0 ? dy / dt : 0.0f;
+        s.active = true, s.tmpl = tmpl;
         bool seen = s.posture >= 0, teleport = dt > 0 && std::sqrt(dx * dx + dy * dy + dz * dz) / dt > 30;
         std::copy(pos, pos + 3, s.pos);
         // Posture changes: SoldierToCrouch / FromCrouch / ToCrawl / StandUp (patch 0; their layers chain by time).
@@ -327,6 +329,18 @@ void Game::footsteps(float t, float dt) {
         bool chute = phys.parachute_open(ch);
         if (chute && !s.chute) play("soldieropenparachute.ssc", 0);
         s.chute = chute;
+        // Swimming: SoldierToSwim's splash going in, SoldierSwimStand coming out (no SoldierFromSwim in the
+        // archives), a SoldierSwim stroke every setSwimFrequency (1 s) while moving.
+        bool swim = phys.character_swimming(ch);
+        // shortcut: what starts the original's SoldierFallingHigh is unread; here a free fall past 10 m/s (about 5 m)
+        if (phys.character_on_ground(ch) || chute || swim) s.falling = false;
+        else if (vy < -10 && !teleport) s.falling = true;
+        if (seen && !teleport && swim != s.swim) play(swim ? "soldiertoswim.ssc" : "soldierswimstand.ssc", 0);
+        s.swim = swim;
+        if (swim) {
+            if (v > 0.5f && v < 15 && t >= s.next) s.next = t + 1, play("soldierswim.ssc", 0);
+            return;
+        }
         if (!phys.character_on_ground(ch)) return;
         if (v < 0.5f || v > 15) return;  // standing, or a teleport (respawn)
         if (t < s.next) return;
@@ -342,6 +356,49 @@ void Game::footsteps(float t, float dt) {
     for (size_t i = 0; i < bots.size(); ++i) {
         const Bot& b = bots[i];
         if (!b.dead && b.veh < 0) step(b.ch, b.pos, b.posture, b.tmpl, static_cast<int>(i));
+    }
+}
+
+void Game::landing_gear(float dt) {
+    for (Veh& v : vehicles) {
+        if (!v.plane || v.wrecked) continue;
+        auto g = gears_.find(v.name);
+        if (g == gears_.end()) {
+            Gear gear;
+            auto& ts = con.templates["objecttemplate"];
+            std::function<bool(const std::string&, int)> find = [&](const std::string& n, int depth) {
+                auto it = ts.find(lower(n));
+                if (it == ts.end() || depth > 12) return false;
+                if (lower(it->second.type) == "landinggear") {
+                    float rot[3] = {}, speed[3] = {};
+                    for (auto& [k, a] : it->second.props) {
+                        float x = a.empty() ? 0.0f : static_cast<float>(std::atof(a[0].c_str()));
+                        if (k == "setgeardownheight") gear.down_height = x, gear.up_height = std::max(gear.up_height, x);
+                        else if (k == "setgearupheight") gear.up_height = x;
+                        else if (k == "setgeardownengineinput") gear.down_input = x;
+                        else if (k == "setgearupengineinput") gear.up_input = x;
+                        else if (k == "setmaxrotation" && !a.empty()) parse_vec3(a[0], rot);
+                        else if (k == "setmaxspeed" && !a.empty()) parse_vec3(a[0], speed);
+                    }
+                    for (int i = 0; i < 3; ++i)
+                        if (rot[i] != 0 && speed[i] != 0) gear.travel = std::fabs(rot[i] / speed[i]);
+                    return gear.has = true;
+                }
+                for (auto& [k, a] : it->second.props)
+                    if (k == "addtemplate" && !a.empty() && find(a[0], depth + 1)) return true;
+                return false;
+            };
+            find(v.name, 0);
+            g = gears_.emplace(v.name, gear).first;
+        }
+        const Gear& gear = g->second;
+        if (!gear.has) continue;
+        v.gear_moving = std::max(0.0f, v.gear_moving - dt);
+        if (v.gear_moving > 0) continue;
+        Mat4 m = phys.transform(v.id);
+        float alt = m.m[13] - std::max(ground(m.m[12], m.m[14]), info.water_level);
+        if (v.gear_down ? alt > gear.up_height && v.throttle >= gear.up_input : alt < gear.down_height && v.throttle <= gear.down_input)
+            v.gear_down = !v.gear_down, v.gear_moving = gear.travel;
     }
 }
 
@@ -687,7 +744,7 @@ std::vector<Game::LoopSound> Game::loop_sounds(float dt) {
                 std::string type = lower(o.type), name = lower(o.name);
                 int occ = seen[name]++;
                 bool own = std::any_of(o.props.begin(), o.props.end(), [](const auto& p) { return p.first == "loadsoundscript"; });
-                if (own && (type == "engine" || type == "animatedbundle" || type == "rotationalbundle" || type == "wing"))
+                if (own && (type == "engine" || type == "animatedbundle" || type == "rotationalbundle" || type == "wing" || type == "landinggear"))
                     parts.push_back({name, type, occ});
                 for (auto& [k, a] : o.props)
                     if (k == "addtemplate" && !a.empty()) walk(a[0], depth + 1);
@@ -703,6 +760,10 @@ std::vector<Game::LoopSound> Game::loop_sounds(float dt) {
             const SoundPart& p = parts[i];
             if (p.tmpl.empty()) continue;
             long long key = static_cast<long long>(v.id) * 256 + static_cast<long long>(i);
+            if (p.type == "landinggear") {  // only while it moves; a new key each way, so the next move starts afresh
+                if (v.gear_moving > 0) out.push_back({key + (v.gear_down ? 0 : 128), p.tmpl, {m.m[12], m.m[13], m.m[14]}, 0, speed, accel, v.gear_down ? 0 : 1});
+                continue;
+            }
             float control = 0;
             if (p.type == "engine") {
                 // shortcut: engine load from speed (30 m/s = full; aircraft 80), until engines expose their rpm
@@ -722,6 +783,10 @@ std::vector<Game::LoopSound> Game::loop_sounds(float dt) {
         }
     };
     if (cur >= 0 && seat == 0) add(static_cast<size_t>(cur));
+    for (auto& [ch, s] : strides_)  // falling soldiers: the wind (patch 0) and a scream (patch 1, from 3.3 s)
+        if (s.active && s.falling)
+            for (int pa = 0; pa < 2; ++pa)
+                out.push_back({(1LL << 42) + 2LL * ch + pa, s.tmpl, {s.pos[0], s.pos[1], s.pos[2]}, 0, 0, 0, pa, "soldierfallinghigh.ssc"});
     for (const Bot& b : bots)
         if (!b.dead && b.veh >= 0 && b.vseat == 0) add(static_cast<size_t>(b.veh));
     if (!ambient_found_) {  // placed map objects whose parts loop a script of their own: flags, towers, coastline
@@ -1347,6 +1412,7 @@ void Game::step(float t, float dt, const GameInput& in) {
     phys.step(dt);
     apply_hits();
     footsteps(t, dt);
+    landing_gear(dt);
 }
 
 void Game::demo(float sim_seconds) {
