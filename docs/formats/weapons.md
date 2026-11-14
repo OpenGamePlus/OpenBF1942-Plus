@@ -21,13 +21,15 @@ Projectiles with `dieAfterColl 0` bounce instead of hitting and come to rest: gr
 
 Kits: the player carries every kit weapon that fires (e.g. Allied assault: BAR 1918, Colt, knife, grenades), keys 1–9, each with its own magazines.
 
-Supply depots (`SupplyDepot`, under placed objects such as `Ammobox`, `mediclocker`, the airfield ammo; 1,567 over the 78 levels): `radius`, `team` (0 both), `workOnSoldiers` / `workOnVehicles`, `addAmmoType <type> -1 <rate> 0` (Ammobox: type 1 at 15), `setHealth -1 <rate> 0` (medic locker 4.0). We read the rates as rounds and hit points per second (unverified). Soldiers in range get spare magazines and health; bots out of spare magazines walk to the nearest depot of their team that stocks their ammunition and wait there until full.
+Supply depots (`SupplyDepot`, under placed objects such as `Ammobox`, `mediclocker`, the airfield ammo; 1,567 over the 78 levels): `radius`, `team` (0 both), `workOnSoldiers` / `workOnVehicles`, `addAmmoType <type> -1 <rate> 0` (Ammobox: type 1 at 15), `setHealth -1 <rate> 0` (medic locker 4.0). We read the rates as rounds and hit points per second (unverified). Soldiers in range of a `workOnSoldiers` depot get spare magazines and health, vehicles in range of a `workOnVehicles` one rounds for their seats' guns; bots out of spare magazines walk to the nearest depot of their team that stocks their ammunition and wait there until full.
 
 Medic pack (`MedPack`, a `HandFireArms` with `magType 1`, "healing type"; `magSize 1800`, `numOfMag 1`, `roundOfFire 10`, no projectile): each round heals the first hurt teammate within the soldier's `healDistance` (10 m, 3D, CommonSoldierData.inc) by `healFactor` (0.25), else the medic itself by `selfHealFactor` (0.15) (Mac client `BFSoldier::useMedPack`, applied as negative damage; hit points per round inferred). A 30 hit-point soldier heals itself 10 → 24 in 10 s. With nobody hurt the pack is not used. Kits list it among their weapons; bots keep their first weapon with a projectile.
 
 `Projectile`: `material` (hit), `material2` (explosion; the damage file calls it splash damage), `timeToLive CRD_NONE/<s>/…`, `damageType`.
 
 The engine fires a vehicle's first `FireArms` with a projectile from that part's posed transform (turret and gun pitch included), along its local +z. Projectiles fly with full gravity and no drag (unverified).
+
+Vehicle guns carry `magSize` / `numOfMag` like hand weapons (Sherman cannon 30 × 1, coaxial MG 400 × 1, B-17 bombs 8 × 10, Elco torpedoes 2 × 5; `magSize -1`: unlimited, ship and AA guns). Each seat keeps its own rounds; with more magazines it reloads on empty, with one it stays empty until a depot that `workOnVehicles` and stocks its `ammoType` puts rounds back at the depot's rate (airfield depots: guns 100, bombs 4; vehicle depots and repair pads: type 0 at 10–20). `autoReload`, the overheat values (`heatAddWhenFire`, `timeDelayOnOverheat`) and the depots' `addVehicleType` repairs are not read.
 
 ## Damage
 

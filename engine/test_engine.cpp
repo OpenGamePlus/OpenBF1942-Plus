@@ -870,13 +870,14 @@ int main() {
         }
         {  // vehicle: health bar filled by hit points, the picture with the seat dot, one weapon icon in the right slot
             HudInfo v = info;
-            v.vehicle_icon = "vi", v.seat_x = 54, v.seat_y = 103, v.vehicle_frac = 0.5f, v.vehicle_weapons = {{"wi", 1}};
+            v.vehicle_icon = "vi", v.seat_x = 54, v.seat_y = 103, v.vehicle_frac = 0.5f, v.vehicle_weapons = {{"wi", 1, 15, 0.25f}};
             std::vector<HudQuad> vq = hud_layout(f, v, 800, 600);
             auto find = [&](const std::string& n) { return *std::find_if(vq.begin(), vq.end(), [&](const HudQuad& q) { return q.tex == n; }); };
             assert(find("vi").x == 199 && find("vi").w == 128);
             assert(find("menu/texture/minimap/map_dot").x == 199 + 54 - 3);
             assert(find("menu/texture/ingame/vehicle_healthbar_full_32x64").h == 32);  // half of 64 rows (the first: health)
             assert(find("wi").x == 710);
+            assert(find("menu/texture/ingame/ammobar_full_32x64").h == 16);  // a quarter of the magazine
         }
         {  // radio bar: closed, a button per key in its slot; open, the category above and the row below (empty keys skipped)
             HudInfo r = info;
@@ -927,6 +928,16 @@ int main() {
         assert(a.spare == 1 && a.refill == 0);
         assert(!a.supply(5, w));
         assert(a.spare == 1);
+        WeaponDef gun;  // a vehicle gun: one magazine, no reload; a depot puts rounds back one by one
+        gun.mag_size = 30, gun.mags = 1;
+        Ammo g = Ammo::full(gun);
+        g.rounds = 0;
+        g.tick(0, gun);
+        assert(!g.reloading(0) && !g.take(0));
+        g.supply(2.5f, gun);
+        assert(g.rounds == 2 && g.take(0));
+        g.supply(100, gun);
+        assert(g.rounds == 30);
     }
     std::puts("engine tests ok");
     return 0;

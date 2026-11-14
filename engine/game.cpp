@@ -144,18 +144,18 @@ Game::Game(const Vfs& vfs_, Con& con_, const Heightmap& hm_, const TerrainInfo& 
             const ConObject* t = inst.deleted ? nullptr : depot_of(inst.name, 0);
             if (!t) continue;
             Depot d;
-            bool soldiers = true;
             for (auto& [k, a] : t->props) {
                 if (a.empty()) continue;
                 if (k == "radius") d.radius = static_cast<float>(std::atof(a[0].c_str()));
                 else if (k == "team") d.team = std::atoi(a[0].c_str());
-                else if (k == "workonsoldiers") soldiers = std::atoi(a[0].c_str()) != 0;
+                else if (k == "workonsoldiers") d.soldiers = std::atoi(a[0].c_str()) != 0;
+                else if (k == "workonvehicles") d.vehicles = std::atoi(a[0].c_str()) != 0;
                 else if (k == "sethealth" && a.size() >= 2) d.health = std::max(0.0f, static_cast<float>(std::atof(a[1].c_str())));
                 else if (k == "addammotype" && a.size() >= 3) d.ammo[std::atoi(a[0].c_str())] = static_cast<float>(std::atof(a[2].c_str()));
             }
             for (auto& [k, a] : inst.props)
                 if (k == "absoluteposition" && !a.empty()) parse_vec3(a[0], d.pos);
-            if (soldiers && d.radius > 0 && (d.health > 0 || !d.ammo.empty())) depots.push_back(d);
+            if ((d.soldiers || d.vehicles) && d.radius > 0 && (d.health > 0 || !d.ammo.empty())) depots.push_back(d);
         }
         for (auto& inst : con.instances) {
             const ConObject* t = inst.deleted ? nullptr : object_template(inst.name);
@@ -499,9 +499,10 @@ void Game::add_vehicle(const std::string& name, Mat4 world, int team_on) {
         // Seat poses (animationStatesVehicle.con): a seat's own states, else sitting / standing by its flags.
         st.lower = !sd.lower.empty() ? sd.lower : sd.show == 3 || sd.show == 2 ? "lb_standinvehicle" : "lb_sitinvehicle";
         st.upper = !sd.upper.empty() ? sd.upper : "ub_sitinvehicle";
+        st.ammo = Ammo::full(sd.weapon);
         v.seats.push_back(st);
     }
-    if (v.seats.empty()) v.seats.push_back(Seat{}), v.seats[0].weapon = def->weapon, std::copy(def->exit, def->exit + 3, v.seats[0].exit);
+    if (v.seats.empty()) v.seats.push_back(Seat{}), v.seats[0].weapon = def->weapon, v.seats[0].ammo = Ammo::full(def->weapon), std::copy(def->exit, def->exit + 3, v.seats[0].exit);
     // Ships carry spawn points (FletcherSoldierSpawn): owned by the spawner's team when it has teamOnVehicle 1.
     if (team_on > 0) {
         std::function<void(const std::string&, Mat4, int)> find = [&](const std::string& n, Mat4 at, int depth) {
@@ -674,6 +675,12 @@ Ammo Ammo::full(const WeaponDef& w) {
 bool Ammo::supply(float r, const WeaponDef& w) {
     if (unlimited || w.mag_size <= 0) return false;
     int most = std::max(0, w.mags - 1), had = spare;
+    if (most == 0 && rounds < w.mag_size) {  // one magazine (most vehicle guns): it fills round by round
+        refill += r;
+        int n = static_cast<int>(refill);
+        refill -= static_cast<float>(n), rounds = std::min(w.mag_size, rounds + n);
+        return false;
+    }
     if (spare >= most) {
         refill = 0;
         return false;
@@ -708,7 +715,7 @@ void Game::supply(float step) {
     auto at = [&](const float p[3], int tm, Ammo& ammo, const WeaponDef& w, float& hp, float full, const std::string& tmpl, int source) {
         for (const Depot& d : depots) {
             float dx = p[0] - d.pos[0], dy = p[1] - d.pos[1], dz = p[2] - d.pos[2];
-            if ((d.team && d.team != tm) || dx * dx + dy * dy + dz * dz > d.radius * d.radius) continue;
+            if (!d.soldiers || (d.team && d.team != tm) || dx * dx + dy * dy + dz * dz > d.radius * d.radius) continue;
             auto r = d.ammo.find(w.ammo_type);
             if (r != d.ammo.end() && ammo.supply(r->second * step, w))  // a magazine more: SoldierRefillAmmo
                 sounds.push_back({tmpl, {p[0], p[1] + 1, p[2]}, source, false, false, "soldierrefillammo.ssc", 0});
@@ -722,6 +729,17 @@ void Game::supply(float step) {
     }
     for (size_t i = 0; i < bots.size(); ++i)
         if (Bot& b = bots[i]; !b.dead) at(b.pos, b.team, b.ammo, b.weapon, b.hp, hitpoints(b.tmpl), b.tmpl, static_cast<int>(i));
+    // Vehicles get rounds for their seats' weapons by ammoType (shortcut: setHealth / addVehicleType repairs not applied)
+    for (Veh& v : vehicles) {
+        if (v.wrecked) continue;
+        Mat4 m = phys.transform(v.id);
+        for (const Depot& d : depots) {
+            float dx = m.m[12] - d.pos[0], dy = m.m[13] - d.pos[1], dz = m.m[14] - d.pos[2];
+            if (!d.vehicles || (d.team && v.team && d.team != v.team) || dx * dx + dy * dy + dz * dz > d.radius * d.radius) continue;
+            for (Seat& st : v.seats)
+                if (auto r = d.ammo.find(st.weapon.ammo_type); r != d.ammo.end()) st.ammo.supply(r->second * step, st.weapon);
+        }
+    }
 }
 
 int Game::nearest_depot(const float pos[3], int tm, const WeaponDef& w) const {
@@ -730,7 +748,7 @@ int Game::nearest_depot(const float pos[3], int tm, const WeaponDef& w) const {
     for (size_t i = 0; i < depots.size(); ++i) {
         const Depot& d = depots[i];
         float dx = pos[0] - d.pos[0], dz = pos[2] - d.pos[2];
-        if ((d.team && d.team != tm) || !d.ammo.count(w.ammo_type) || dx * dx + dz * dz >= bd) continue;
+        if (!d.soldiers || (d.team && d.team != tm) || !d.ammo.count(w.ammo_type) || dx * dx + dz * dz >= bd) continue;
         bd = dx * dx + dz * dz, best = static_cast<int>(i);
     }
     return best;
@@ -768,7 +786,7 @@ void Game::fire(float t) {
         Veh& v = vehicles[static_cast<size_t>(cur)];
         Seat& st = v.seats[static_cast<size_t>(seat)];
         const WeaponDef& w = st.weapon;
-        if (v.wrecked || w.name.empty() || t < st.next_fire) return;
+        if (v.wrecked || w.name.empty() || t < st.next_fire || !st.ammo.take(t)) return;
         st.next_fire = t + w.interval;
         Mat4 m = st.has_muzzle ? st.muzzle : phys.transform(v.id);
         float d[3] = {m.m[8], m.m[9], m.m[10]}, l = std::sqrt(d[0] * d[0] + d[1] * d[1] + d[2] * d[2]);
@@ -1253,7 +1271,7 @@ void Game::crew(Bot& b, float t, float step, const float* target, int target_veh
             float pitch_err = (std::atan2(d[1], std::sqrt(d[0] * d[0] + d[2] * d[2])) - std::asin(std::clamp(f[1] / fl, -1.0f, 1.0f))) * 57.29578f;
             // Mouse right turns right, mouse down lowers the gun (the player's mapping).
             phys.look(v.id, std::clamp(yaw_err / 10, -1.0f, 1.0f), std::clamp(-pitch_err / 5, -1.0f, 1.0f), b.vseat);
-            if (std::fabs(yaw_err) < 3 && std::fabs(pitch_err) < 3 && dist < 250 && t >= st.next_fire) {
+            if (std::fabs(yaw_err) < 3 && std::fabs(pitch_err) < 3 && dist < 250 && t >= st.next_fire && st.ammo.take(t)) {
                 st.next_fire = t + st.weapon.interval * (st.weapon.interval > 1 ? 1.0f : 2.0f);
                 float l = dist;
                 std::normal_distribution<float> err(0.0f, 0.01f);
@@ -1528,6 +1546,8 @@ void Game::think(float t, float step) {
         b.yaw = std::atan2(gx, gz) * 57.29578f;
         phys.walk(b.ch, gx * 4, gz * 4, t < b.detour_until);  // jumping while stuck helps over low walls
     }
+    for (Veh& v : vehicles)
+        for (Seat& st : v.seats) st.ammo.tick(t, st.weapon);
     supply(step);
     // Who stands at each flag.
     std::vector<std::array<int, 3>> present(game.flags.size(), std::array<int, 3>{0, 0, 0});
@@ -2083,8 +2103,15 @@ HudInfo Game::hud_info() const {
                 else if (k == "setprimaryammobar") bar[0] = lower(a[0]);
                 else if (k == "setsecondaryammobar") bar[1] = lower(a[0]);
             }
+        const Seat& st = v.seats[static_cast<size_t>(seat)];
         for (int i = 0; i < n; ++i)
-            if (!icon[i].empty()) h.vehicle_weapons.push_back({icon[i], bar[i].find("reload") != std::string::npos ? 1 : bar[i].find("heat") != std::string::npos ? 2 : 0});
+            if (!icon[i].empty()) {
+                HudInfo::VehicleWeapon vw{icon[i], bar[i].find("reload") != std::string::npos ? 1 : bar[i].find("heat") != std::string::npos ? 2 : 0};
+                // shortcut: a seat fires only its first FireArms, shown as the primary; the secondary's count stays unknown
+                if (i == 0 && !st.ammo.unlimited)
+                    vw.rounds = st.ammo.rounds, vw.frac = std::clamp(static_cast<float>(st.ammo.rounds) / static_cast<float>(st.weapon.mag_size), 0.0f, 1.0f);
+                h.vehicle_weapons.push_back(vw);
+            }
     }
     h.mag = hand.mag_size;
     if (cur >= 0) {

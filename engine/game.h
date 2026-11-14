@@ -180,6 +180,7 @@ private:
         std::string lower, upper;    // the seated soldier's animation states
         int who = -2;  // -2 empty, -1 the player, else a bot
         std::string pco;  // its PlayerControlObject template (HUD icons)
+        Ammo ammo;        // its weapon's rounds (magSize, numOfMag); empty ones refill at depots that workOnVehicles
     };
     struct Veh {
         int id = -1;
@@ -220,8 +221,9 @@ private:
     std::map<std::string, Gear> gears_;  // by vehicle template
     void landing_gear(float dt);
 
-    struct Depot {  // SupplyDepot working on soldiers (ammo boxes, medic lockers, half-tracks are not placed by levels)
-        float pos[3] = {}, radius = 0, health = 0;  // health: hit points per second (setHealth second value; unverified)
+    struct Depot {  // placed SupplyDepot (ammo boxes, medic lockers, airfield and vehicle depots; half-tracks' are not placed)
+        float pos[3] = {}, radius = 0, health = 0;
+        bool soldiers = true, vehicles = false;      // workOnSoldiers, workOnVehicles  // health: hit points per second (setHealth second value; unverified)
         int team = 0;                                // 0: both
         std::map<int, float> ammo;                   // ammoType -> rounds per second (addAmmoType third value; unverified)
     };

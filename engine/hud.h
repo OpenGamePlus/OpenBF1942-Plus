@@ -67,6 +67,8 @@ struct HudInfo {
     struct VehicleWeapon {
         std::string icon;  // setPrimaryAmmoIcon / setSecondaryAmmoIcon
         int bar = 0;       // setPrimaryAmmoBar: 1 ABAmmoBarReloadBar, 2 ABAmmoBarHeatBar, 0 none
+        int rounds = -1;   // -1: unlimited or not fired by us (no count, full bar)
+        float frac = 1;    // rounds / magSize: the ammunition bar's fill
     };
     std::vector<VehicleWeapon> vehicle_weapons;                // teams 1, 2: their soldiers' setMinimapIcon (national flag)
     int mag = 0;                            // magSize: a full fill

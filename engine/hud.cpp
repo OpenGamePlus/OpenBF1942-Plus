@@ -169,8 +169,8 @@ std::vector<HudQuad> hud_layout(const Font& f, const HudInfo& in, int w, int h) 
     if (!in.vehicle_icon.empty()) {
         // vehicle: its green health bar (32 x 64 at 174, 525.5), its picture (128 x 128 at 199, 450) with the seat's
         // dot at setVehicleIconPos, and per weapon (primary at 550, secondary at 670; one icon: the right slot) a
-        // small reload / heat bar, the ammunition bar and a panel with the weapon's icon (shortcut: vehicle guns
-        // have no ammunition count here, so the bars stay full and no number is drawn)
+        // small reload / heat bar, the ammunition bar filled by rounds / magSize and a panel with the weapon's icon
+        // and its rounds at the top left
         const float rows = 64 * in.vehicle_frac;
         V(174, 525.5f, 32, 64, "menu/texture/ingame/vehicle_healthbar_empty_32x64", 0, 0, 1, 1);
         V(174, 525.5f + 64 - rows, 32, rows, "menu/texture/ingame/vehicle_healthbar_full_32x64", 0, (64 - rows) / 64, 1, 1);
@@ -184,9 +184,12 @@ std::vector<HudQuad> hud_layout(const Font& f, const HudInfo& in, int w, int h) 
             // reload bar: green and segmented in the capture (the vehicle health bar's art, shrunk); heat: the empty heat bar
             if (vw.bar == 1) V(x, 547, 24.4f, 41, "menu/texture/ingame/vehicle_healthbar_full_32x64", 0, 0, 1, 1);
             else if (vw.bar == 2) V(x, 545, 32, 64, "menu/texture/ingame/heatbar_empty_32x64", 0, 0, 1, 1);
-            V(x + 19, 525.5f, 32, 64, "menu/texture/ingame/ammobar_full_32x64", 0, 0, 1, 1);
+            const float fill = 64 * std::clamp(vw.frac, 0.0f, 1.0f);
+            V(x + 19, 525.5f, 32, 64, "menu/texture/ingame/ammobar_empty_32x64", 0, 0, 1, 1);
+            V(x + 19, 525.5f + 64 - fill, 32, fill, "menu/texture/ingame/ammobar_full_32x64", 0, (64 - fill) / 64, 1, 1);
             V(x + 40, 525.5f, 64, 64, "menu/texture/ingame/ammobar_vehicle_panel_64x64", 0, 0, 1, 1);
             V(x + 40, 525.5f, 64, 64, vw.icon, 0, 0, 1, 1);
+            if (vw.rounds >= 0) vtext(std::to_string(vw.rounds), x + 44, 528.5f, 12, vw.rounds == 0 ? axis : white);
         }
     } else if (in.vehicle_hp >= 0) {
         std::string v = in.vehicle + "  " + std::to_string(in.vehicle_hp);

@@ -2,6 +2,10 @@
 
 Append-only. Newest first. At most 3 bullets per stage.
 
+## 2026-11-14 — B3: vehicle ammunition
+
+- Seats keep their gun's rounds (`magSize` / `numOfMag`, read from the retail FireArms); depots that `workOnVehicles` refill them by `ammoType`, single-magazine guns round by round. The vehicle HUD shows the count and fills the bar. Checked with a probe (an empty Sherman gets 10 rounds a second at a repair pad) and a forced-seat screenshot; tested; Berlin 300 s identical.
+
 ## 2026-11-14 — C2: HUD placed as the original
 
 - Vehicle HUD from each seat's `setVehicleIcon` / `setVehicleIconPos` / ammo icons and bar kinds, placed as measured (checked on a forced-seat screenshot of a Sherman).
