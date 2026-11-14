@@ -499,11 +499,14 @@ Renderer::Impl::Impl(const Vfs& vfs_, Con& con, const Heightmap& hm, const Terra
             if (method == "createstate" && !args.empty()) cur = lower(args[0]);
             // copyState2 <new> <from> [<3p weapon> <speed> <1p weapon> <speed>]: the state just made, for another
             // weapon: <from> replaced in its name and animation paths (Ub_StandAimThompson -> Ub_StandAimBar1918).
-            if (method == "copystate2" && args.size() >= 2 && states.count(cur)) {
+            // copyState (K98 from No4, WalterP38 from Colt) takes the same arguments.
+            if ((method == "copystate2" || method == "copystate") && args.size() >= 2 && states.count(cur)) {
                 std::string to = lower(args[0]), from = lower(args[1]), name = swap(cur, from, to);
                 State st = states[cur];
-                std::string baf = swap(st.baf, from, lower(args.size() >= 3 ? args[2] : args[0]));
-                if (vfs.has(baf)) st.baf = baf;
+                // Weapon states pose the weapon's own skeleton: its own animation first (WalterP38Reload, not Colt's).
+                std::string own = swap(st.baf, from, to), baf = swap(st.baf, from, lower(args.size() >= 3 ? args[2] : args[0]));
+                if (cur.rfind("weapon", 0) == 0 && vfs.has(own)) st.baf = own;
+                else if (vfs.has(baf)) st.baf = baf;
                 std::string baf1p = swap(st.baf1p, from, lower(args.size() >= 5 ? args[4] : args[0]));
                 if (vfs.has(baf1p)) st.baf1p = baf1p;
                 if (name != cur && !states.count(name)) states[name] = st;

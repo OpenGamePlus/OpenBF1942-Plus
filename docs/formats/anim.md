@@ -67,7 +67,7 @@ We draw each part at:
 
 Without the 180° turn the barrel points back through the body and the left hand sits on the barrel axis behind the grip. With it, the left hand is on the forestock (M1 Garand: butt 0.29 m behind the grip, left hand 0.27 m ahead, muzzle 0.82 m ahead). The turn is fitted, not explained. It turns each part's mesh, not its bone offset: turning the offsets too put the Colt's slide 4 cm behind the frame (barrel bare, slide over the hand) and the MP40's magazine under the pistol grip. With the turn last, the slide's front meets the muzzle, the hammer sits at the slide's rear and the MP40's magazine hangs from its well.
 
-Upper-body states are per weapon: `copyState2 <new> <from> [<3p> <speed> <1p> <speed>]` copies the state just created, replacing `<from>` in its name and animation paths (e.g. `Ub_StandAimThompson` → `Ub_StandAimBar1918`, with the `bar1918` animations when they exist). There are 1,217 calls.
+Upper-body states are per weapon: `copyState2 <new> <from> [<3p> <speed> <1p> <speed>]` copies the state just created, replacing `<from>` in its name and animation paths (e.g. `Ub_StandAimThompson` → `Ub_StandAimBar1918`, with the `bar1918` animations when they exist). There are 1,217 calls. `copyState` takes the same arguments for weapons that borrow another's third-person animations (`K98`, `K98Sniper`, `No4Sniper` from `No4`; `Panzershreck` from `Bazooka`; `WalterP38` from `Colt`); until it was read those weapons had no arm, fire or reload states. Weapon states (`Weapon*`, which pose the weapon's own skeleton) use the weapon's own animation when it exists (`WalterP38Reload.baf`), else the borrowed one (`WlaterP38OutOfAmmo.baf` is misspelt in the archives, so the Walther locks its slide with the Colt's animation).
 
 ## Fire and reload
 
@@ -97,7 +97,7 @@ Shortcuts: one climb cycle loops (the start, end and exit states are not played)
 
 ## Weapon after a reload
 
-`WeaponReload<w>` ends in `StopDummyState`; we then leave the weapon at its skeleton's rest pose. Checked on the Colt and Walther P38: the slide (`mantel`) is forward at rest and at the last reload frame, back in the first 60 of 156 frames and in `<w>OutOfAmmo.baf` (not played yet). A maintainer report of the slide always looking back was the part placement above, not the states.
+`WeaponReload<w>` ends in `StopDummyState`; we then leave the weapon at its skeleton's rest pose. Checked on the Colt and Walther P38: the slide (`mantel`) is forward at rest and at the last reload frame, back in the first 60 of 156 frames and in `<w>OutOfAmmo.baf` (played once from the last shot and held when the magazine and every spare are empty: an empty magazine with spares reloads at once). A maintainer report of the slide always looking back was the part placement above, not the states.
 
 ## First person
 

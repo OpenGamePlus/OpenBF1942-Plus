@@ -2,6 +2,11 @@
 
 Append-only. Newest first. At most 3 bullets per stage.
 
+## 2026-11-14 — copyState weapons; out-of-ammo slide lock
+
+- `copyState` (not only `copyState2`) creates the per-weapon states of the K98, both snipers, the Panzershreck and the Walther P38: they had no arm, fire or reload animations. Weapon states take the weapon's own animation first. Checked by dumping the loaded states.
+- With no rounds and no spare magazine, `WeaponOutOfAmmo<w>` holds the slide / bolt back.
+
 ## 2026-11-14 — Held weapon parts placed on their bones
 
 - The maintainer's screenshot showed the Colt's slide always back: the 180° turn on held weapons was applied before each part's bone offset, mirroring it. Turning the meshes after the offsets puts the slide over the barrel and the MP40's magazine in its well (checked against mesh bounds).

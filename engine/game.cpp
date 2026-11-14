@@ -933,6 +933,9 @@ void Game::arm_states(SoldierView& v, const std::string& w, const WeaponDef& def
         // at the clock's phase the pistol's slide could show anywhere in its travel
         if (def.fire_once) v.upper_hold = v.weapon_hold = shot;
     }
+    // Empty with no magazine left (an empty one with spares starts reloading): WeaponOutOfAmmo<w>, played once from
+    // the last shot and held at its end, locks the pistol's slide / the bolt back.
+    if (ammo.rounds == 0 && !ammo.reloading(now)) v.weapon = "weaponoutofammo" + w, v.weapon_hold = shot, v.span = 0;
 }
 
 void Game::player_dies() {
