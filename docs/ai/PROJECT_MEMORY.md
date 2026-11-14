@@ -6,7 +6,7 @@ Append-only. Newest first. At most 3 bullets per stage.
 
 - The engine builds with MSVC 14.29 and vcpkg (SDL2, libepoxy, pkgconf); engine tests pass on Windows. Command in SYSTEM_SUMMARY.
 - Fixes: the matrix header renamed from `math.h` to `engine/mat.h` (MSVC's `<cmath>` picked ours up through `-I engine`); Jolt on the `/MD` runtime like SDL2; `SDL_MAIN_HANDLED` so no SDL2main.
-- Open: the maintainer listening to audio on the native build (WSLg stalls check).
+- The maintainer played it natively: runs fine, but the mouse was inverted on both axes. The earlier flips compensated WSLg, so they now apply only under WSL (`WSL_DISTRO_NAME`). Open: audio stalls check on the native build.
 
 ## 2026-11-14 — audio stalls traced to WSLg's device
 

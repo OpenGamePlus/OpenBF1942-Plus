@@ -114,6 +114,7 @@ int run(int argc, char** argv) {
     for (auto& [why, n] : game.skipped) skipped[why] += n;
 
     SDL_SetMainReady();
+    const bool wslg = std::getenv("WSL_DISTRO_NAME") != nullptr;  // running inside WSL, so input comes through WSLg
     if (SDL_Init(SDL_INIT_VIDEO) != 0) throw std::runtime_error(SDL_GetError());
     // Sound: the game adds voices, SDL's audio thread mixes them; without a device the game runs silent.
     Sounds sounds(vfs, con, 44100);  // the mixer locks its voice list itself; files load outside that lock
@@ -192,10 +193,11 @@ int run(int argc, char** argv) {
             if (ev.type == SDL_WINDOWEVENT && ev.window.event == SDL_WINDOWEVENT_FOCUS_LOST) grab = false;
             if (ev.type == SDL_MOUSEBUTTONDOWN && !play.empty() && shot.empty()) grab = true;
             if (ev.type == SDL_MOUSEMOTION && (look || grab)) {
-                // Both axes flipped at the maintainer's request (vertical 2026-11-10, horizontal 2026-11-14). By the
-                // view math, mouse right with xrel > 0 turns right; the flip is what the maintainer sees through WSLg.
-                // Turrets follow the same flipped axes.
-                float yrel = -static_cast<float>(ev.motion.yrel), xrel = -static_cast<float>(ev.motion.xrel);
+                // By the view math, mouse right with xrel > 0 turns right, which is what the maintainer sees on
+                // native Windows; through WSLg both axes arrive flipped, so they are flipped back there only.
+                // Turrets follow the same axes.
+                float flip = wslg ? -1.0f : 1.0f;
+                float yrel = flip * static_cast<float>(ev.motion.yrel), xrel = flip * static_cast<float>(ev.motion.xrel);
                 mouse_x += xrel, mouse_y += yrel;
                 cam.yaw += xrel * 0.004f;
                 cam.pitch = std::clamp(cam.pitch - yrel * 0.004f, -1.5f, 1.5f);
