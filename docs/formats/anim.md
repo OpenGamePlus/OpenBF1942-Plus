@@ -48,7 +48,7 @@ Bones not driven by any active animation keep the skeleton's local matrix. Soldi
 
 `animations/animationstates.con` (and the files it runs) define `AnimationStateMachine.createState <name>` followed by `addAnimation <baf> <speed> <flags>`, transitions and idles. Templates select states with `setAnimationState [index] <state>`: flags use `FlagBlow`; soldiers use index 0 (lower body, `Lb_Stand`) and 1 (upper body, `Ub_StandAim`, completed with the weapon name, e.g. `Ub_StandAimThompson`).
 
-The viewer plays the first animation of each state, looping at 25 frames per second × speed — the frame rate is a guess. Transitions, idles and weapon selection are not implemented.
+The viewer plays the first animation of each state, looping at 25 frames per second × speed — the frame rate is a guess. A negative speed plays backwards (`Lb_RunBackward` -1.6, `Lb_ClimbLadder1B` -5.6). The legs run at their own state's speed (before 2026-11-14 at the item's first state's, so `Lb_RunBackward` ran forwards). Transitions, idles and weapon selection are not implemented.
 
 ## Soldier root
 
@@ -75,11 +75,29 @@ Per weapon, from the Thompson states through `copyState2`:
 
 | State | Plays | When |
 |---|---|---|
-| `Ub_Fire<w>` / `Ub_LieFire<w>` | looping (`c_AsmLooping`) | while shots come within 1.5 rounds' interval (at least 0.25 s; ours) |
+| `Ub_Fire<w>` / `Ub_LieFire<w>` | looping (`c_AsmLooping`); `fireOnce` weapons once from the shot (their weapon states are `c_AsmPlayOnce`, copied from `WeaponFireDetonator`) | while shots come within 1.5 rounds' interval (at least 0.25 s; ours) |
 | `Ub_StandReload<w>` / `Ub_LieReload<w>` | once (`c_AsmPlayOnce`) | from the start of a reload |
 | `WeaponFire<w>`, `WeaponReload<w>` | on the weapon's own skeleton (bolt, magazine) | the same moments |
 
 Reloads (the arms and the weapon's own animation) are stretched to the weapon's `reloadTime`. The 3p reload animations (35–37 frames at speed 0.4) match it at 25 fps, but the 1p ones have 99–231 frames: at a fixed rate they were cut off halfway through the new magazine, as the maintainer saw. The upper body runs at its own speed and start time while the legs keep theirs; `pose()` takes one frame per animation. The state machine's own transitions (`addTransitionOne c_PIFire …`) are not interpreted.
+
+## Movement states
+
+Swimming, ladders, free falls, parachutes and jumps replace the walking states (`AnimationStatesSwim`, `Climb`, `Parachute`, `Jump`):
+
+| Situation | Lower / upper state | Weapon |
+|---|---|---|
+| swimming forward / backward / still | `Lb_` / `Ub_SwimForward`, `SwimBackward`, `Floating` | hidden (`c_AsmHideWeapon` on the lower state) |
+| on a ladder: up / down / holding on | `ClimbLadder1`, `ClimbLadder1B` (speed -5.6, backwards), `ClimbLadderIdle1` | hidden |
+| free fall past 10 m/s | `ParachuteFall` (the explosion fly animation) | hidden |
+| parachute open | `Lb_ParachuteIdle`, upper body unchanged | held |
+| in the air up to 1.5 s after a jump | `Lb_StandJump` / `Lb_RunJump`, once from the jump | held |
+
+Shortcuts: one climb cycle loops (the start, end and exit states are not played), as do the swim states without `Lb_StartSwim` / `Lb_EndSwim`; in first person the arms take the same upper states.
+
+## Weapon after a reload
+
+`WeaponReload<w>` ends in `StopDummyState`; we then leave the weapon at its skeleton's rest pose. Checked on the Colt and Walther P38: the slide (`mantel`) is forward at rest and at the last reload frame, back in the first 60 of 156 frames and in `<w>OutOfAmmo.baf` (not played yet). A maintainer report of the slide staying back after a reload is not reproduced by the states (headless trace: the weapon state clears when the reload ends).
 
 ## First person
 

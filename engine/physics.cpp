@@ -439,7 +439,7 @@ struct Physics::Impl {
         float landing = 0;  // downward speed at the last touch-down
         unsigned jumps = 0, landings = 0;  // counts, for sounds: jumps taken, touch-downs above 3 m/s
         bool swimming = false;  // head held at the surface
-        bool climbing = false;  // on a ladder, moving
+        int ladder = 0;  // on a ladder: 1 climbing up, -1 down, 2 holding on; 0 off
     };
     std::vector<Soldier> soldiers;
     struct Ladder {
@@ -1011,7 +1011,7 @@ void Physics::Impl::soldier(Soldier& s) {
     // Ladders: within 0.6 m of a ladder's box (feet from 0.5 m below its foot to its top), walking towards it climbs,
     // walking away while off the ground climbs down, standing still holds on. shortcut: 2.5 m/s and the reach are
     // guesses; the original's ladder rules (c_CGLadders) are unread.
-    s.climbing = false;
+    s.ladder = 0;
     Vec3 move = s.want;
     {
         Vec3 pos = ch.GetPosition();
@@ -1025,11 +1025,11 @@ void Physics::Impl::soldier(Soldier& s) {
             bool grounded = ch.GetGroundState() == CharacterBase::EGroundState::OnGround;
             float wl = std::sqrt(wx * wx + wz * wz);
             if (wl > 0.5f && toward > 0) {  // up, held at the ladder until its last metre, where it steps off on top
-                v = Vec3(0, 2.5f, 0), s.climbing = true;
+                v = Vec3(0, 2.5f, 0), s.ladder = 1;
                 if (feet < l.hi[1] - 1) move = Vec3::sZero();
             }
-            else if (wl > 0.5f && !grounded) v = Vec3(0, -2.5f, 0), s.climbing = true, move = Vec3::sZero();
-            else if (!grounded) v = Vec3::sZero();
+            else if (wl > 0.5f && !grounded) v = Vec3(0, -2.5f, 0), s.ladder = -1, move = Vec3::sZero();
+            else if (!grounded) v = Vec3::sZero(), s.ladder = 2;
             else break;
             s.fall = 0, s.jump = false;
             break;
@@ -1054,7 +1054,8 @@ void Physics::open_parachute(int character, float k) { p_->soldiers.at(static_ca
 bool Physics::parachute_open(int character) const { return p_->soldiers.at(static_cast<size_t>(character)).chute > 0; }
 void Physics::add_ladder(const float lo[3], const float hi[3]) { p_->ladders.push_back({{lo[0], lo[1], lo[2]}, {hi[0], hi[1], hi[2]}}); }
 size_t Physics::ladders() const { return p_->ladders.size(); }
-bool Physics::character_climbing(int character) const { return p_->soldiers.at(static_cast<size_t>(character)).climbing; }
+int Physics::character_ladder(int character) const { return p_->soldiers.at(static_cast<size_t>(character)).ladder; }
+bool Physics::character_climbing(int character) const { int l = character_ladder(character); return l == 1 || l == -1; }
 bool Physics::character_swimming(int character) const { return p_->soldiers.at(static_cast<size_t>(character)).swimming; }
 void Physics::character_steps(int character, unsigned& jumps, unsigned& landings) const {
     const auto& s = p_->soldiers.at(static_cast<size_t>(character));

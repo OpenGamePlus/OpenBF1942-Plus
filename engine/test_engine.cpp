@@ -227,6 +227,15 @@ int main() {
         a1.channels[3][0] = 1;
         auto w = pose(one, {&a1}, std::nanf(""));  // NaN frame (speed "nan" in a script) is clamped
         assert(w.size() == 1 && w[0].m[15] == 1);
+        {  // backwards (negative speed): frame -0.5 of a 4-frame move is frame 3.5, between the last and the first
+            Animation mv;
+            mv.bones = {"Root"};
+            mv.frames = 4;
+            mv.channels.assign(7, std::vector<float>(4, 0));
+            for (int f = 0; f < 4; ++f) mv.channels[3][static_cast<size_t>(f)] = 1, mv.channels[4][static_cast<size_t>(f)] = static_cast<float>(f);
+            assert(std::fabs(pose(one, {&mv}, -0.5f)[0].m[12] - 1.5f) < 1e-4f);  // x: 3 and 0 halved
+            assert(std::fabs(pose(one, {&mv}, -1.0f)[0].m[12] - 3.0f) < 1e-4f && std::fabs(pose(one, {&mv}, 2.0f)[0].m[12] - 2.0f) < 1e-4f);
+        }
         assert(throws([] { parse_terrain_con("GeometryTemplate.worldSize nan\nGeometryTemplate.yScale 1\nGeometryTemplate.file h\n"); }));
     }
 

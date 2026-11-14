@@ -176,6 +176,7 @@ public:
     void character_steps(int character, unsigned& jumps, unsigned& landings) const;  // running counts (landings above 3 m/s)
     bool character_swimming(int character) const;  // in water deep enough to swim
     bool character_climbing(int character) const;  // on a ladder, moving up or down
+    int character_ladder(int character) const;     // 1 climbing up, -1 down, 2 holding on, 0 off a ladder
     bool character_on_ground(int character) const;
 
 private:

@@ -58,6 +58,7 @@ struct SoldierView {
     float span = 0;                          // > 0: those play-once states (upper and weapon) last this long (s)
     std::string weapon;                      // state animating the held weapon's skeleton (WeaponReloadThompson)
     float weapon_hold = -1;                  // as upper_hold, for the weapon state
+    float lower_hold = -1;                   // >= 0: the lower state plays once from this time (jumps)
 };
 
 // Rounds in the weapon and spare magazines. numOfMag read as all magazines, the loaded one included (unverified).
@@ -125,6 +126,7 @@ public:
         bool swim = false;   // swimming
         bool moving = false; // above 0.5 m/s last frame
         float landed = -10;  // time of its last landing sound
+        float jumped = -10;  // time of its last jump
         bool falling = false;  // free fall above 10 m/s, until ground, parachute or water: SoldierFallingHigh
         bool active = false;   // stepped this frame (alive, on foot)
         std::string tmpl;      // its soldier template
@@ -133,6 +135,7 @@ public:
     std::map<int, Stride> strides_;  // by character: footsteps
     void footsteps(float t, float dt);
     void voice(int ch, const float pos[3], const std::string& tmpl, int source, bool killed);
+    bool motion_states(int ch, float forward, SoldierView& v) const;  // swim, ladder, fall, parachute, jump states
 
     struct SoundEvent {
         std::string tmpl;  // FireArms template; with effect, an EffectBundle (a shot's end effect: explosions)

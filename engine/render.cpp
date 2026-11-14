@@ -281,6 +281,7 @@ struct Animated {
     float normal_sign = 1;      // posed face normals point the stored normals' way
     float upper_speed = 0, upper_hold = -1;  // the upper-body layer's own speed (0: the item's) and play-once start
     float span = 0;                          // > 0: the play-once upper layer is stretched to this many seconds
+    float lower_speed = 0, lower_hold = -1;  // the lower-body state's own speed (0: the item's) and play-once start
 };
 
 // Tree mesh: all three groups share one buffer; group 3 sprites carry corner offsets.
@@ -673,7 +674,9 @@ void Renderer::Impl::draw(const std::vector<DrawItem>& scene, const Camera& cam,
                 Animated& a = animated[static_cast<size_t>(anim_of_item[i])];
                 if (a.anims0.empty()) continue;
                 a.anims = a.anims0, a.hold = sv.hold, a.upper_speed = 0, a.upper_hold = sv.upper_hold, a.span = sv.span;
-                if (auto an = sv.lower.empty() ? nullptr : state_anim(sv.lower, sv.first_person)) a.anims[0] = an;
+                a.lower_speed = 0, a.lower_hold = sv.lower_hold;
+                float ls = 0;
+                if (auto an = sv.lower.empty() ? nullptr : state_anim(sv.lower, sv.first_person, &ls)) a.anims[0] = an, a.lower_speed = ls;
                 // First person: the 1p arms' animations only; the legs' 3p states lifted the hands (and the gun) into view.
                 if (sv.first_person) a.anims[0] = nullptr;
                 float us = 0;
@@ -696,7 +699,7 @@ void Renderer::Impl::draw(const std::vector<DrawItem>& scene, const Camera& cam,
                 frame = std::clamp((seconds - a.hold) * 25.0f * a.speed, 0.0f, static_cast<float>(frames) - 1.01f);
             }
             std::vector<float> frames(list.size(), frame);
-            if (list.size() >= 2 && a.hold == -1 && a.upper_speed > 0) {  // the upper body at its own speed / start
+            if (list.size() >= 2 && a.hold == -1 && a.upper_speed != 0) {  // the upper body at its own speed / start
                 float s = a.upper_speed;
                 // Reloads fill the weapon's reloadTime: 3p reloads (about 36 frames at speed 0.4) match it at 25 fps,
                 // 1p ones have 4-6 times the frames, so a fixed rate cut them off before the new magazine went in.
@@ -705,6 +708,9 @@ void Renderer::Impl::draw(const std::vector<DrawItem>& scene, const Camera& cam,
                                                              : std::clamp((seconds - a.upper_hold) * 25.0f * s, 0.0f, last))
                                               : (seconds * 25.0f + a.phase) * s;
             }
+            if (a.hold == -1 && !list.empty() && list[0] && a.lower_speed != 0)  // the legs at their state's speed
+                frames[0] = a.lower_hold >= 0 ? std::clamp((seconds - a.lower_hold) * 25.0f * std::fabs(a.lower_speed), 0.0f, static_cast<float>(list[0]->frames) - 1.01f)
+                                              : (seconds * 25.0f + a.phase) * a.lower_speed;
             auto world = pose(*a.skeleton, list, frames, a.biped);
             a.bones = world;
             skin_apply(*a.skin, a.map, a.to_ske, world, a.base, 10, skinned);

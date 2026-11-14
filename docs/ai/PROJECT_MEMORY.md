@@ -2,6 +2,12 @@
 
 Append-only. Newest first. At most 3 bullets per stage.
 
+## 2026-11-14 — B2: movement animations; legs at their own speed
+
+- Swim, ladder (up, down backwards, idle), free fall, parachute and jump states replace walking, hiding the weapon where the state does; `pose()` plays negative speeds backwards (tested), and legs now run at their own state's speed (`Lb_RunBackward` had been playing forwards).
+- Single-shot (`fireOnce`) fire states now play once from the shot instead of looping at the clock's phase.
+- The maintainer saw a pistol slide stay back after a reload: not reproduced (states clear, data has the slide forward at rest and at the reload's end); asked for details. Berlin 300 s identical.
+
 ## 2026-11-14 — B2: ladders
 
 - `c_CGLadders` objects become climbable boxes in physics: walk into one to climb (2.5 m/s, guessed), back off to climb down, stand still to hold on; `SoldierClimbLadder` while climbing. Tested on a synthetic ladder.

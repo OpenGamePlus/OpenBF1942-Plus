@@ -331,7 +331,7 @@ void Game::footsteps(float t, float dt) {
         s.posture = posture;
         unsigned jumps, landings;
         phys.character_steps(ch, jumps, landings);
-        if (seen && !teleport && jumps != s.jumps) play("soldierjump.ssc", 0);
+        if (seen && !teleport && jumps != s.jumps) play("soldierjump.ssc", 0), s.jumped = t;
         if (seen && !teleport && landings != s.landings && t - s.landed >= 1) play("soldierjumpland.ssc", ground), s.landed = t;  // 1 s cooldown (Mac client SoldierSound)
         s.jumps = jumps, s.landings = landings;
         bool chute = phys.parachute_open(ch);
@@ -903,6 +903,25 @@ float Game::fall_damage(int character, float full) {
     return v > 10 ? full * (v - 10) / 10 : 0.0f;
 }
 
+// Swimming, ladders, free falls, an open parachute and jumps (animations/AnimationStates{Swim,Climb,Parachute}.con,
+// Lb_StandJump / Lb_RunJump): their states replace the walking ones; the swim, ladder and fall states hide the weapon
+// (c_AsmHideWeapon). shortcut: one climb cycle (Ladder1, 1B down, Idle1) loops; the start, end and exit states and
+// the swim start / end are not played.
+bool Game::motion_states(int ch, float forward, SoldierView& v) const {
+    auto it = strides_.find(ch);
+    if (ch < 0 || it == strides_.end()) return false;
+    const Stride& s = it->second;
+    auto both = [&](const std::string& m) { v.lower = "lb_" + m, v.upper = "ub_" + m, v.weapon.clear(), v.held_parts = 0; };
+    int ladder = phys.character_ladder(ch);
+    if (s.swim) both(forward > 0.1f ? "swimforward" : forward < -0.1f ? "swimbackward" : "floating");
+    else if (ladder) both(ladder == 1 ? "climbladder1" : ladder == -1 ? "climbladder1b" : "climbladderidle1");
+    else if (s.falling) both("parachutefall");
+    else if (phys.parachute_open(ch)) v.lower = "lb_parachuteidle";
+    else if (!phys.character_on_ground(ch) && now - s.jumped < 1.5f) v.lower = s.moving ? "lb_runjump" : "lb_standjump", v.lower_hold = s.jumped;
+    else return false;
+    return true;
+}
+
 void Game::arm_states(SoldierView& v, const std::string& w, const WeaponDef& def, const Ammo& ammo, float shot, int pose) const {
     if (ammo.reloading(now)) {
         v.upper = (pose == 2 ? "ub_liereload" : "ub_standreload") + w, v.upper_hold = ammo.reload_until - def.reload;
@@ -910,6 +929,9 @@ void Game::arm_states(SoldierView& v, const std::string& w, const WeaponDef& def
     } else if (now - shot < std::max(0.25f, def.interval * 1.5f)) {  // looping fire states while shots keep coming
         v.upper = (pose == 2 ? "ub_liefire" : "ub_fire") + w;
         v.weapon = "weaponfire" + w;
+        // fireOnce weapons (pistols, rifles, bazooka): their fire states play once (c_AsmPlayOnce), from the shot; looped
+        // at the clock's phase the pistol's slide could show anywhere in its travel
+        if (def.fire_once) v.upper_hold = v.weapon_hold = shot;
     }
 }
 
@@ -1738,6 +1760,7 @@ void Game::pose() {
         me.first = sol_first, me.parts = sol_parts, me.lower = lower_state, me.upper = held.empty() ? "" : upper;
         if (!held.empty()) arm_states(me, held, hand, hand_ammo, last_shot, posture);
         if (in_seat) me.lower = in_seat->lower, me.upper = in_seat->upper, me.weapon.clear();
+        else if (cur < 0) motion_states(player, move_f, me);
         if (cur < 0 && slot < loadout_items.size()) me.held_first = loadout_items[slot].first, me.held_parts = loadout_items[slot].second;
         // First person: the 1p arms and body hang from the camera at the eye (center1pHands), with the states'
         // first-person animations; the held weapon follows their right hand.
@@ -1786,6 +1809,7 @@ void Game::pose() {
             v.lower = lower_b, v.upper = w.empty() ? "" : upper;
             if (!w.empty()) arm_states(v, w, b.weapon, b.ammo, b.last_shot, b.posture);
             if (bseat) v.lower = bseat->lower, v.upper = bseat->upper, v.weapon.clear(), v.held_parts = 0;  // c_AsmHideWeapon
+            else if (b.veh < 0) motion_states(b.ch, b.moving ? 1.0f : 0.0f, v);
             soldiers.push_back(v);
         }
     }

@@ -151,7 +151,10 @@ std::vector<Mat4> pose(const Skeleton& s, const std::vector<const Animation*>& a
         const Animation* a = anims[k];
         float frame = k < frames.size() ? frames[k] : 0.0f;
         if (!a || !a->frames) continue;
-        float f = std::isfinite(frame) ? std::fmod(std::max(frame, 0.0f), static_cast<float>(a->frames)) : 0.0f;
+        // negative frames wrap from the end: states with a negative speed play backwards (Lb_RunBackward -1.6)
+        float f = std::isfinite(frame) ? std::fmod(frame, static_cast<float>(a->frames)) : 0.0f;
+        if (f < 0) f += static_cast<float>(a->frames);
+        if (!(f < static_cast<float>(a->frames))) f = 0;  // fmod rounding at the end
         uint32_t f0 = static_cast<uint32_t>(f), f1 = (f0 + 1) % a->frames;
         float t = f - static_cast<float>(f0);
         for (size_t b = 0; b < a->bones.size(); ++b)
