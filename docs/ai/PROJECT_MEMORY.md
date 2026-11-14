@@ -2,6 +2,12 @@
 
 Append-only. Newest first. At most 3 bullets per stage.
 
+## 2026-11-14 — C1: voices, parachute, depot refills
+
+- Hurt soldiers say `SoldierHitDamage` (once a second at most), dying ones `SoldierKilled`, in the template's `setRadioLanguage` (`@Language` folder; Canadian falls back to English). The earlier note that these scripts are empty at HIGH was wrong: their voices sit under `sound/<rate>/<language>/`.
+- `SoldierOpenParachute` when a parachute opens; `SoldierRefillAmmo` when a depot adds a magazine (`Ammo::supply` now says so, tested). Every voice path resolves for the 7 soldier templates; Berlin 300 s identical.
+- Open in C1: radio and callouts, charge, swimming, falling wind / scream, medic healing, landing gear; the maintainer has not heard these yet.
+
 ## 2026-11-14 — C1: jumps, landings, posture changes
 
 - Soldiers play `SoldierJump` when the physics takes a jump, `SoldierJumpLand` on touch-downs above 3 m/s (ground patch), and the four posture scripts; physics counts jumps and landings per character (tested). Game results unchanged (Berlin 300 s identical).

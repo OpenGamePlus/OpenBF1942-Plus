@@ -70,7 +70,7 @@ struct Ammo {
     void tick(float t, const WeaponDef& w);    // a finished reload fills the magazine
     bool reloading(float t) const { return t < reload_until; }
     float refill = 0;  // rounds received from a supply depot towards the next spare magazine
-    void supply(float rounds, const WeaponDef& w);  // adds rounds, as spare magazines up to numOfMag
+    bool supply(float rounds, const WeaponDef& w);  // adds rounds, as spare magazines up to numOfMag; true: one more
 };
 
 struct Camera {
@@ -116,9 +116,12 @@ public:
         float next = 0;    // time of its next footstep
         int posture = -1;  // last seen; -1 not seen yet
         unsigned jumps = 0, landings = 0;  // physics counts last seen
+        bool chute = false;  // parachute open
+        float voiced = -10;  // time of its last hit voice
     };
     std::map<int, Stride> strides_;  // by character: footsteps
     void footsteps(float t, float dt);
+    void voice(int ch, const float pos[3], const std::string& tmpl, int source, bool killed);
 
     struct SoundEvent {
         std::string tmpl;  // FireArms template; with effect, an EffectBundle (a shot's end effect: explosions)

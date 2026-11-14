@@ -243,7 +243,7 @@ int run(int argc, char** argv) {
             sounds.mixer.listen(Listener{{cam.x, cam.y, cam.z}, {std::cos(cam.yaw), 0, -std::sin(cam.yaw)}});
             float now_s = static_cast<float>(SDL_GetTicks()) / 1000.0f;
             for (auto& e : game.sounds) {
-                if (!e.script.empty()) sounds.soldier(e.script, e.patch, e.pos);
+                if (!e.script.empty()) sounds.soldier(e.script, e.patch, e.pos, e.tmpl);
                 else if (e.effect) sounds.effect(e.tmpl, e.pos);
                 else if (e.reload) sounds.reload(e.tmpl, e.pos);
                 else sounds.shot(e.tmpl, e.pos, e.source, now_s);

@@ -115,7 +115,22 @@ void Sounds::effect(const std::string& tmpl, const float pos[3]) {
         if (const SoundPatch* p = weapon_patch(tmpl, i)) play_patch(*p, pos, 0, true);
 }
 
-void Sounds::soldier(const std::string& script, int patch, const float pos[3]) {
+// A soldier template's setRadioLanguage ("German"), lower-cased; "english" if it has none.
+std::string Sounds::language(const std::string& tmpl) const {
+    if (con_.templates.count("objecttemplate")) {
+        auto& ts = con_.templates.at("objecttemplate");
+        if (auto it = ts.find(low(tmpl)); it != ts.end())
+            for (auto& [k, a] : it->second.props)
+                if (k == "setradiolanguage" && !a.empty()) {
+                    std::string l = low(a[0]);
+                    l.erase(std::remove(l.begin(), l.end(), '"'), l.end());
+                    return l;
+                }
+    }
+    return "english";
+}
+
+void Sounds::soldier(const std::string& script, int patch, const float pos[3], const std::string& tmpl) {
     // shortcut: the soldiers' shared script folder, where SoldierSound.inc's relative names point
     const std::string key = "objects/soldiers/common/sounds/" + script;
     auto it = weapon_.find(key);
@@ -130,9 +145,16 @@ void Sounds::soldier(const std::string& script, int patch, const float pos[3]) {
     if (patch < 0 || static_cast<size_t>(patch) >= it->second.size() || it->second[static_cast<size_t>(patch)].layers.empty()) return;
     const SoundPatch& all = it->second[static_cast<size_t>(patch)];
     // A patch whose layers chain by trigger (posture changes) plays whole; otherwise its layers are variants.
-    if (std::any_of(all.layers.begin(), all.layers.end(), [](const SoundLayer& l) { return l.trigger; })) return void(play_patch(all, pos, 0, true));
     SoundPatch one;
-    one.layers.push_back(all.layers[variant_++ % all.layers.size()]);
+    if (std::any_of(all.layers.begin(), all.layers.end(), [](const SoundLayer& l) { return l.trigger; })) one = all;
+    else one.layers.push_back(all.layers[variant_++ % all.layers.size()]);
+    // Voices: @Language is the soldier's radio language folder; one the archives lack (Canadian) falls back to English.
+    for (SoundLayer& l : one.layers)
+        if (auto at = l.wav.find("@language"); at != std::string::npos) {
+            std::string wav = l.wav;
+            l.wav.replace(at, 9, language(tmpl));
+            if (!vfs_.has(l.wav)) l.wav = wav.replace(at, 9, "english");
+        }
     play_patch(one, pos, 0, true);
 }
 

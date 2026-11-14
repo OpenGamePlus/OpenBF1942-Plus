@@ -19,9 +19,9 @@ public:
     void shot(const std::string& tmpl, const float pos[3], int source, float now);
     void reload(const std::string& tmpl, const float pos[3]);  // patch 1
     void effect(const std::string& tmpl, const float pos[3]);  // an EffectBundle's script: every patch, once
-    // A soldier movement sound (script file of SoldierSound.inc, e.g. "soldierrun.ssc"): one layer of the patch, the
-    // next variant each time.
-    void soldier(const std::string& script, int patch, const float pos[3]);
+    // A soldier sound (script file of SoldierSound.inc, e.g. "soldierrun.ssc") of the soldier template tmpl: one layer
+    // of the patch, the next variant each time; voices in tmpl's radio language.
+    void soldier(const std::string& script, int patch, const float pos[3], const std::string& tmpl);
     void tick(float now);  // ends automatic fire that stopped (no shot for 0.25 s)
     // Looping part sounds (engines, tracks, turrets, wings): each template's own script, one loop per key; a key
     // missing from the list stops its loop.
@@ -39,6 +39,7 @@ public:
 
 private:
     const SoundPatch* patch(const std::string& path);
+    std::string language(const std::string& tmpl) const;
     const SoundPatch* weapon_patch(const std::string& tmpl, size_t index);
     int play_patch(const SoundPatch& p, const float pos[3], float control, bool once);
     int play(const std::string& path, const float pos[3], float control);

@@ -324,6 +324,9 @@ void Game::footsteps(float t, float dt) {
         if (seen && !teleport && jumps != s.jumps) play("soldierjump.ssc", 0);
         if (seen && !teleport && landings != s.landings) play("soldierjumpland.ssc", ground);
         s.jumps = jumps, s.landings = landings;
+        bool chute = phys.parachute_open(ch);
+        if (chute && !s.chute) play("soldieropenparachute.ssc", 0);
+        s.chute = chute;
         if (!phys.character_on_ground(ch)) return;
         if (v < 0.5f || v > 15) return;  // standing, or a teleport (respawn)
         if (t < s.next) return;
@@ -553,15 +556,16 @@ Ammo Ammo::full(const WeaponDef& w) {
     return a;
 }
 
-void Ammo::supply(float r, const WeaponDef& w) {
-    if (unlimited || w.mag_size <= 0) return;
-    int most = std::max(0, w.mags - 1);
+bool Ammo::supply(float r, const WeaponDef& w) {
+    if (unlimited || w.mag_size <= 0) return false;
+    int most = std::max(0, w.mags - 1), had = spare;
     if (spare >= most) {
         refill = 0;
-        return;
+        return false;
     }
     refill += r;
     while (refill >= static_cast<float>(w.mag_size) && spare < most) refill -= static_cast<float>(w.mag_size), ++spare;
+    return spare > had;
 }
 
 bool Ammo::take(float t) {
@@ -586,22 +590,23 @@ void Ammo::tick(float t, const WeaponDef& w) {
 
 // Soldiers inside a depot's radius get ammunition (spare magazines) and hit points.
 void Game::supply(float step) {
-    auto at = [&](const float p[3], int tm, Ammo& ammo, const WeaponDef& w, float& hp, float full) {
+    auto at = [&](const float p[3], int tm, Ammo& ammo, const WeaponDef& w, float& hp, float full, const std::string& tmpl, int source) {
         for (const Depot& d : depots) {
             float dx = p[0] - d.pos[0], dy = p[1] - d.pos[1], dz = p[2] - d.pos[2];
             if ((d.team && d.team != tm) || dx * dx + dy * dy + dz * dz > d.radius * d.radius) continue;
             auto r = d.ammo.find(w.ammo_type);
-            if (r != d.ammo.end()) ammo.supply(r->second * step, w);
+            if (r != d.ammo.end() && ammo.supply(r->second * step, w))  // a magazine more: SoldierRefillAmmo
+                sounds.push_back({tmpl, {p[0], p[1] + 1, p[2]}, source, false, false, "soldierrefillammo.ssc", 0});
             hp = std::min(full, hp + d.health * step);
         }
     };
     if (player >= 0 && !player_dead && cur < 0) {
         float p[3];
         phys.character_position(player, p);
-        at(p, team, hand_ammo, hand, player_hp, hitpoints(soldier_tmpl));
+        at(p, team, hand_ammo, hand, player_hp, hitpoints(soldier_tmpl), soldier_tmpl, -1);
     }
-    for (Bot& b : bots)
-        if (!b.dead) at(b.pos, b.team, b.ammo, b.weapon, b.hp, hitpoints(b.tmpl));
+    for (size_t i = 0; i < bots.size(); ++i)
+        if (Bot& b = bots[i]; !b.dead) at(b.pos, b.team, b.ammo, b.weapon, b.hp, hitpoints(b.tmpl), b.tmpl, static_cast<int>(i));
 }
 
 int Game::nearest_depot(const float pos[3], int tm, const WeaponDef& w) const {
@@ -787,6 +792,15 @@ void Game::player_dies() {
     std::printf("you died\n");
 }
 
+// A hurt soldier's voice: SoldierKilled when it dies, else SoldierHitDamage at most once a second
+// (SoldierSound.inc setHitDamageFrequency 1.0; its random 0.2 left out).
+void Game::voice(int ch, const float pos[3], const std::string& tmpl, int source, bool killed) {
+    float& last = strides_[ch].voiced;
+    if (!killed && now - last < 1) return;
+    last = now;
+    sounds.push_back({tmpl, {pos[0], pos[1] + 1.5f, pos[2]}, source, false, false, killed ? "soldierkilled.ssc" : "soldierhitdamage.ssc", 0});
+}
+
 // Hits: damage = hit material vs the armour face met (else the vehicle's material). The explosion material (material2)
 // hits everything within the projectile's radius, falling off linearly to 0 at its edge (unverified); without a radius
 // it adds to the direct hit. Soldiers take no damage from their own team (shots carry the shooter's team as their tag).
@@ -794,10 +808,14 @@ void Game::apply_hits() {
     auto hurt_player = [&](float d) {
         player_hp -= d;
         std::printf("you are hit: %.1f hp left\n", std::max(0.0f, player_hp));
+        float p[3];
+        phys.character_position(player, p);
+        voice(player, p, soldier_tmpl, -1, player_hp <= 0);
         if (player_hp <= 0) player_dies();
     };
     auto hurt_bot = [&](Bot& b, float d, int tag) {
         b.hp -= d;
+        voice(b.ch, b.pos, b.tmpl, static_cast<int>(&b - bots.data()), b.hp <= 0);
         if (b.hp > 0) return;
         b.dead = true, b.died_at = game_time();
         phys.character_position(b.ch, b.pos);
@@ -1295,6 +1313,9 @@ void Game::step(float t, float dt, const GameInput& in) {
         if (float d = fall_damage(player, hitpoints(soldier_tmpl)); d > 0 && !player_dead) {
             player_hp -= d;
             std::printf("fall: %.1f damage\n", d);
+            float p[3];
+            phys.character_position(player, p);
+            voice(player, p, soldier_tmpl, -1, player_hp <= 0);
             if (player_hp <= 0) player_dies();
         }
         if (int want = lying ? 2 : in.crouch ? 1 : 0; cur < 0 && !player_dead && want != posture && phys.set_posture(player, want)) posture = want;

@@ -757,11 +757,11 @@ int main() {
         a.tick(3, w);
         assert(!a.reloading(3) && !a.take(4));  // no spare left
         assert(Ammo::full(WeaponDef{}).take(0));  // magSize 0: unlimited
-        a.supply(1.5f, w);  // numOfMag 2: one spare at most
+        assert(!a.supply(1.5f, w));  // numOfMag 2: one spare at most; true only when a magazine is added
         assert(a.spare == 0 && a.refill == 1.5f);
-        a.supply(0.5f, w);
+        assert(a.supply(0.5f, w));
         assert(a.spare == 1 && a.refill == 0);
-        a.supply(5, w);
+        assert(!a.supply(5, w));
         assert(a.spare == 1);
     }
     std::puts("engine tests ok");
