@@ -113,7 +113,9 @@ public:
     std::map<int, float> part_speed_;                            // last speed of each vehicle
     struct Stride {
         float pos[3];
-        float next = 0;  // time of its next footstep
+        float next = 0;    // time of its next footstep
+        int posture = -1;  // last seen; -1 not seen yet
+        unsigned jumps = 0, landings = 0;  // physics counts last seen
     };
     std::map<int, Stride> strides_;  // by character: footsteps
     void footsteps(float t, float dt);

@@ -301,21 +301,35 @@ int Game::fire(const WeaponDef& w, const float pos[3], const float vel[3], int i
 }
 
 // Footsteps of every soldier on foot (SoldierSound.inc frequencies: run 0.36 s, walk 0.66, crouch 0.5, crawl 0.6),
-// on the ground patch of the terrain material under it. shortcut: materials grouped by name (grass, gravel, rock and
-// paved roads as concrete, the rest sand); static objects underfoot count as the ground under them.
+// on the ground patch of the terrain material under it; also its jumps, landings (above 3 m/s, threshold guessed) and
+// posture changes. shortcut: materials grouped by name (grass, gravel, rock and paved roads as concrete, the rest
+// sand); static objects underfoot count as the ground under them.
 void Game::footsteps(float t, float dt) {
     static const int ground_patch[16] = {0, 0, 4, 4, 0, 0, 0, 0, 5, 0, 0, 0, 3, 0, 5, 3};  // terrain materials 0-15
     auto step = [&](int ch, const float* pos, int posture, const std::string& tmpl, int source) {
-        if (ch < 0 || tmpl.empty() || !phys.character_on_ground(ch)) return;
+        if (ch < 0 || tmpl.empty()) return;
         Stride& s = strides_[ch];
-        float dx = pos[0] - s.pos[0], dz = pos[2] - s.pos[2], v = dt > 0 ? std::sqrt(dx * dx + dz * dz) / dt : 0.0f;
+        auto play = [&](const char* script, int patch) { sounds.push_back({tmpl, {pos[0], pos[1], pos[2]}, source, false, false, script, patch}); };
+        int m = ground_material(pos[0], pos[2]), ground = m >= 0 && m < 16 ? ground_patch[m] : 3;
+        float dx = pos[0] - s.pos[0], dy = pos[1] - s.pos[1], dz = pos[2] - s.pos[2];
+        float v = dt > 0 ? std::sqrt(dx * dx + dz * dz) / dt : 0.0f;
+        bool seen = s.posture >= 0, teleport = dt > 0 && std::sqrt(dx * dx + dy * dy + dz * dz) / dt > 30;
         std::copy(pos, pos + 3, s.pos);
+        // Posture changes: SoldierToCrouch / FromCrouch / ToCrawl / StandUp (patch 0; their layers chain by time).
+        if (seen && posture != s.posture && !teleport)
+            play(posture == 2 ? "soldiertocrawl.ssc" : s.posture == 2 ? "soldierstandup.ssc" : posture == 1 ? "soldiertocrouch.ssc" : "soldierfromcrouch.ssc", 0);
+        s.posture = posture;
+        unsigned jumps, landings;
+        phys.character_steps(ch, jumps, landings);
+        if (seen && !teleport && jumps != s.jumps) play("soldierjump.ssc", 0);
+        if (seen && !teleport && landings != s.landings) play("soldierjumpland.ssc", ground);
+        s.jumps = jumps, s.landings = landings;
+        if (!phys.character_on_ground(ch)) return;
         if (v < 0.5f || v > 15) return;  // standing, or a teleport (respawn)
         if (t < s.next) return;
         const char* script = posture == 2 ? "soldiercrawlmove.ssc" : posture == 1 ? "soldiercrouchmove.ssc" : v > 4 ? "soldierrun.ssc" : "soldierwalk.ssc";
         s.next = t + (posture == 2 ? 0.6f : posture == 1 ? 0.5f : v > 4 ? 0.36f : 0.66f);
-        int m = ground_material(pos[0], pos[2]);
-        sounds.push_back({tmpl, {pos[0], pos[1], pos[2]}, source, false, false, script, m >= 0 && m < 16 ? ground_patch[m] : 3});
+        play(script, ground);
     };
     if (player >= 0 && cur < 0 && !player_dead) {
         float p[3];

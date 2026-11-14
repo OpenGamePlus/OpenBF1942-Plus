@@ -2,6 +2,12 @@
 
 Append-only. Newest first. At most 3 bullets per stage.
 
+## 2026-11-14 — C1: jumps, landings, posture changes
+
+- Soldiers play `SoldierJump` when the physics takes a jump, `SoldierJumpLand` on touch-downs above 3 m/s (ground patch), and the four posture scripts; physics counts jumps and landings per character (tested). Game results unchanged (Berlin 300 s identical).
+- Rejected: jumps inferred from leaving the ground while rising, 1,091 jumps against 62 landings on Berlin (bots climbing rubble).
+- Open in C1: radio, voices, swimming, parachute, landing gear, refills; the maintainer has not heard the new sounds yet.
+
 ## 2026-11-14 — native Windows build
 
 - The engine builds with MSVC 14.29 and vcpkg (SDL2, libepoxy, pkgconf); engine tests pass on Windows. Command in SYSTEM_SUMMARY.

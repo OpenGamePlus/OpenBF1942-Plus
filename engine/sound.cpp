@@ -129,6 +129,8 @@ void Sounds::soldier(const std::string& script, int patch, const float pos[3]) {
     }
     if (patch < 0 || static_cast<size_t>(patch) >= it->second.size() || it->second[static_cast<size_t>(patch)].layers.empty()) return;
     const SoundPatch& all = it->second[static_cast<size_t>(patch)];
+    // A patch whose layers chain by trigger (posture changes) plays whole; otherwise its layers are variants.
+    if (std::any_of(all.layers.begin(), all.layers.end(), [](const SoundLayer& l) { return l.trigger; })) return void(play_patch(all, pos, 0, true));
     SoundPatch one;
     one.layers.push_back(all.layers[variant_++ % all.layers.size()]);
     play_patch(one, pos, 0, true);

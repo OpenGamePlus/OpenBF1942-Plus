@@ -433,6 +433,13 @@ int main() {
         for (int i = 0; i < 18; ++i) phys.step(1.0f / 60);
         phys.character_position(ch, p);
         assert(p[1] > 0.5f && !phys.character_on_ground(ch));
+        // Sound counts: the 2 m drop at the start and the jump's touch-down are landings, the jump is one jump.
+        unsigned jumps, landings;
+        phys.character_steps(ch, jumps, landings);
+        assert(jumps == 1 && landings == 1);
+        for (int i = 0; i < 60; ++i) phys.step(1.0f / 60);
+        phys.character_steps(ch, jumps, landings);
+        assert(phys.character_on_ground(ch) && jumps == 1 && landings == 2);
         // Hull parts: a 20 x 20 m deck 1 m high with a 10 m tower is a compound; a soldier lands on the deck, not on the
         // single convex hull's slope up to the tower top.
         VehicleDef ship;

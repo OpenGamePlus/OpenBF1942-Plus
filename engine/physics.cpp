@@ -435,6 +435,7 @@ struct Physics::Impl {
         float chute = 0;    // parachute drag per mass; 0 closed
         float fall = 0;     // downward speed last step in the air
         float landing = 0;  // downward speed at the last touch-down
+        unsigned jumps = 0, landings = 0;  // counts, for sounds: jumps taken, touch-downs above 3 m/s
     };
     std::vector<Soldier> soldiers;
     void soldier(Soldier& s);
@@ -977,10 +978,11 @@ void Physics::Impl::soldier(Soldier& s) {
     Vec3 g = sys.GetGravity(), vel = ch.GetLinearVelocity();
     Vec3 v = Vec3(0, vel.GetY(), 0);
     if (ch.GetGroundState() == CharacterBase::EGroundState::OnGround && vel.GetY() - ch.GetGroundVelocity().GetY() < 0.1f) {
+        if (s.fall > 3) ++s.landings;
         if (s.fall > 0) s.landing = s.fall, s.fall = 0;
         s.chute = 0;
         v = ch.GetGroundVelocity();
-        if (s.jump) v += Vec3(0, 4.5f, 0);
+        if (s.jump) v += Vec3(0, 4.5f, 0), ++s.jumps;
     } else {
         v += g * kStep;
         if (s.chute > 0 && v.GetY() < 0) v.SetY(v.GetY() + s.chute * v.GetY() * v.GetY() * kStep);  // drag up, against the fall
@@ -1003,6 +1005,10 @@ Ref<Shape> soldier_shape(int posture) {  // a capsule of radius 0.3 standing on 
 
 void Physics::open_parachute(int character, float k) { p_->soldiers.at(static_cast<size_t>(character)).chute = std::max(0.0f, k); }
 bool Physics::parachute_open(int character) const { return p_->soldiers.at(static_cast<size_t>(character)).chute > 0; }
+void Physics::character_steps(int character, unsigned& jumps, unsigned& landings) const {
+    const auto& s = p_->soldiers.at(static_cast<size_t>(character));
+    jumps = s.jumps, landings = s.landings;
+}
 float Physics::take_landing(int character) { return std::exchange(p_->soldiers.at(static_cast<size_t>(character)).landing, 0.0f); }
 
 bool Physics::set_posture(int character, int posture) {
