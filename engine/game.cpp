@@ -2025,9 +2025,13 @@ HudInfo Game::hud_info() const {
             };
             if (k == "setammobar") h.ammo_empty = path(a[0]);
             else if (k == "setammobarfill") h.ammo_full = path(a[0]);
+            else if (k == "setamombarposx" || k == "setammobarposx") h.ammo_x = std::clamp(static_cast<float>(std::atof(a[0].c_str())), -64.0f, 64.0f);
+            else if (k == "setamombarposy" || k == "setammobarposy") h.ammo_y = std::clamp(static_cast<float>(std::atof(a[0].c_str())), -64.0f, 64.0f);
             else if (k == "setammobarsize") h.ammo_rows = std::isfinite(std::atof(a[0].c_str())) ? static_cast<float>(std::atof(a[0].c_str())) : 0.0f;
         }
     if (h.ammo_full.empty()) h.ammo_empty.clear();
+    for (int t = 1; t <= 2; ++t)
+        if (team_skins.count(t)) h.flag_tex[t - 1] = minimap_icon(team_skins.at(t), nullptr);
     h.mag = hand.mag_size;
     if (cur >= 0) {
         const Veh& v = vehicles[static_cast<size_t>(cur)];

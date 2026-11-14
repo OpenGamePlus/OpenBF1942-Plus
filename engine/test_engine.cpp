@@ -854,7 +854,7 @@ int main() {
         HudInfo info;
         assert(hud_layout(f, info, 640, 480).empty());  // no player, no HUD
         info.on = true, info.hp = 50, info.feed = {"A"};
-        assert(hud_layout(f, info, 640, 480).size() == 8);  // crosshair 4, tickets panel, health panel and bar, feed "A" (no digit glyphs)
+        assert(hud_layout(f, info, 640, 480).size() == 10);  // crosshair 4, ticket boxes 3, health panel and bar, feed "A" (no digit glyphs)
         {  // original textures: the health bar filled from the bottom, the magazine by rounds / magSize over setAmmoBarSize rows
             HudInfo t = info;
             t.hp = 50, t.health_empty = "he", t.health_full = "hf", t.weapon = "w", t.rounds = 5, t.spare = 2, t.mag = 10;
@@ -862,20 +862,23 @@ int main() {
             std::vector<HudQuad> tq = hud_layout(f, t, 640, 480);
             auto find = [&](const char* n) { return *std::find_if(tq.begin(), tq.end(), [&](const HudQuad& q) { return q.tex == n; }); };
             HudQuad hf = find("hf"), af = find("af");
-            assert(std::fabs(hf.v0 - (2 + 0.5f * 59) / 64) < 1e-5f && hf.v1 == 1 && std::fabs(hf.h - (64 - 31.5f)) < 1e-4f);
-            assert(std::fabs(af.h - 20) < 1e-4f && std::fabs(af.v0 - 44.0f / 64) < 1e-5f);  // half of 40 rows
+            // laid out in 800 x 600 units, stretched: at 640 x 480 a unit is 0.8 px on each axis
+            assert(std::fabs(hf.v0 - (2 + 0.5f * 59) / 64) < 1e-5f && hf.v1 == 1 && std::fabs(hf.h - (64 - 31.5f) * 0.8f) < 1e-4f);
+            assert(std::fabs(hf.x - 47.5f * 0.8f) < 1e-4f);
+            assert(std::fabs(af.h - 20 * 0.8f) < 1e-4f && std::fabs(af.v0 - 44.0f / 64) < 1e-5f);  // half of 40 rows
+            assert(std::fabs(af.x - (691 + 5) * 0.8f) < 1e-4f && std::fabs(af.y + af.h - (600 - 11) * 0.8f) < 1e-3f);  // setAmomBarPosX / Y
         }
-        // minimap: frame, map (centred on the player, north up), markers inside its 2 x 250 m only
+        // minimap: frame, map (centred on the player, north up), grid lines every world / 8, markers inside its 2 x 200 m only
         info.world = 1000, info.map_x = 500, info.map_z = 400;
         MapIcon near, far;
         near.x = 625, near.z = 400, near.tex = "menu/texture/minimap/map_dot", far.x = 900, far.z = 400;
         info.icons = {near, far};
         std::vector<HudQuad> mq = hud_layout(f, info, 640, 480);
-        assert(mq.size() == 11);
+        assert(mq.size() == 19);  // 10 + frame + map + 3 + 3 grid lines + the near marker
         auto map = std::find_if(mq.begin(), mq.end(), [](const HudQuad& q) { return q.tex == "@minimap"; });
-        assert(map != mq.end() && std::fabs(map->u0 - 0.25f) < 1e-6f && std::fabs(map->u1 - 0.75f) < 1e-6f && map->v0 > map->v1);
-        const HudQuad& dot = *std::find_if(mq.begin(), mq.end(), [&](const HudQuad& q) { return q.tex == near.tex; });  // 125 m east: 3/4 across
-        assert(dot.tex == near.tex && std::fabs(dot.x + dot.w / 2 - (map->x + map->w * 0.75f)) < 1e-3f);
+        assert(map != mq.end() && std::fabs(map->u0 - 0.3f) < 1e-6f && std::fabs(map->u1 - 0.7f) < 1e-6f && map->v0 > map->v1);
+        const HudQuad& dot = *std::find_if(mq.begin(), mq.end(), [&](const HudQuad& q) { return q.tex == near.tex; });  // 125 m east of 200
+        assert(dot.tex == near.tex && std::fabs(dot.x + dot.w / 2 - (map->x + map->w * 0.8125f)) < 1e-3f);
         std::vector<uint8_t> gray(18 + 4, 0);
         gray[2] = 3, gray[12] = 2, gray[14] = 2, gray[16] = 8, gray[17] = 0x20, gray[18] = 200;
         assert(tga_decode(gray).rgba[3] == 200 && tga_decode(gray).rgba[0] == 200);

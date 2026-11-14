@@ -2,6 +2,10 @@
 
 Append-only. Newest first. At most 3 bullets per stage.
 
+## 2026-11-14 — C2: HUD placed as the original
+
+- Maintainer captures of the original client (1920 × 1080, kept out of the repository) show an 800 × 600 layout stretched per axis; health, ammunition panel and magazine (`setAmomBarPosX/Y` confirmed), tickets with flags above a top-right minimap with its grid, feed top left, measured and drawn so. Tests updated.
+
 ## 2026-11-14 — C2: health bar and magazine textures
 
 - The kit's `healthbar_*` texture filled from the bottom and the weapon's `setAmmoBar` magazine filled by rounds over `setAmmoBarSize` rows (the art's height, checked on the pistol: 41 rows). Placement ours (`menu/InGame` is a MemeFile). Checked on screenshots (assault BAR, engineer No4); tested.

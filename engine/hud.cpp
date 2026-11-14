@@ -115,38 +115,52 @@ std::vector<HudQuad> hud_layout(const Font& f, const HudInfo& in, int w, int h) 
     solid(cx - gap - len, cy - t / 2, len, t, white), solid(cx + gap, cy - t / 2, len, t, white);
     solid(cx - t / 2, cy - gap - len, t, len, white), solid(cx - t / 2, cy + gap, t, len, white);
 
-    // tickets and flags, top centre: team 1 (axis in the retail conquest maps) left, team 2 right
-    std::string t1 = std::to_string(in.tickets[0]) + "  [" + std::to_string(in.flags[0]) + "]";
-    std::string t2 = "[" + std::to_string(in.flags[1]) + "]  " + std::to_string(in.tickets[1]);
-    float half = std::max(text_width(f, t1, s), text_width(f, t2, s)) + 16 * s;
-    solid(W / 2 - half, 4 * s, 2 * half, lh + 4 * s, shade);
-    text(t1, W / 2 - 10 * s - text_width(f, t1, s), 6 * s, axis), text(t2, W / 2 + 10 * s, 6 * s, ally);
-
-    // health bar and weapon, bottom left; vehicle bottom right
-    float by = H - 10 * s - lh;
-    auto tex = [&](const std::string& t, float x, float y, float tw, float th, float u0, float v0, float u1, float v1) {
-        q.push_back({x, y, tw, th, u0, v0, u1, v1, {1, 1, 1, 1}, t, 0});
+    // The original's layout is made for 800 x 600 and stretched to the screen on each axis: these spots and sizes are
+    // measured on maintainer captures at 1920 x 1080 (x 2.4, y 1.8), El Alamein; menu/InGame (a MemeFile) holds them.
+    const float sx = W / 800, sy = H / 600;
+    auto V = [&](float x, float y, float bw, float bh, const std::string& t, float u0, float v0, float u1, float v1, const float* c = nullptr) {
+        const float one[4] = {1, 1, 1, 1};
+        if (!c) c = one;
+        q.push_back({x * sx, y * sy, bw * sx, bh * sy, u0, v0, u1, v1, {c[0], c[1], c[2], c[3]}, t, 0});
     };
-    // shortcut: placement and scale are ours (the original's are in menu/InGame, a MemeFile not decoded)
-    if (!in.health_empty.empty()) {  // 64 x 64 texels; the bar is columns 0-21, rows 2-61, filled from the bottom
-        const float px = 10 * s, py = H - 10 * s - 64 * s, top = 2 + (1 - static_cast<float>(std::clamp(in.hp, 0, 100)) / 100) * 59;
-        tex(in.health_empty, px, py, 64 * s, 64 * s, 0, 0, 1, 1);
-        tex(in.health_full, px, py + top * s, 22 * s, (64 - top) * s, 0, top / 64, 22.0f / 64, 1);
-        text(std::to_string(std::max(0, in.hp)), px + 44 * s, py + 30 * s, white);
-        by = py - 2 * s;
+    auto vsolid = [&](float x, float y, float bw, float bh, const float c[4]) { solid(x * sx, y * sy, bw * sx, bh * sy, c); };
+    auto vtext = [&](const std::string& t, float x, float y, float height, const float c[4], bool right = false) {
+        float sc = height * sy / static_cast<float>(std::max(1, f.height));
+        hud_text(f, t, x * sx - (right ? text_width(f, t, sc) : 0.0f), y * sy, sc, c, q);
+    };
+    const float frame[4] = {0.08f, 0.08f, 0.08f, 0.8f}, panel[4] = {0.18f, 0.18f, 0.18f, 0.7f};
+
+    // tickets, above the minimap: allies left (blue), an empty box, axis right (red), each with its flag
+    vsolid(621, 5.5f, 66, 20.5f, panel), vsolid(691, 5.5f, 34, 20.5f, panel), vsolid(727, 5.5f, 67, 20.5f, panel);
+    for (int k = 0; k < 2; ++k) {  // k 0: team 2 (allies) on the left
+        int team = k == 0 ? 2 : 1;
+        float bx = k == 0 ? 621 : 727;
+        if (!in.flag_tex[team - 1].empty()) V(bx + 4, 9, 18, 13, in.flag_tex[team - 1], 0, 0, 1, 1);
+        vtext(std::to_string(in.tickets[team - 1]), bx + 62, 8.5f, 13, team == 2 ? ally : axis, true);
+    }
+
+    // health bar (64 x 64 texels at 47.5, 525; the bar is columns 0-21, rows 2-61, filled from the bottom)
+    float by = H - 10 * s - lh;
+    if (!in.health_empty.empty()) {
+        const float top = 2 + (1 - static_cast<float>(std::clamp(in.hp, 0, 100)) / 100) * 59;
+        V(47.5f, 525, 64, 64, in.health_empty, 0, 0, 1, 1);
+        V(47.5f, 525 + top, 22, 64 - top, in.health_full, 0, top / 64, 22.0f / 64, 1);
+        by = 525 * sy - 2 * s;
     } else {
         solid(10 * s, by, 104 * s, lh, shade);
         solid(12 * s, by + 2 * s, static_cast<float>(std::clamp(in.hp, 0, 100)) * s, lh - 4 * s, in.hp > 25 ? ally : axis);
         text(std::to_string(std::max(0, in.hp)), 120 * s, by + s, white);
     }
-    if (!in.ammo_empty.empty() && in.rounds >= 0) {  // the magazine, 32 x 64 texels, filled from the bottom; numbers beside
-        const float px = W - 10 * s - 64 * s, py = H - 10 * s - 64 * s;
+    // ammunition: the soldier panel (64 x 64 at 691, 527), the weapon's magazine at setAmomBarPosX from the panel and
+    // its bottom setAmomBarPosY above the screen's, filled from the bottom; rounds at the top right, magazines in the tab
+    if (!in.ammo_empty.empty() && in.rounds >= 0) {
+        const float px = 691, py = 527, mx = px + in.ammo_x, my = 600 + in.ammo_y - 64;
         float rows = std::clamp(in.ammo_rows, 0.0f, 64.0f) * (in.mag > 0 ? std::clamp(static_cast<float>(in.rounds) / static_cast<float>(in.mag), 0.0f, 1.0f) : 1.0f);
-        tex(in.ammo_empty, px, py, 32 * s, 64 * s, 0, 0, 1, 1);
-        if (!in.reloading) tex(in.ammo_full, px, py + (64 - rows) * s, 32 * s, rows * s, 0, (64 - rows) / 64, 1, 1);
-        std::string n = in.reloading ? "RELOADING" : std::to_string(in.rounds) + " / " + std::to_string(in.spare);
-        text(n, px + 34 * s, py + 46 * s, in.rounds == 0 && in.spare == 0 && !in.reloading ? axis : white);
-        text(in.weapon, W - 10 * s - text_width(f, in.weapon, s), py - lh, white);
+        V(px, py, 64, 64, "menu/texture/ingame/ammobar_soldier_panel_64x64", 0, 0, 1, 1);
+        V(mx, my, 32, 64, in.ammo_empty, 0, 0, 1, 1);
+        if (!in.reloading) V(mx, my + 64 - rows, 32, rows, in.ammo_full, 0, (64 - rows) / 64, 1, 1);
+        vtext(std::to_string(in.rounds), px + 38, 530, 12, in.rounds == 0 && in.spare == 0 && !in.reloading ? axis : white, true);
+        vtext(std::to_string(in.spare), px + 56, 575, 10, white, true);
     } else if (!in.weapon.empty()) {
         std::string wl = in.weapon;
         if (in.rounds >= 0) wl += "  " + std::to_string(in.rounds) + " / " + std::to_string(in.spare) + (in.reloading ? "  RELOADING" : "");
@@ -154,26 +168,31 @@ std::vector<HudQuad> hud_layout(const Font& f, const HudInfo& in, int w, int h) 
     }
     if (in.vehicle_hp >= 0) {
         std::string v = in.vehicle + "  " + std::to_string(in.vehicle_hp);
-        text(v, W - 10 * s - text_width(f, v, s), in.ammo_empty.empty() ? by : H - 10 * s - 64 * s - 2 * lh, white);
+        text(v, W - 10 * s - text_width(f, v, s), in.ammo_empty.empty() ? by : 527 * sy - lh, white);
     }
 
-    // minimap, top left: the level's colour map 2 x 250 m around the player, north up (shortcut: the original's
-    // zoom levels, frame and placement are not read), with its markers
+    // minimap, top right (173 x 171 at 621, 32), north up, 2 x 200 m around the player (shortcut: span estimated from
+    // the grid lines in a capture; zoom levels not read), the level's 8 x 8 grid, markers
     if (in.world > 0) {
-        const float ms = 120 * s, mx = 10 * s, my = 10 * s, r = 250;
-        solid(mx - s, my - s, ms + 2 * s, ms + 2 * s, shade);
-        q.push_back({mx, my, ms, ms, (in.map_x - r) / in.world, (in.map_z + r) / in.world, (in.map_x + r) / in.world, (in.map_z - r) / in.world,
-                     {1, 1, 1, 1}, "@minimap", 0});
+        const float mx = 621, my = 32, mw = 173, mh = 171, r = 200;
+        vsolid(mx - 1.5f, my - 1.5f, mw + 3, mh + 3, frame);
+        V(mx, my, mw, mh, "@minimap", (in.map_x - r) / in.world, (in.map_z + r) / in.world, (in.map_x + r) / in.world, (in.map_z - r) / in.world);
+        const float grid[4] = {1, 1, 1, 0.35f}, cell = in.world / 8;
+        for (int k = 1; k < 8; ++k) {
+            float gx = (static_cast<float>(k) * cell - in.map_x + r) / (2 * r), gz = (in.map_z + r - static_cast<float>(k) * cell) / (2 * r);
+            if (gx > 0 && gx < 1) vsolid(mx + gx * mw, my, 0.5f, mh, grid);
+            if (gz > 0 && gz < 1) vsolid(mx, my + gz * mh, mw, 0.6f, grid);
+        }
         for (const MapIcon& ic : in.icons) {
-            float ix = mx + (ic.x - in.map_x + r) / (2 * r) * ms, iy = my + (in.map_z + r - ic.z) / (2 * r) * ms, sz = ic.size * 0.5f * s;
-            if (ix < mx || iy < my || ix > mx + ms || iy > my + ms) continue;
-            q.push_back({ix - sz / 2, iy - sz / 2, sz, sz, 0, 0, 1, 1, {ic.rgba[0], ic.rgba[1], ic.rgba[2], ic.rgba[3]}, ic.tex, ic.yaw});
+            float ix = mx + (ic.x - in.map_x + r) / (2 * r) * mw, iy = my + (in.map_z + r - ic.z) / (2 * r) * mh, sz = ic.size * 0.5f;
+            if (ix < mx || iy < my || ix > mx + mw || iy > my + mh) continue;
+            q.push_back({(ix - sz / 2) * sx, (iy - sz / 2) * sy, sz * sx, sz * sy, 0, 0, 1, 1, {ic.rgba[0], ic.rgba[1], ic.rgba[2], ic.rgba[3]}, ic.tex, ic.yaw});
         }
     }
 
-    // kill / capture feed, top right, newest at the bottom
-    float fy = 6 * s;
-    for (const std::string& m : in.feed) text(m, W - 10 * s - text_width(f, m, s), fy, white), fy += lh;
+    // kill / capture feed, top left below where the original's radio bar sits, newest at the bottom
+    float fy = 40 * sy;
+    for (const std::string& m : in.feed) text(m, 6 * sx, fy, white), fy += lh;
 
     // open radio menu, left of centre: its heading, then one message per key (shortcut: plain text, the original's
     // icons and colours in menu/RadioMenu are not drawn)
