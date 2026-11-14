@@ -8,7 +8,7 @@ Effects are object templates in `objects/effects/<name>/effects.con` (202 folder
 
 | Type | Count | Role |
 |---|---|---|
-| `EffectBundle` | 71 | an effect: `addTemplate` children (emitters), each placed by the `setPosition` / `setRotation` that follow it; `timeToLive` (`-1`: until stopped); `loadSoundScript` (its sound, [sound.md](sound.md)) |
+| `EffectBundle` | 71 | an effect: `addTemplate` children (emitters), each placed by the `setPosition` / `setRotation` that follow it; `timeToLive` (`-1`: until stopped); `loadSoundScript` (its sound, [sound.md](sound.md)); `addWorkOnMaterial <n>` (only over terrain material `n`; `1` read as water) |
 | `Emitter` | 111 | `template <particle>`; emits for `timeToLive` seconds at `intensity` particles per second, after `delay`; `looping 1` repeats |
 | `SpriteParticle` | 84 | a camera-facing textured quad |
 | `Particle` | 17 | a mesh particle (`geometry`): 3p muzzle flashes, debris; **not drawn** |
@@ -28,8 +28,10 @@ Effects are object templates in `objects/effects/<name>/effects.con` (202 folder
 | `positionalSpeedIn{Right,Up,Dof}` | start velocity in the emitter's frame |
 | `addEmitterSpeed`, `emitterSpeedScale` | adds the carrier's velocity, scaled |
 | `showInFirstPerson` / `showInThirdPerson` | first-person-only emitters are left out |
+| `IntensityAtSpeed` | full intensity from this carrier speed (m/s), proportionally less below |
+| `moveToWaterSurface` | particles start at the water level |
 
-Not read: `startRotation`, `rotationalSpeedIn*`, `IntensityAtSpeed`, `hasOverDamage`, `startProbability`, `moveToWaterSurface`, `lodDistance`.
+Not read: `startRotation`, `rotationalSpeedIn*`, `hasOverDamage`, `startProbability`, `moveToWaterSurface`, `lodDistance`.
 
 ## Particle fields we read
 
@@ -44,6 +46,7 @@ Not read: `srcBlendMode`, `hasStaticColor`, `animationSpeedOverTime`, `dragOverT
 | Hand and vehicle weapons | an `EffectBundle` child whose name has `muzz` (`e_MuzzGun`) | at the muzzle on each shot, facing the shot; none for the player in first person |
 | Projectiles | `endEffectTemplate` | where the shot ends |
 | Hits without one | the MaterialManager's effect for the pair ([weapons.md](weapons.md)) | ricochets, blood, sand |
+| Vehicle parts | an `EffectBundle` child anywhere in the vehicle tree, outside its weapons (`e_wdustPanz` on track wheels, `e_ExFumePanz`, `e_WaterFrontBig`) | while the vehicle has a driver and is not wrecked, at the part's rest position, over its listed materials and within 1.5 m of that ground or the water |
 | Vehicles | `addArmorEffect <hp> <effect> <x/y/z>` | `<hp>` > 0: while hit points are below it, on the body at that offset (damage smoke, then fire); `0`: once on destruction; `-1`: in water (not shown) |
 
 Impacts face up (hits do not carry the surface normal). A wreck's damage effects run on for 30 s (guessed).

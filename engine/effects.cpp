@@ -132,6 +132,8 @@ const EffectDef* Effects::def(const std::string& name) {
                 else if (k == "positionalspeedinright") ed.speed[0] = crd_parse(v);
                 else if (k == "positionalspeedinup") ed.speed[1] = crd_parse(v);
                 else if (k == "positionalspeedindof") ed.speed[2] = crd_parse(v);
+                else if (k == "intensityatspeed") ed.at_speed = std::max(0.0f, num(v));
+                else if (k == "movetowatersurface") ed.to_water = num(v) != 0;
                 else if (k == "showinfirstperson") first_only = num(v) != 0;
                 else if (k == "showinthirdperson") third = num(v) != 0;
             }
@@ -147,6 +149,7 @@ const EffectDef* Effects::def(const std::string& name) {
             else if (k == "setposition" && !kids.empty()) parse_vec3(a[0], kids.back().second.data());
             else if (k == "setrotation" && !kids.empty()) parse_vec3(a[0], kids.back().second.data() + 3);
             else if (k == "timetolive") d->ttl = crd_parse(a[0]).a;
+            else if (k == "addworkonmaterial") d->materials.push_back(std::atoi(a[0].c_str()));
         }
         for (auto& [kn, pr] : kids) emitter(kn, translate(pr[0], pr[1], pr[2]) * rotation_ypr(pr[3], pr[4], pr[5]));
     }
@@ -188,7 +191,9 @@ void Effects::step(float dt) {
             float t = r.age - er.delay;
             bool on = !over && t >= 0 && (e.looping || er.ttl < 0 || t < er.ttl);
             if (on) {
-                er.acc += std::max(0.0f, e.intensity.sample(rng_)) * dt;
+                float k = 1;
+                if (e.at_speed > 0) k = std::min(1.0f, std::sqrt(r.vel[0] * r.vel[0] + r.vel[1] * r.vel[1] + r.vel[2] * r.vel[2]) / e.at_speed);
+                er.acc += std::max(0.0f, e.intensity.sample(rng_)) * k * dt;
                 for (; er.acc >= 1 && er.ps.size() < 400; er.acc -= 1) {  // 400: a cap per emitter, guessed
                     Mat4 m = r.at * e.local;
                     float o[3] = {e.pos[0].sample(rng_), e.pos[1].sample(rng_), e.pos[2].sample(rng_)};
@@ -198,6 +203,7 @@ void Effects::step(float dt) {
                         p.pos[i] = m.m[12 + i] + m.m[i] * o[0] + m.m[4 + i] * o[1] + m.m[8 + i] * o[2];
                         p.vel[i] = m.m[i] * s[0] + m.m[4 + i] * s[1] + m.m[8 + i] * s[2] + (e.add_speed ? r.vel[i] * e.speed_scale : 0.0f);
                     }
+                    if (e.to_water) p.pos[1] = water_level;
                     p.ttl = std::max(0.01f, pd.ttl.sample(rng_)), p.size = pd.size.sample(rng_), p.gravity = pd.gravity.sample(rng_);
                     p.drag = pd.drag.sample(rng_), p.rot = pd.rotation.sample(rng_), p.rot_speed = pd.rotation_speed.sample(rng_);
                     p.frame = pd.frame.sample(rng_), p.anim_speed = pd.anim_speed.sample(rng_), p.ratio = pd.ratio.sample(rng_);

@@ -22,6 +22,7 @@ bool hide_3p(const std::string& t) { return t == "parachute" || !(t.rfind("1p", 
 Game::Game(const Vfs& vfs_, Con& con_, const Heightmap& hm_, const TerrainInfo& info_, std::vector<DrawItem>& scene_,
            const std::vector<SpawnPoint>& spawns, const GameOptions& opt_, Camera cam_, bool objects)
     : phys(hm_, info_.world_size, info_.water_level), cam(cam_), vfs(vfs_), con(con_), hm(hm_), info(info_), scene(scene_), opt(opt_) {
+    effects.water_level = info_.water_level;
     if (objects) {
         std::set<std::string> ladders;  // templates in collision group c_CGLadders
         if (auto ts = con.templates.find("objecttemplate"); ts != con.templates.end())
@@ -472,6 +473,24 @@ void Game::add_vehicle(const std::string& name, Mat4 world, int team_on) {
                 parse_vec3(a[2], fx.pos);
                 if (std::isfinite(fx.below) && fx.below >= 0) v.armor_fx.push_back(fx);  // -1: in water (not drawn)
             }
+    {  // effects on parts: each addTemplate placed by the setPosition / setRotation after it; none under weapons
+        std::function<void(const std::string&, const Mat4&, int)> walk = [&](const std::string& n, const Mat4& at, int depth) {
+            const ConObject* t = object_template(n);
+            if (!t || depth > 12) return;
+            std::string type = lower(t->type);
+            if (type == "effectbundle") return void(v.part_fx.push_back({lower(n), at, -1}));
+            if (type == "firearms" || type == "handfirearms") return;
+            std::vector<std::pair<std::string, std::array<float, 6>>> kids;
+            for (auto& [k, a] : t->props) {
+                if (a.empty()) continue;
+                if (k == "addtemplate") kids.push_back({a[0], {}});
+                else if (k == "setposition" && !kids.empty()) parse_vec3(a[0], kids.back().second.data());
+                else if (k == "setrotation" && !kids.empty()) parse_vec3(a[0], kids.back().second.data() + 3);
+            }
+            for (auto& [kn, pr] : kids) walk(kn, at * translate(pr[0], pr[1], pr[2]) * rotation_ypr(pr[3], pr[4], pr[5]), depth + 1);
+        };
+        walk(name, Mat4::identity(), 0);
+    }
     for (const SeatDef& sd : def->seats) {
         Seat st;
         st.weapon = sd.weapon;
@@ -1718,11 +1737,33 @@ void Game::effect(const std::string& name, const float pos[3], const float dir[3
 }
 
 // Damage smoke and fire (addArmorEffect) while a vehicle's hit points are below their mark, on its body; a wreck
-// burns on for 30 s (guessed: the original wreck's lifetime is unread).
+// burns on for 30 s (guessed: the original wreck's lifetime is unread). Part effects (dust, exhaust, bow waves) run
+// while it has a driver and is not wrecked, over the ground materials they list (addWorkOnMaterial; 1: water) and
+// within 1.5 m of that surface (shortcut: parts at their rest position, suspension travel ignored).
 void Game::armor_effects() {
-    for (Veh& v : vehicles) {
-        if (v.armor_fx.empty()) continue;
+    std::vector<char> driven(vehicles.size(), 0);
+    if (cur >= 0 && seat == 0 && !player_dead) driven[static_cast<size_t>(cur)] = 1;
+    for (const Bot& b : bots)
+        if (!b.dead && b.veh >= 0 && b.vseat == 0) driven[static_cast<size_t>(b.veh)] = 1;
+    for (size_t vi = 0; vi < vehicles.size(); ++vi) {
+        Veh& v = vehicles[vi];
+        if (v.armor_fx.empty() && v.part_fx.empty()) continue;
         Mat4 m = phys.transform(v.id);
+        float sp = phys.speed(v.id), vel[3] = {m.m[8] * sp, m.m[9] * sp, m.m[10] * sp};
+        for (Veh::PartFx& fx : v.part_fx) {
+            Mat4 at = m * fx.local;
+            bool want = driven[vi] && !v.wrecked;
+            if (const EffectDef* d = want ? effects.lookup(fx.effect) : nullptr; d && !d->materials.empty()) {
+                float x = at.m[12], y = at.m[13], z = at.m[14];
+                bool wet = info.water_level > ground(x, z) && y - info.water_level < 1.5f;
+                bool on_ground = y - ground(x, z) < 1.5f && !wet;
+                int mat = ground_material(x, z);
+                want = std::any_of(d->materials.begin(), d->materials.end(), [&](int k) { return k == 1 ? wet : on_ground && k == mat; });
+            }
+            if (want && (fx.id < 0 || !effects.alive(fx.id))) fx.id = effects.spawn(fx.effect, at, vel);
+            else if (want) effects.move(fx.id, at, vel);
+            else if (fx.id >= 0) effects.stop(fx.id), fx.id = -1;
+        }
         for (Veh::ArmorFx& fx : v.armor_fx) {
             if (fx.below <= 0) continue;
             bool want = v.hp < fx.below && !(v.wrecked && now - v.wrecked_at > 30);

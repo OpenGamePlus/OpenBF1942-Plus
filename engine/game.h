@@ -198,6 +198,12 @@ private:
             int id = -1;
         };
         std::vector<ArmorFx> armor_fx;
+        struct PartFx {  // an EffectBundle on a part (wheel dust, exhaust, bow wave): vehicle space at rest
+            std::string effect;
+            Mat4 local = Mat4::identity();
+            int id = -1;
+        };
+        std::vector<PartFx> part_fx;
         float wrecked_at = 0;
     };
     // LandingGear settings of an aircraft (its first LandingGear part), defaults as the Mac client's template;

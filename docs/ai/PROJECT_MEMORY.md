@@ -2,6 +2,10 @@
 
 Append-only. Newest first. At most 3 bullets per stage.
 
+## 2026-11-14 — C3: dust, exhaust and wakes
+
+- Effects on vehicle parts (track and wheel dust, exhaust, bow waves, plane water touch) run while driven, over the materials their bundle lists (`addWorkOnMaterial`, 1 = water) and scaled by `IntensityAtSpeed`. Checked on a driven Sherman (the material-10 dust variant emits; the other stays off); Berlin 300 s identical.
+
 ## 2026-11-14 — C2: minimap
 
 - The level's colour tiles shrunk into one texture (water tinted) drawn top left, north up, 250 m around the player, with `setMinimapIcon` markers: flags by owner, vehicles turned to their heading, teammates, the player. HUD quads now carry a texture and an angle. Checked on a screenshot (El Alamein base); layout tested.

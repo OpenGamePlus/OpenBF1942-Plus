@@ -44,11 +44,14 @@ struct EmitterDef {
     Crd pos[3], speed[3];           // relativePositionIn / positionalSpeedIn Right, Up, Dof
     bool looping = false, add_speed = false;
     float speed_scale = 1;
+    float at_speed = 0;     // IntensityAtSpeed: full intensity from this carrier speed (m/s), less below; 0: always
+    bool to_water = false;  // moveToWaterSurface: particles start at the water level
 };
 
 struct EffectDef {
     std::vector<EmitterDef> emitters;
-    float ttl = -1;  // the bundle's timeToLive; -1 until stopped
+    float ttl = -1;              // the bundle's timeToLive; -1 until stopped
+    std::vector<int> materials;  // addWorkOnMaterial: only over these (1: water); empty: anywhere
 };
 
 struct Sprite {
@@ -66,6 +69,8 @@ public:
     int spawn(const std::string& name, const Mat4& at, const float vel[3] = nullptr);
     void move(int id, const Mat4& at, const float vel[3] = nullptr);  // an attached effect follows its carrier
     bool alive(int id) const { return live_.count(id) > 0; }
+    const EffectDef* lookup(const std::string& name) { return name.empty() ? nullptr : def(name); }
+    float water_level = -1e9f;
     void stop(int id);                                               // emitters end; particles live out their time
     void step(float dt);
     std::vector<Sprite> sprites() const;
