@@ -183,13 +183,20 @@ Game::Game(const Vfs& vfs_, Con& con_, const Heightmap& hm_, const TerrainInfo& 
             b.kit = static_cast<int>(bots.size() % 5);  // the five classes in turn
             b.weapon = weapon_def(con, primary(tm, b.kit));
             b.ammo = Ammo::full(b.weapon);
-            for (const std::string& w : kit_weapons(tm, b.kit))
-                if (WeaponDef g = weapon_def(con, w); g.bounce && g.radius > 0 && g.ttl < 60 && b.grenade.name.empty()) b.grenade = g;
-            b.grenades = Ammo::full(b.grenade);
+            for (const std::string& w : kit_weapons(tm, b.kit)) {
+                WeaponDef g = weapon_def(con, w);
+                WeaponDef& slot = g.bounce && g.radius > 0 && g.ttl < 60 ? b.grenade
+                                : g.bounce && g.near > 0 ? b.mine
+                                : g.bounce ? b.pack
+                                : g.fire_once && !g.heals && g.mag_size > 0 && g.name != b.weapon.name ? b.sidearm : g;
+                if (&slot != &g && slot.name.empty()) slot = g;
+            }
+            b.grenades = Ammo::full(b.grenade), b.side_ammo = Ammo::full(b.sidearm), b.mines = Ammo::full(b.mine), b.packs = Ammo::full(b.pack);
             std::copy(sp.pos, sp.pos + 3, b.pos);
             b.ch = phys.add_character(sp.pos[0], sp.pos[1] + 0.1f, sp.pos[2]);
             for (DrawItem& item : build_object(con, vfs, b.tmpl, Mat4::identity(), skipped, nullptr, hide_1p)) ++b.parts, scene.push_back(std::move(item));
             b.held_first = scene.size(), b.held_parts = add_weapon_items(b.weapon.name);
+            b.side_first = scene.size(), b.side_parts = add_weapon_items(b.sidearm.name);
             bots.push_back(std::move(b));
         }
         int n1 = static_cast<int>(std::count_if(bots.begin(), bots.end(), [](const Bot& b) { return b.team == 1; }));
@@ -710,7 +717,12 @@ void Game::placed_charges(bool detonate) {
             placed[i] = placed.back(), placed.pop_back();
             continue;
         }
-        bool go = detonate && placed[i].near <= 0;
+        bool go = detonate && placed[i].near <= 0 && placed[i].owner < 0;
+        if (placed[i].owner >= 0 && placed[i].near <= 0) {  // a bot's pack: once it is out of the blast, or after 20 s
+            const Bot& o = bots[static_cast<size_t>(placed[i].owner)];
+            float dx = o.pos[0] - p[0], dz = o.pos[2] - p[2], r = placed[i].radius + 1;
+            go = !o.dead && (dx * dx + dz * dz > r * r || now - placed[i].at > 20);
+        }
         for (const Veh& v : vehicles) {
             if (go || placed[i].near <= 0 || v.wrecked) continue;
             Mat4 m = phys.transform(v.id);
@@ -747,8 +759,44 @@ void Game::fire(float t) {
         for (int i = 0; i < 3; ++i) pos[i] = p[i] + (i == 1 ? eye_height() : 0.0f) + d[i] * 0.6f, vel[i] = d[i] * hand.velocity;
         int id = fire(hand, pos, vel, -1, player, team);
         last_shot = t;
-        if (id >= 0 && hand.bounce && hand.ttl > 60) placed.push_back({id, hand.near});  // not a grenade: waits for a trigger
+        if (id >= 0 && hand.bounce && hand.ttl > 60) placed.push_back({id, hand.near, -1, hand.radius, t});  // not a grenade: waits for a trigger
         sounds.push_back({hand.name, {pos[0], pos[1], pos[2]}, -1});
+    }
+}
+
+// Engineer bots (shortcut: rules guessed, the original AI's are unread): an explosive pack dropped within 6 m of a
+// vehicle with an enemy aboard, set off once the bot is out of its blast; a landmine within 20 m of a flag its
+// team holds, one every 30 s, at most a magazine's worth lying at once.
+void Game::lay_charges(Bot& b, size_t bi, float t) {
+    if (t < b.next_mine) return;
+    auto place = [&](const WeaponDef& w, Ammo& a, float wait) {
+        if (!a.take(t)) return false;
+        float pos[3] = {b.pos[0], b.pos[1] + 0.5f, b.pos[2]}, vel[3] = {0, -1, 0};
+        int id = fire(w, pos, vel, -1, b.ch, b.team);
+        if (id >= 0) placed.push_back({id, w.near, static_cast<int>(bi), w.radius, t});
+        sounds.push_back({w.name, {pos[0], pos[1], pos[2]}, static_cast<int>(bi)});
+        b.next_mine = t + wait;
+        return true;
+    };
+    auto near2d = [&](const float* q, float r) { return (q[0] - b.pos[0]) * (q[0] - b.pos[0]) + (q[2] - b.pos[2]) * (q[2] - b.pos[2]) < r * r; };
+    if (!b.pack.name.empty()) {
+        std::vector<int> enemy;  // vehicles with an enemy aboard
+        if (cur >= 0 && team != b.team && !player_dead) enemy.push_back(cur);
+        for (const Bot& o : bots)
+            if (!o.dead && o.veh >= 0 && o.team != b.team) enemy.push_back(o.veh);
+        for (int vi : enemy) {
+            const Veh& v = vehicles[static_cast<size_t>(vi)];
+            Mat4 m = phys.transform(v.id);
+            float q[3] = {m.m[12], m.m[13], m.m[14]};
+            if (!v.wrecked && near2d(q, 6 + v.len) && place(b.pack, b.packs, 5)) return void(++packs_laid);
+        }
+    }
+    if (!b.mine.name.empty()) {
+        int lying = 0;
+        for (const Placed& pl : placed) lying += pl.owner == static_cast<int>(bi) && pl.near > 0;
+        if (lying >= std::max(1, b.mine.mag_size)) return;
+        for (const ConquestFlag& f : game.flags)
+            if (f.team == b.team && near2d(f.pos, 20) && place(b.mine, b.mines, 30)) return void(++mines_laid);
     }
 }
 
@@ -1259,7 +1307,8 @@ void Game::think(float t, float step) {
         phys.place_character(b.ch, sp->pos[0], sp->pos[1] + 0.2f, sp->pos[2]);
         phys.set_character_active(b.ch, true);
         b.dead = false, b.hp = hitpoints(b.tmpl), b.yaw = sp->yaw, b.target = -2, b.seen_at = -1;
-        b.ammo = Ammo::full(b.weapon), b.grenades = Ammo::full(b.grenade);
+        b.ammo = Ammo::full(b.weapon), b.grenades = Ammo::full(b.grenade), b.side_ammo = Ammo::full(b.sidearm);
+        b.mines = Ammo::full(b.mine), b.packs = Ammo::full(b.pack);
         if (phys.set_posture(b.ch, 0)) b.posture = 0;
         b.veh = b.vseat = -1, b.path.clear(), b.path_goal = -1;
         std::copy(sp->pos, sp->pos + 3, b.pos);
@@ -1336,6 +1385,7 @@ void Game::think(float t, float step) {
             crew(b, t, step, b.target != -2 ? q : nullptr, veh);
             continue;
         }
+        lay_charges(b, bi, t);
         if (b.target != -2) {
             float q[3];
             int ch, veh;
@@ -1346,9 +1396,12 @@ void Game::think(float t, float step) {
             phys.walk(b.ch, 0, 0, false);
             // shortcut: in a fight scouts lie down and the others crouch (the original AI's choice is unread)
             if (int want = b.kit == 0 ? 2 : 1; b.posture != want && phys.set_posture(b.ch, want)) b.posture = want;
-            b.ammo.tick(t, b.weapon);
-            if (bool r = b.ammo.reloading(t); r && !b.was_reloading) sounds.push_back({b.weapon.name, {b.pos[0], b.pos[1] + 1.5f, b.pos[2]}, static_cast<int>(bi), true});
-            b.was_reloading = b.ammo.reloading(t);
+            b.ammo.tick(t, b.weapon), b.side_ammo.tick(t, b.sidearm);
+            bool side = on_sidearm(b, t);
+            const WeaponDef& gun = side ? b.sidearm : b.weapon;
+            Ammo& gun_ammo = side ? b.side_ammo : b.ammo;
+            if (bool r = gun_ammo.reloading(t); r && !b.was_reloading) sounds.push_back({gun.name, {b.pos[0], b.pos[1] + 1.5f, b.pos[2]}, static_cast<int>(bi), true});
+            b.was_reloading = gun_ammo.reloading(t);
             // A grenade at soldiers 12-35 m away, at most every 8 s (guessed): the low arc that lands on them.
             float hd = std::sqrt(d[0] * d[0] + d[2] * d[2]), v = b.grenade.velocity, gr = 9.81f;
             float disc = v * v * v * v - gr * (gr * hd * hd + 2 * d[1] * v * v);
@@ -1363,14 +1416,14 @@ void Game::think(float t, float step) {
                 ++grenades_thrown;
                 continue;
             }
-            if (dist > 0.5f && t - b.seen_at > 0.7f && t >= b.next_fire && !b.weapon.name.empty() && b.ammo.take(t)) {
-                b.next_fire = t + 2 * b.weapon.interval;
+            if (dist > 0.5f && t - b.seen_at > 0.7f && t >= b.next_fire && !gun.name.empty() && gun_ammo.take(t)) {
+                b.next_fire = t + 2 * gun.interval;
                 float dir[3] = {d[0] / dist + err(rng), d[1] / dist + err(rng), d[2] / dist + err(rng)};
                 float l = std::sqrt(dir[0] * dir[0] + dir[1] * dir[1] + dir[2] * dir[2]), pos[3], vel[3];
-                for (int i = 0; i < 3; ++i) pos[i] = eye[i] + dir[i] / l * 0.6f, vel[i] = dir[i] / l * b.weapon.velocity;
-                fire(b.weapon, pos, vel, -1, b.ch, b.team);
+                for (int i = 0; i < 3; ++i) pos[i] = eye[i] + dir[i] / l * 0.6f, vel[i] = dir[i] / l * gun.velocity;
+                fire(gun, pos, vel, -1, b.ch, b.team);
                 b.last_shot = t;
-                sounds.push_back({b.weapon.name, {pos[0], pos[1], pos[2]}, static_cast<int>(bi)});
+                sounds.push_back({gun.name, {pos[0], pos[1], pos[2]}, static_cast<int>(bi)});
             }
             continue;
         }
@@ -1677,10 +1730,10 @@ void Game::demo_play(float sim_seconds) {
     int alive = 0, running = 0;
     for (const Bot& b : bots) alive += !b.dead, running += !b.dead && b.moving;
     std::printf("after %.0f s: %d of %zu bots alive, %d running for a flag; flags held %d / %d; tickets %.1f / %.1f%s; player %s; "
-                "bot deaths %d / %d; stuck sidesteps %d; grenades %d; boardings %d, wrecks %d\n",
+                "bot deaths %d / %d; stuck sidesteps %d; grenades %d, mines %d, packs %d; boardings %d, wrecks %d\n",
                 now, alive, bots.size(), running, game.owned(1), game.owned(2), game.tickets[1], game.tickets[2],
                 game.winner ? (game.winner == 1 ? ", team 1 won" : ", team 2 won") : "", player_dead ? "dead" : "alive", deaths[1], deaths[2],
-                detours, grenades_thrown, boardings, wrecks);
+                detours, grenades_thrown, mines_laid, packs_laid, boardings, wrecks);
     // Parked vehicles after 5 s: those pushed away (spawned inside something) or tipped over.
     int moved = 0, tipped = 0;
     for (size_t i = 0; i < vehicles.size(); ++i) {
@@ -1803,14 +1856,16 @@ void Game::pose() {
                                                    skipped, nullptr, hide_1p);
         for (size_t i = 0; i < parts.size() && i < b.parts; ++i) scene[b.first + i].world = parts[i].world;
         SoldierView v;
-        v.first = b.first, v.parts = b.parts, v.held_first = b.held_first, v.held_parts = b.held_parts;
+        bool side = on_sidearm(b, now);
+        v.first = b.first, v.parts = b.parts, v.held_first = side ? b.side_first : b.held_first, v.held_parts = side ? b.side_parts : b.held_parts;
         if (b.dead) v.lower = "lb_diecheststand", v.upper = "ub_diecheststand", v.hold = opt.shot ? -1000.0f : b.died_at, soldiers.push_back(v);
         else {
-            const std::string& w = b.weapon.name;
+            const WeaponDef& gun = side ? b.sidearm : b.weapon;
+            const std::string& w = gun.name;
             const char* lower_b = b.posture == 2 ? "lb_lie" : b.posture == 1 ? "lb_crouch" : b.moving ? "lb_runforward" : "lb_stand";
             std::string upper = b.posture == 2 ? "ub_lie" + w : b.posture == 1 ? "ub_crouch" + w : b.moving ? "ub_runforward" + w : "ub_standaim" + w;
             v.lower = lower_b, v.upper = w.empty() ? "" : upper;
-            if (!w.empty()) arm_states(v, w, b.weapon, b.ammo, b.last_shot, b.posture);
+            if (!w.empty()) arm_states(v, w, gun, side ? b.side_ammo : b.ammo, b.last_shot, b.posture);
             if (bseat) v.lower = bseat->lower, v.upper = bseat->upper, v.weapon.clear(), v.held_parts = 0;  // c_AsmHideWeapon
             else if (b.veh < 0) motion_states(b.ch, b.moving ? 1.0f : 0.0f, v);
             soldiers.push_back(v);

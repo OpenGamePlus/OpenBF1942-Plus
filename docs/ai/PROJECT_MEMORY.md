@@ -2,6 +2,11 @@
 
 Append-only. Newest first. At most 3 bullets per stage.
 
+## 2026-11-14 — B2: bots use pistols, mines and packs
+
+- A bot whose primary has no round and no magazine fires its kit's pistol (drawn and animated as it); engineers lay mines near flags their team holds and drop packs by enemy-crewed vehicles, set off once out of the blast. Placed charges now record their owner, so the player's detonator sets off only the player's packs. Rules guessed.
+- Berlin 300 s: 15 mines laid, no wrecks, no packs (no enemy vehicle came within 6 m); tickets and deaths within one of the previous run. El Alamein: no mines (its engineers rode vehicles). Pistol fallback not seen in a 300 s run (bots rarely run dry).
+
 ## 2026-11-14 — copyState weapons; out-of-ammo slide lock
 
 - `copyState` (not only `copyState2`) creates the per-weapon states of the K98, both snipers, the Panzershreck and the Walther P38: they had no arm, fire or reload animations. Weapon states take the weapon's own animation first. Checked by dumping the loaded states.

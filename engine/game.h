@@ -228,6 +228,12 @@ private:
         WeaponDef grenade;         // the kit's hand grenade, if any
         Ammo grenades;
         float next_grenade = 0;
+        WeaponDef sidearm;  // the kit's pistol: fired once the primary has no round and no magazine left
+        Ammo side_ammo;
+        size_t side_first = 0, side_parts = 0;
+        WeaponDef mine, pack;  // engineers: landmines laid near flags its team holds, packs left by enemy vehicles
+        Ammo mines, packs;
+        float next_mine = 0;
         float next_fire = 0, seen_at = -1, next_look = 0, last_shot = -10;
         bool was_reloading = false;
         int target = -2;  // -2 nobody, -1 the player, else a bot
@@ -290,6 +296,11 @@ private:
     NavGrid boat_nav;  // landing craft (else boat) map, 4 m cells; empty: boats go straight
     bool troop_boat(const Veh& v) const { return v.ship && !v.plane && v.len < 8; }  // LCVP, Higgins, Daihatsu
     void disembark(Veh& v, float t);
+    // Out of rounds and magazines for its primary (not reloading), with a pistol: it fires the pistol.
+    static bool on_sidearm(const Bot& b, float t) {
+        return !b.sidearm.name.empty() && !b.ammo.unlimited && b.ammo.rounds == 0 && b.ammo.spare == 0 && !b.ammo.reloading(t);
+    }
+    void lay_charges(Bot& b, size_t bi, float t);
     void board(Bot& b, float t);
     void crew(Bot& b, float t, float step, const float* target, int target_veh);
     void leave(Bot& b);
@@ -299,7 +310,7 @@ private:
     Mat4 seated(int veh, const Seat& st) const;     // where a seated soldier's model goes
     std::array<int, 3> deaths{0, 0, 0};
     int detours = 0;  // sidesteps taken by stuck bots
-    int grenades_thrown = 0, boardings = 0, wrecks = 0;
+    int grenades_thrown = 0, boardings = 0, wrecks = 0, mines_laid = 0, packs_laid = 0;
     DamageTable damage;
     WeaponDef hand;  // the weapon in hand, and its ammunition
     Ammo hand_ammo;
@@ -324,9 +335,11 @@ private:
     bool lying = false;      // prone toggled on
     float eye_height() const { return posture == 2 ? 0.35f : posture == 1 ? 1.0f : 1.5f; }
     static float body_height(int p) { return p == 2 ? 0.7f : p == 1 ? 1.2f : 1.8f; }  // as the physics capsules
-    struct Placed {  // the player's mines (go off near a vehicle) and explosive packs (go off on detonate)
+    struct Placed {  // mines (go off near a vehicle) and explosive packs (go off on detonate)
         int shot = -1;
         float near = 0;
+        int owner = -1;           // -1 the player, else the bot that placed it
+        float radius = 0, at = 0;  // a bot's pack: its blast radius, when it was left
     };
     std::vector<Placed> placed;
     void placed_charges(bool detonate);
