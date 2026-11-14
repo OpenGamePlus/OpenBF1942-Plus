@@ -285,6 +285,7 @@ int run(int argc, char** argv) {
 }  // namespace
 
 int main(int argc, char** argv) {
+    std::setvbuf(stdout, nullptr, _IONBF, 0);  // unbuffered: a log file or pipe sees each message as it happens
     try {
         return run(argc, argv);
     } catch (const std::exception& e) {
