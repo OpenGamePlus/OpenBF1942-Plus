@@ -45,7 +45,7 @@ int run(int argc, char** argv) {
                      "  --shot with --drive: settles 2 s, drives 4 s (last 2 s steering right), prints the track;\n"
                      "  aircraft: 20 s take-off run, pulling up from 12 s to 16 s; the vehicle fires from 2 s (--fire-ahead: gun\n"
                      "  straight ahead, no steering)\n"
-                     "  --play: walk a soldier (WASD, shift walks, space jumps, the mouse looks (F10 frees it), left mouse fires, R reloads, 1-9 weapons, G detonates explosive packs, left ctrl crouches, Z lies down, V first / third person), E gets into / out of the nearest vehicle, 1-8 change seat, F1-F7 radio menu then F1-F8 message\n"
+                     "  --play: walk a soldier (WASD, shift walks, space jumps, the mouse looks (F10 frees it), left mouse fires, R reloads, 1-9 weapons, G detonates explosive packs, left ctrl crouches, Z lies down, V first / third person), E gets into / out of the nearest vehicle, 1-8 change seat, F1-F7 radio menu then F1-F7 message\n"
                      "  (parked vehicles are drivable with --play or --drive); with --shot: runs 2 s, gets into the nearest vehicle,\n"
                      "  drives 2 s, gets out, then reports how far the parked vehicles moved while settling, then plays --sim seconds\n"
                      "  (default 10) of conquest and prints flag changes and tickets\n");

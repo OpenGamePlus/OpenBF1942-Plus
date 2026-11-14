@@ -35,7 +35,19 @@ uint32 record count, uint32 strings per record (9 in bf1942), then UTF-16LE zero
 
 ## Radio menu (`menu/RadioMenu`, a MemeFile)
 
-Its strings list the seven categories on F1–F7 (F8 toggles radio icons): radio confirm, request, enemy spotted, game; local confirm, alarms, tactics. Each category's messages follow in reverse key order. The key of each message is read from that order and is unverified against the original. Local alarms list 10 messages; we put the last two (bail out, abandon ship) on F7–F8 inside a vehicle (shortcut). The conquest game page also names the closest control point; we offer only attack and defend.
+Key layout from the Mac client decompilation (`Radio::handleRadioInput`; F1 as the first key is inferred). Closed, F1–F7 open a category; F8 shows / hides the category list (not drawn here). In a category, F1–F7 send:
+
+| Category | Keys |
+|---|---|
+| F1 radio confirm | F1 roger, F2 negative |
+| F2 request | F1 pickup, F2 reinforcement, F3 anti-tank, F4 naval, F5 air, F6 artillery ready, F7 APC |
+| F3 spotted | F1 armor, F2 infantry, F3 unit, F4 ship, F5 submarine, F6 airplane, F7 scout |
+| F4 game (conquest) | F1–F3 control points 1–3, F4 the closest, F5–F7 points 4–6: "defend" if the sender's team holds it, else "attack" (CTF: F4–F7 flag messages, not done) |
+| F5 local confirm | F3 defending, F4 attacking, F5 roger, F6 negative |
+| F6 local alarms | F1 wait, F2 fire, F3 hold fire, F4 fire in the hole, F5 medic (in a vehicle: need repairs), F6 take cover (aircraft: check your six), F7 bail out (ship: abandon ship) |
+| F7 local tactics | F1 cover me, F2 hold position, F3 go for enemy flag, F4 fall back, F5 stick together (in a vehicle: get in), F6 follow me, F7 go |
+
+Radio messages reach the whole team; local ones only teammates within 70 m (`GameServer::radioMessage`). The AI only receives (`AIRadio`); bots send nothing.
 
 ## Use in the engine
 

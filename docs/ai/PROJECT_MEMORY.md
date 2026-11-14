@@ -2,6 +2,12 @@
 
 Append-only. Newest first. At most 3 bullets per stage.
 
+## 2026-11-14 — C1: radio, gear, medic checked against the Mac client
+
+- The decompiled Mac client gave the radio key layout (local confirm sits on F3–F6, vehicle swaps by kind, conquest page by control point with attack / defend by owner), TicketLow at 20 %, gear defaults 30 / 20 m and 0.65 / 0.85 with patch 0 going up, and the medic healing the first hurt teammate in range. All applied; Berlin 300 s identical.
+- Found: bots never send radio; soldier sounds in the original start from animation-state triggers (our physics events are a stand-in), which is also where `SoldierCharge` lives.
+- Open in C1: `SoldierCharge` (animation-state triggers), CTF radio page.
+
 ## 2026-11-14 — B2 / C1: medic pack heals
 
 - `MedPack` (`magType 1`) is now a kit weapon: rounds heal the teammate aimed at within `healDistance`, else the medic (`healFactor` / `selfHealFactor` as hit points per round, unverified), with `SoldierHealedByMedic`. Headless: 10 → 24 of 30 hit points in 10 s, 10 heal sounds.

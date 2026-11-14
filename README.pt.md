@@ -55,7 +55,7 @@ build/obf_sim "<BF1942_DIR>" bf1942 El_Alamein --play 2 --sim 600 # sem janela: 
 | Armas | botão esquerdo atira, R recarrega, 1–9 armas do kit, G detona as cargas explosivas |
 | Postura, visão | ctrl esquerdo agacha, Z deita, V primeira / terceira pessoa |
 | Veículos | E entra / sai, 1–8 troca de assento, WASD dirige, o mouse mira as torres |
-| Rádio | F1–F7 abre um menu, depois F1–F8 envia uma mensagem |
+| Rádio | F1–F7 abre um menu, depois F1–F7 envia uma mensagem |
 | Aviões | W / S acelerador, setas arfagem e rolagem, A / D leme |
 | Câmera livre | botão direito olha, WASD / QE movem, shift rápido; C mostra as malhas de colisão; Esc sai |
 

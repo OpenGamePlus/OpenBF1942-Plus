@@ -185,12 +185,11 @@ private:
         bool gear_down = true;  // aircraft landing gear
         float gear_moving = 0;  // seconds of gear travel left
     };
-    // LandingGear settings of an aircraft (its first LandingGear part). shortcut: when the original raises and lowers
-    // the gear is unread; here up above setGearUpHeight with throttle at setGearUpEngineInput, down below
-    // setGearDownHeight with throttle at most setGearDownEngineInput; travel = setMaxRotation / setMaxSpeed.
+    // LandingGear settings of an aircraft (its first LandingGear part), defaults as the Mac client's template;
+    // travel = setMaxRotation / setMaxSpeed (shortcut: the original stops the sound when the rotation stops).
     struct Gear {
         bool has = false;
-        float down_height = 25, up_height = 25, down_input = 0.55f, up_input = 0.8f, travel = 1;
+        float down_height = 30, up_height = 20, down_input = 0.65f, up_input = 0.85f, travel = 1;
     };
     std::map<std::string, Gear> gears_;  // by vehicle template
     void landing_gear(float dt);
@@ -333,7 +332,12 @@ private:
     void heal(float t);        // the player's medic pack in use
     float healed_sound_ = -10;
     void radio(int key);
-    std::vector<int> radio_items() const;  // indices into the open menu's messages, by key
+    struct RadioLine {
+        std::string text, extra, shown;  // lexicon RADIO_HEADING_<text> / RADIO_<text>; extra: a control point's name
+                                         // (sent); shown: in the menu instead of extra ("CLOSEST")
+        int radio = -1, voice = -1;
+    };
+    std::vector<RadioLine> radio_items() const;  // the open category, by F-key (7); empty text: nothing there
     std::string word(const std::string& key) const;  // lexicon text, else the key
     int radio_menu_ = -1;  // open radio category, -1 closed
     float radio_until_ = 0, tickets_start_ = 0;
