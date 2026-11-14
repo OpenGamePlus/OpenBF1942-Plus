@@ -131,8 +131,9 @@ std::string Sounds::language(const std::string& tmpl) const {
 }
 
 SoundPatch Sounds::soldier_patch(const std::string& script, int patch, const std::string& tmpl) {
-    // shortcut: the soldiers' shared script folder, where SoldierSound.inc's relative names point
-    const std::string key = "objects/soldiers/common/sounds/" + script;
+    // shortcut: the soldiers' shared script folder, where SoldierSound.inc's relative names point; paths with a
+    // folder (the radio's menu/menuradiosound.ssc, bf1942/game/gameplay.ssc) are taken as they are
+    const std::string key = script.find('/') != std::string::npos ? script : "objects/soldiers/common/sounds/" + script;
     auto it = weapon_.find(key);
     if (it == weapon_.end()) {
         auto read = [&](const std::string& p) {

@@ -9,6 +9,9 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <filesystem>
+#include <fstream>
+#include <iterator>
 #include <map>
 #include <mutex>
 #include <stdexcept>
@@ -42,7 +45,7 @@ int run(int argc, char** argv) {
                      "  --shot with --drive: settles 2 s, drives 4 s (last 2 s steering right), prints the track;\n"
                      "  aircraft: 20 s take-off run, pulling up from 12 s to 16 s; the vehicle fires from 2 s (--fire-ahead: gun\n"
                      "  straight ahead, no steering)\n"
-                     "  --play: walk a soldier (WASD, shift walks, space jumps, the mouse looks (F10 frees it), left mouse fires, R reloads, 1-9 weapons, G detonates explosive packs, left ctrl crouches, Z lies down, V first / third person), E gets into / out of the nearest vehicle, F1-F8 change seat\n"
+                     "  --play: walk a soldier (WASD, shift walks, space jumps, the mouse looks (F10 frees it), left mouse fires, R reloads, 1-9 weapons, G detonates explosive packs, left ctrl crouches, Z lies down, V first / third person), E gets into / out of the nearest vehicle, 1-8 change seat, F1-F7 radio menu then F1-F8 message\n"
                      "  (parked vehicles are drivable with --play or --drive); with --shot: runs 2 s, gets into the nearest vehicle,\n"
                      "  drives 2 s, gets out, then reports how far the parked vehicles moved while settling, then plays --sim seconds\n"
                      "  (default 10) of conquest and prints flag changes and tickets\n");
@@ -111,6 +114,10 @@ int run(int argc, char** argv) {
     GameOptions opt;
     opt.drive = drive, opt.play = play, opt.kit = kit, opt.fire_ahead = look_demo, opt.shot = !shot.empty();
     Game game(vfs, con, hm, info, scene, spawns, opt, Camera{cx, cy, cz, yaw, pitch}, objects);
+    {  // the game's texts (radio menu and messages), a loose file of the mod folder; without it keys are shown
+        std::ifstream lex(std::filesystem::path(argv[1]) / "Mods" / argv[2] / "lexiconAll.dat", std::ios::binary);
+        game.words = lexicon_parse(std::vector<uint8_t>((std::istreambuf_iterator<char>(lex)), std::istreambuf_iterator<char>()));
+    }
     for (auto& [why, n] : game.skipped) skipped[why] += n;
 
     SDL_SetMainReady();
@@ -180,6 +187,7 @@ int run(int argc, char** argv) {
         bool toggle_vehicle = false;     // E: get in / out
         bool toggle_prone = false;       // Z: lie down / get up
         bool toggle_view = false;        // V: first / third person
+        int radio_key = -1;              // F1-F8: radio
         Camera& cam = game.cam;
         while (SDL_PollEvent(&ev)) {
             if (ev.type == SDL_QUIT || (ev.type == SDL_KEYDOWN && ev.key.keysym.sym == SDLK_ESCAPE)) running = false;
@@ -187,6 +195,7 @@ int run(int argc, char** argv) {
             if (ev.type == SDL_KEYDOWN && ev.key.keysym.sym == SDLK_e && !ev.key.repeat) toggle_vehicle = true;
             if (ev.type == SDL_KEYDOWN && ev.key.keysym.sym == SDLK_z && !ev.key.repeat) toggle_prone = true;
             if (ev.type == SDL_KEYDOWN && ev.key.keysym.sym == SDLK_v && !ev.key.repeat) toggle_view = true;
+            if (ev.type == SDL_KEYDOWN && !ev.key.repeat && ev.key.keysym.sym >= SDLK_F1 && ev.key.keysym.sym <= SDLK_F8) radio_key = ev.key.keysym.sym - SDLK_F1;
             if (ev.type == SDL_MOUSEBUTTONDOWN && ev.button.button == SDL_BUTTON_RIGHT) look = true;
             if (ev.type == SDL_MOUSEBUTTONUP && ev.button.button == SDL_BUTTON_RIGHT) look = false;
             if (ev.type == SDL_KEYDOWN && ev.key.keysym.sym == SDLK_F10 && !ev.key.repeat && !play.empty()) grab = !grab;
@@ -217,10 +226,9 @@ int run(int argc, char** argv) {
             in.look_x = mouse_x / 20.0f, in.look_y = mouse_y / 20.0f;  // mouse right / down = +1 at ~20 px per frame
             in.jump = k[SDL_SCANCODE_SPACE], in.slow = k[SDL_SCANCODE_LSHIFT], in.use = toggle_vehicle, in.reload = k[SDL_SCANCODE_R], in.detonate = k[SDL_SCANCODE_G];
             in.crouch = k[SDL_SCANCODE_LCTRL], in.prone = toggle_prone, in.view = toggle_view;
-            for (int n = 0; n < 9; ++n)
-                if (k[SDL_SCANCODE_1 + n]) in.select = n;
-            for (int n = 0; n < 8; ++n)
-                if (k[SDL_SCANCODE_F1 + n]) in.seat = n;
+            for (int n = 0; n < 9; ++n)  // on foot a kit weapon, in a vehicle a seat (as the original's c_PIMenuSelect)
+                if (k[SDL_SCANCODE_1 + n]) in.select = in.seat = n;
+            in.radio = radio_key;
             in.fire = SDL_GetMouseState(nullptr, nullptr) & SDL_BUTTON(SDL_BUTTON_LEFT);
             game.step(static_cast<float>(SDL_GetTicks()) / 1000.0f, dt, in);
         } else {

@@ -41,7 +41,8 @@ struct GameInput {
     bool crouch = false;    // held
     bool prone = false;     // pressed this frame: lie down / get up
     bool view = false;      // pressed this frame: first / third person
-    int seat = -1;          // F1..F8 pressed: move to that seat of the vehicle (0-based)
+    int radio = -1;         // F1..F8 pressed this frame (0-based): radio menu, then message
+    int seat = -1;          // number key in a vehicle: move to that seat (0-based)
 };
 
 // The lower / upper body animation states a soldier's skinned parts should play; empty: as loaded.
@@ -153,6 +154,7 @@ public:
 
     Physics phys;
     Camera cam;
+    std::map<std::string, std::string> words;  // lexicon (lexiconAll.dat), set by the window; empty: keys shown
     std::vector<SoldierView> soldiers;
     std::map<std::string, int> skipped;
 
@@ -327,6 +329,12 @@ private:
     float hand_next = 0, player_hp = 30, respawn_at = -1, now = 0;
     bool player_dead = false;
     std::vector<std::pair<float, std::string>> feed;  // (game time, message): kills, captures, destroyed vehicles
+    void announce(int patch);  // a GamePlay.ssc announcement to the player, in its language
+    void radio(int key);
+    std::vector<int> radio_items() const;  // indices into the open menu's messages, by key
+    std::string word(const std::string& key) const;  // lexicon text, else the key
+    int radio_menu_ = -1;  // open radio category, -1 closed
+    float radio_until_ = 0, tickets_start_ = 0;
     void note(std::string m) {
         while (!feed.empty() && now - feed.front().first > 6) feed.erase(feed.begin());
         feed.emplace_back(now, std::move(m));

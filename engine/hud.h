@@ -2,6 +2,8 @@
 // Spec: docs/formats/hud.md
 #pragma once
 #include <array>
+#include <cstdint>
+#include <map>
 #include <string>
 #include <vector>
 
@@ -16,6 +18,10 @@ struct Font {
     std::array<Glyph, 256> glyphs{};  // by Latin-1 code
 };
 Font font_parse(const std::string& text);  // throws std::runtime_error without a header or glyphs
+// lexiconAll.dat (Mods/<mod>/, loose): uint32 records, uint32 strings per record, then UTF-16LE zero-terminated
+// strings, a key and one text per language (the first record names them: English, French, Italian, Spanish,
+// German, Japanese, Korean, Chinese). Returns key -> text in language `lang` (0 English), as Latin-1 ('?' beyond).
+std::map<std::string, std::string> lexicon_parse(const std::vector<uint8_t>& data, int lang = 0);
 
 struct HudQuad {
     float x, y, w, h;          // pixels, top-left origin
@@ -33,6 +39,7 @@ struct HudInfo {
     int rounds = -1, spare = 0;     // rounds -1: unlimited (not shown)
     bool reloading = false;
     std::vector<std::string> feed;  // newest last
+    std::vector<std::string> radio;  // the open radio menu: heading, then "F1 ROGER"...; empty: closed
 };
 
 float text_width(const Font& f, const std::string& s, float scale);

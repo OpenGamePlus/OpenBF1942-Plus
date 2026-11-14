@@ -54,7 +54,8 @@ build/obf_sim "<BF1942_DIR>" bf1942 El_Alamein --play 2 --sim 600 # ohne Fenster
 | Bewegen, umsehen | WASD, Maus (gefangen; F10 gibt sie frei), Shift geht, Leertaste springt (im Fall: öffnet den Fallschirm) |
 | Waffen | linke Maustaste feuert, R lädt nach, 1–9 Kit-Waffen, G zündet Sprengladungen |
 | Haltung, Ansicht | linke Strg-Taste duckt, Z legt hin, V Ego- / Third-Person-Ansicht |
-| Fahrzeuge | E steigt ein / aus, F1–F8 wechseln den Platz, WASD fährt, die Maus richtet Geschütztürme aus |
+| Fahrzeuge | E steigt ein / aus, 1–8 wechseln den Platz, WASD fährt, die Maus richtet Geschütztürme aus |
+| Funk | F1–F7 öffnet ein Menü, dann sendet F1–F8 eine Nachricht |
 | Flugzeuge | W / S Schub, Pfeiltasten Nicken und Rollen, A / D Seitenruder |
 | Freie Kamera | rechte Maustaste sieht sich um, WASD / QE bewegen, Shift schnell; C zeigt Kollisionsmeshes; Esc beendet |
 

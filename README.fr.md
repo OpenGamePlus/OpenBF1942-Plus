@@ -54,7 +54,8 @@ build/obf_sim "<BF1942_DIR>" bf1942 El_Alamein --play 2 --sim 600 # sans afficha
 | Se déplacer, regarder | WASD, souris (capturée ; F10 la libère), shift pour marcher, espace pour sauter (en chute : ouvre le parachute) |
 | Armes | clic gauche pour tirer, R pour recharger, 1–9 armes du kit, G fait exploser les charges explosives |
 | Posture, vue | ctrl gauche pour s'accroupir, Z pour se coucher, V première / troisième personne |
-| Véhicules | E pour monter / descendre, F1–F8 changent de place, WASD pour conduire, la souris vise avec les tourelles |
+| Véhicules | E pour monter / descendre, 1–8 changent de place, WASD pour conduire, la souris vise avec les tourelles |
+| Radio | F1–F7 ouvre un menu, puis F1–F8 envoie un message |
 | Avions | W / S gaz, flèches tangage et roulis, A / D gouvernail |
 | Caméra libre | clic droit pour regarder, WASD / QE pour se déplacer, shift rapide ; C affiche les maillages de collision ; Esc quitte |
 

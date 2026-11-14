@@ -137,7 +137,7 @@ Getting in: the nearest vehicle within 5 m + half its length (not yet the `Entry
 Crews (seats):
 - **Seats:** the vehicle's own `PlayerControlObject` is seat 1, the driver. Each `PlayerControlObject` nested in it is another seat: the Sherman's Browning gunner, the Hanomag's MG42 and four passengers, the LCVP's gunner and four passengers, the B-17's two gunners.
 - **What a seat has:** its first `FireArms` is that seat's weapon. Its `RotationalBundle`s answer only to that seat's mouse look. Its `SeatObject` places the seat, and its `setSoldierExitLocation` says where you get out.
-- **Getting in:** you take the driver's seat if it is free, otherwise the first free one. F1–F8 move you to a free seat.
+- **Getting in:** you take the driver's seat if it is free, otherwise the first free one. Number keys 1–8 move you to a free seat (the original binds `c_PIMenuSelect1-9` in vehicles; F1–F8 are `c_PIRadio1-8`).
 - **Driving:** only seat 1 drives.
 - **Seated soldiers:** a seat with `seatFlags c_SeatShowFullBodySoldier` shows a sitting soldier. `…HalfBody…` or `…StandingSoldier` show one standing. A seat without a show flag, such as a tank driver inside, shows nobody.
 - **Seat animations:** the seat's own `seatAnimationLowerBody` / `UpperBody` (`Lb_PassengerInWilly`), else `Lb_SitInVehicle` or `Lb_StandInVehicle` with `Ub_SitInVehicle` (`animationStatesVehicle.con`, whose `c_AsmHideWeapon` hides the hand weapon).

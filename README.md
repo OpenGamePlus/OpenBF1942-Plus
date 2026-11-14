@@ -54,7 +54,8 @@ build/obf_sim "<BF1942_DIR>" bf1942 El_Alamein --play 2 --sim 600 # headless: 10
 | Move, look | WASD, mouse (captured; F10 frees it), shift walks, space jumps (falling: opens the parachute) |
 | Weapons | left mouse fires, R reloads, 1–9 kit weapons, G detonates explosive packs |
 | Posture, view | left ctrl crouches, Z lies down, V first / third person |
-| Vehicles | E gets in / out, F1–F8 change seat, WASD drives, mouse aims turrets |
+| Vehicles | E gets in / out, 1–8 change seat, WASD drives, mouse aims turrets |
+| Radio | F1–F7 opens a menu, then F1–F8 sends a message |
 | Aircraft | W / S throttle, arrows pitch and roll, A / D rudder |
 | Free camera | right mouse looks, WASD / QE move, shift fast; C shows collision meshes; Esc quits |
 

@@ -741,6 +741,18 @@ int main() {
         mixer.mix(out.data(), 4410, Listener{});
         assert(mixer.voices() == 0);
     }
+    {  // Lexicon: records of a key and one text per language, UTF-16LE; Latin-1 kept, others become '?'
+        std::vector<uint8_t> lex = {2, 0, 0, 0, 3, 0, 0, 0};
+        auto put = [&](const std::u16string& s) {
+            for (char16_t c : s) lex.push_back(static_cast<uint8_t>(c & 0xff)), lex.push_back(static_cast<uint8_t>(c >> 8));
+            lex.push_back(0), lex.push_back(0);
+        };
+        for (auto s : {u"LANGUAGE", u"English", u"Spanish", u"RADIO_HEADING_ROGER", u"ROGER", u"RECIBIDO \u00c9\u4e86"}) put(s);
+        auto en = lexicon_parse(lex), es = lexicon_parse(lex, 1);
+        assert(en.size() == 1 && en["RADIO_HEADING_ROGER"] == "ROGER" && es["RADIO_HEADING_ROGER"] == "RECIBIDO \xc9?");
+        lex.resize(lex.size() - 3);  // cut short: the last record is dropped, no overrun
+        assert(lexicon_parse(lex).empty() && lexicon_parse({1, 2}).empty());
+    }
     {  // HUD: .font, layout, gray TGA
         Font f = font_parse("Texture = font/BF1942.tga\r\nTextureWidth = 128\r\nTextureHeight = 128\r\nBetweenWidth = 1\r\nSpaceWidth = 1\r\n"
                             "Height = 11\r\n-------\r\n  0 0 0\r\n! 0 0 1\r\nA 31 12 36\r\nZ 120 125 127\r\n");

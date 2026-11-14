@@ -1361,7 +1361,104 @@ void Game::think(float t, float step) {
             if (!b.dead && near(b.pos)) ++present[i][static_cast<size_t>(std::clamp(b.team, 0, 2))];
         if (palive && near(ppos)) ++present[i][static_cast<size_t>(std::clamp(team, 0, 2))];
     }
+    std::vector<int> owners;
+    for (const ConquestFlag& f : game.flags) owners.push_back(f.team);
+    int lead_before = game.owned(team) - game.owned(3 - team);
+    float tickets_before = game.tickets[static_cast<size_t>(std::clamp(team, 1, 2))];
     for (const std::string& ev : game.update(step, present)) std::printf("[%.0f s] %s\n", t, ev.c_str()), note(ev);
+    // Announcements to the player's team, GamePlay.ssc patches: 0 GainControlPoint, 1 LoseControlPoint,
+    // 2 AutoLoseTickets, 3 TicketLow. shortcut: when the original plays 2 and 3 is unread; here when the team starts
+    // losing tickets for holding fewer flags, and when its tickets first drop below a quarter of the start.
+    if (player < 0) return;
+    for (size_t i = 0; i < owners.size(); ++i)
+        if (game.flags[i].team != owners[i]) {
+            if (game.flags[i].team == team) announce(0);
+            else if (owners[i] == team) announce(1);
+        }
+    if (lead_before >= 0 && game.owned(team) - game.owned(3 - team) < 0) announce(2);
+    float tickets = game.tickets[static_cast<size_t>(std::clamp(team, 1, 2))];
+    if (tickets_start_ <= 0) tickets_start_ = tickets_before;
+    if (tickets_before >= tickets_start_ / 4 && tickets < tickets_start_ / 4) announce(3);
+}
+
+void Game::announce(int patch) {
+    float p[3] = {cam.x, cam.y, cam.z};
+    if (player >= 0 && !player_dead && cur < 0) phys.character_position(player, p);
+    sounds.push_back({soldier_tmpl, {p[0], p[1] + 1.5f, p[2]}, -1, false, false, "bf1942/game/gameplay.ssc", patch});
+}
+
+// The radio menu (menu/RadioMenu, a MemeFile; read from its strings, keys unverified against the original): F1-F7
+// open a category, then F1-F8 send one of its messages. Team radio plays menu/MenuRadioSound.ssc after the radio
+// crackle (GamePlay.ssc patch 5); local messages are the sender's SoldierVoice.ssc, heard around it.
+namespace {
+struct RadioMsg {
+    const char* key;  // lexicon RADIO_HEADING_<key> (menu), RADIO_<key> (feed)
+    int radio, voice;  // MenuRadioSound / SoldierVoice patch, -1 none
+};
+const std::vector<std::pair<const char*, std::vector<RadioMsg>>>& radio_menus() {
+    static const std::vector<std::pair<const char*, std::vector<RadioMsg>>> menus = {
+        {"RADIO_CONFIRM", {{"ROGER", 0, -1}, {"NEGATIVE", 1, -1}}},
+        {"RADIO_REQUEST", {{"PICKUP", 6, -1}, {"REINFORCEMENT", 7, -1}, {"ANTITANK_SUPPORT", 8, -1}, {"NAVAL_SUPPORT", 9, -1},
+                           {"AIR_SUPPORT", 10, -1}, {"ARTILLERY_READY", 11, -1}, {"APC_SUPPORT", 13, -1}}},
+        {"RADIO_ENEMY_SPOTTED", {{"ARMOR_SPOTTED", 14, -1}, {"INFANTRY_SPOTTED", 15, -1}, {"UNIT_SPOTTED", 16, -1}, {"SHIP_SPOTTED", 17, -1},
+                                 {"SUBMARINE_SPOTTED", 18, -1}, {"AIRPLANE_SPOTTED", 19, -1}, {"SCOUT_SPOTTED", 20, -1}}},
+        // shortcut: the conquest page also names the closest control point; only attack / defend here
+        {"RADIO_GAME", {{"ATTACK", 21, -1}, {"DEFEND", 22, -1}}},
+        {"LOCAL_CONFIRM", {{"LOCAL_DEFENDING", -1, 0}, {"LOCAL_ATTACKING", -1, 1}, {"LOCAL_ROGER", -1, 3}, {"LOCAL_NEGATIVE", -1, 2}}},
+        // shortcut: the menu holds 10 alarms; the last two (bail out, abandon ship) take keys 7-8 in a vehicle
+        {"LOCAL_ALARMS", {{"LOCAL_WAIT", -1, 4}, {"LOCAL_FIRE", -1, 19}, {"LOCAL_HOLD_FIRE", -1, 18}, {"LOCAL_FIRE_IN_HOLE", -1, 9},
+                          {"LOCAL_NEED_REPAIRS", -1, 21}, {"LOCAL_MEDIC", -1, 20}, {"LOCAL_TAKE_COVER", -1, 10},
+                          {"LOCAL_CHECK_YOUR_SIX", -1, 11}, {"LOCAL_BAIL_OUT", -1, 12}, {"LOCAL_ABANDON_SHIP", -1, 13}}},
+        {"LOCAL_TACTICS", {{"LOCAL_COVER_ME", -1, 14}, {"LOCAL_HOLD_POSITION", -1, 15}, {"LOCAL_GO_FOR_ENEMY_FLAG", -1, 16},
+                           {"LOCAL_FALL_BACK", -1, 17}, {"LOCAL_STICK_TOGETHER", -1, 7}, {"LOCAL_GET_IN", -1, 8},
+                           {"LOCAL_FOLLOW_ME", -1, 6}, {"LOCAL_GO", -1, 5}}},
+    };
+    return menus;
+}
+}  // namespace
+
+std::string Game::word(const std::string& key) const {
+    auto it = words.find(key);
+    return it != words.end() ? it->second : key;
+}
+
+std::vector<int> Game::radio_items() const {
+    std::vector<int> items;
+    if (radio_menu_ < 0) return items;
+    const auto& list = radio_menus()[static_cast<size_t>(radio_menu_)].second;
+    for (size_t i = 0; i < list.size() && i < 8; ++i) items.push_back(static_cast<int>(i));
+    if (list.size() > 8 && cur >= 0) items[6] = 8, items[7] = 9;
+    return items;
+}
+
+void Game::radio(int key) {
+    if (now > radio_until_) radio_menu_ = -1;  // shortcut: the menu closes after 5 s untouched (timing unread)
+    if (key < 0 || player < 0 || player_dead) return;
+    const auto& menus = radio_menus();
+    if (radio_menu_ < 0) {
+        if (key < static_cast<int>(menus.size())) radio_menu_ = key, radio_until_ = now + 5;  // F8: radio icons on / off, not shown
+        return;
+    }
+    auto items = radio_items();
+    int menu = radio_menu_;
+    radio_menu_ = -1;
+    if (key >= static_cast<int>(items.size())) return;  // no message there: closes the menu
+    const RadioMsg& m = menus[static_cast<size_t>(menu)].second[static_cast<size_t>(items[static_cast<size_t>(key)])];
+    float p[3] = {cam.x, cam.y, cam.z};
+    if (cur < 0) phys.character_position(player, p);
+    else {
+        Mat4 v = phys.transform(vehicles[static_cast<size_t>(cur)].id);
+        p[0] = v.m[12], p[1] = v.m[13], p[2] = v.m[14];
+    }
+    if (m.radio >= 0) {
+        announce(5);
+        sounds.push_back({soldier_tmpl, {p[0], p[1] + 1.5f, p[2]}, -1, false, false, "menu/menuradiosound.ssc", m.radio});
+    } else {
+        sounds.push_back({soldier_tmpl, {p[0], p[1] + 1.5f, p[2]}, -1, false, false, "soldiervoice.ssc", m.voice});
+    }
+    std::string text = word(std::string("RADIO_") + m.key);
+    std::printf("radio: %s\n", text.c_str());
+    note("You: " + text);
 }
 
 void Game::step(float t, float dt, const GameInput& in) {
@@ -1369,6 +1466,7 @@ void Game::step(float t, float dt, const GameInput& in) {
     sounds.clear();
     move_f = move_r = 0;
     if (in.use) get_in_out();
+    radio(in.radio);
     if (player >= 0) {
         if (in.select >= 0 && cur < 0) select(static_cast<size_t>(in.select));
         if (in.prone) lying = !lying;
@@ -1623,6 +1721,13 @@ HudInfo Game::hud_info() const {
         h.vehicle = v.name, h.vehicle_hp = static_cast<int>(std::ceil(std::max(0.0f, v.hp)));
         h.weapon = v.seats[static_cast<size_t>(seat)].weapon.name, h.rounds = -1, h.reloading = false;
         if (v.seats.size() > 1) h.vehicle += "  seat " + std::to_string(seat + 1) + "/" + std::to_string(v.seats.size());
+    }
+    if (radio_menu_ >= 0 && now <= radio_until_) {
+        const auto& menu = radio_menus()[static_cast<size_t>(radio_menu_)];
+        h.radio.push_back(word(std::string("RADIO_HEADING_") + menu.first));
+        auto items = radio_items();
+        for (size_t i = 0; i < items.size(); ++i)
+            h.radio.push_back("F" + std::to_string(i + 1) + " " + word(std::string("RADIO_HEADING_") + menu.second[static_cast<size_t>(items[i])].key));
     }
     for (const auto& [t, m] : feed)
         if (now - t < 6) h.feed.push_back(m);

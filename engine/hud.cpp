@@ -9,6 +9,30 @@
 
 namespace obf {
 
+std::map<std::string, std::string> lexicon_parse(const std::vector<uint8_t>& data, int lang) {
+    std::map<std::string, std::string> out;
+    if (data.size() < 8) return out;
+    auto u32 = [&](size_t at) { return uint32_t(data[at]) | uint32_t(data[at + 1]) << 8 | uint32_t(data[at + 2]) << 16 | uint32_t(data[at + 3]) << 24; };
+    uint32_t records = u32(0), per = u32(4);
+    size_t at = 8;
+    auto next = [&](std::string& s) {  // one zero-terminated UTF-16LE string as Latin-1; false at the end of the data
+        s.clear();
+        for (; at + 1 < data.size(); at += 2) {
+            unsigned c = data[at] | unsigned(data[at + 1]) << 8;
+            if (!c) return at += 2, true;
+            s += c < 256 ? static_cast<char>(c) : '?';
+        }
+        return false;
+    };
+    std::vector<std::string> rec(per);
+    for (uint32_t r = 0; r < records && per > 1; ++r) {
+        for (auto& s : rec)
+            if (!next(s)) return out;
+        if (r > 0 && static_cast<size_t>(lang) + 1 < per) out[rec[0]] = rec[static_cast<size_t>(lang) + 1];
+    }
+    return out;
+}
+
 Font font_parse(const std::string& text) {
     Font f;
     std::istringstream in(text);
@@ -116,6 +140,15 @@ std::vector<HudQuad> hud_layout(const Font& f, const HudInfo& in, int w, int h) 
     // kill / capture feed, top right, newest at the bottom
     float fy = 6 * s;
     for (const std::string& m : in.feed) text(m, W - 10 * s - text_width(f, m, s), fy, white), fy += lh;
+
+    // open radio menu, left of centre: its heading, then one message per key (shortcut: plain text, the original's
+    // icons and colours in menu/RadioMenu are not drawn)
+    if (!in.radio.empty()) {
+        float ry = H / 3, rw = 0;
+        for (const std::string& m : in.radio) rw = std::max(rw, text_width(f, m, s));
+        solid(8 * s, ry - 4 * s, rw + 12 * s, lh * static_cast<float>(in.radio.size()) + 6 * s, shade);
+        for (size_t i = 0; i < in.radio.size(); ++i) text(in.radio[i], 14 * s, ry, i ? white : (in.team == 1 ? axis : ally)), ry += lh;
+    }
 
     if (in.winner) {
         std::string m = in.winner == in.team ? "VICTORY" : "DEFEAT";

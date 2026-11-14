@@ -2,6 +2,12 @@
 
 Append-only. Newest first. At most 3 bullets per stage.
 
+## 2026-11-14 — C1: radio and announcements
+
+- Radio menu from `menu/RadioMenu`'s strings: F1–F7 categories, F1–F8 messages, drawn in the HUD with `lexiconAll.dat` texts (parser tested); team messages crackle and play `MenuRadioSound`, local ones `SoldierVoice`. Key order per message unverified. All 45 messages play existing files (headless run).
+- Seats moved from F1–F8 to number keys, as the original binds them. `GamePlay.ssc` announcements: flag gained / lost, ticket bleed starting, tickets below a quarter.
+- Open: bots on the radio, `SoldierCharge`, medic healing; the maintainer to compare menu keys with the original.
+
 ## 2026-11-14 — C1: landing gear, swimming, falls
 
 - Aircraft gear goes up and down by its `setGear*` values (rule guessed) and plays its `LandingGear` patch while moving; the mixer gained `trigger Release` (tested). A headless flight: gear up at 25 m on full throttle, 2 s of gear sound.
