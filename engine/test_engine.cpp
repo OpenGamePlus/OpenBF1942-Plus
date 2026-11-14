@@ -440,6 +440,26 @@ int main() {
         for (int i = 0; i < 60; ++i) phys.step(1.0f / 60);
         phys.character_steps(ch, jumps, landings);
         assert(phys.character_on_ground(ch) && jumps == 1 && landings == 2);
+        {  // Ladder: a 5 m box 1 m ahead; walking into it climbs (2.5 m/s), stopping holds on, backing off climbs down
+            Physics lad(hm, 128, -1);
+            float lo[3] = {63.5f, 0, 66}, hi[3] = {64.5f, 5, 66.1f};
+            lad.add_ladder(lo, hi);
+            int cl = lad.add_character(64, 0.1f, 65.2f);
+            for (int i = 0; i < 30; ++i) lad.step(1.0f / 60);
+            lad.walk(cl, 0, 1, false);
+            for (int i = 0; i < 60; ++i) lad.step(1.0f / 60);
+            lad.character_position(cl, p);
+            assert(lad.character_climbing(cl) && p[1] > 1.5f && p[1] < 3);
+            float held = p[1];
+            lad.walk(cl, 0, 0, false);
+            for (int i = 0; i < 30; ++i) lad.step(1.0f / 60);
+            lad.character_position(cl, p);
+            assert(std::fabs(p[1] - held) < 0.05f && !lad.character_climbing(cl));
+            lad.walk(cl, 0, -1, false);
+            for (int i = 0; i < 90; ++i) lad.step(1.0f / 60);
+            lad.character_position(cl, p);
+            assert(p[1] < 0.1f && lad.ladders() == 1);
+        }
         {  // Swimming: dropped into 5 m of water, the soldier floats with its feet about 1.4 m under the surface
             Physics wet(hm, 128, 5);
             int sw = wet.add_character(64, 6, 64);

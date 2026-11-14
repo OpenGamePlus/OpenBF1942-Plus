@@ -2,6 +2,12 @@
 
 Append-only. Newest first. At most 3 bullets per stage.
 
+## 2026-11-14 — B2: ladders
+
+- `c_CGLadders` objects become climbable boxes in physics: walk into one to climb (2.5 m/s, guessed), back off to climb down, stand still to hold on; `SoldierClimbLadder` while climbing. Tested on a synthetic ladder.
+- 78-level sweep: all exit cleanly; only Aberdeen changed (one more stuck sidestep). The sweep script lives in the scratchpad again (sweep.sh: 16 at a time, 45 s).
+- Open in B2: swimming / jump / ladder animations, bot pistols, bots with mines and packs.
+
 ## 2026-11-14 — C1: soldier sound triggers read from the animation states
 
 - `animations/AnimationStates*.con` name each state's sound (`setSoundTrigger`, 72). No state uses Charge, so bf1942 never plays `SoldierCharge`; `SoldierSwimStand` is floating, not leaving the water. Added `SoldierStop` and floating; landing sounds have the original's 1 s cooldown.

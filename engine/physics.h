@@ -4,6 +4,7 @@
 #include <map>
 #include <memory>
 #include <utility>
+#include <set>
 #include <string>
 #include <vector>
 #include "con.h"
@@ -115,7 +116,10 @@ public:
     Physics(const Heightmap& hm, float world_size, float water_level = -1e9f);
     ~Physics();
     // Static collision for placed .sm meshes (first collision block); returns bodies added.
-    size_t add_scene(const std::vector<DrawItem>& items, const Vfs& vfs);
+    // ladders: object templates in collision group c_CGLadders (lower case); their placed boxes become climbable.
+    size_t add_scene(const std::vector<DrawItem>& items, const Vfs& vfs, const std::set<std::string>& ladders = {});
+    void add_ladder(const float lo[3], const float hi[3]);  // a climbable world box
+    size_t ladders() const;
     void add_static(const std::string& key, const CollisionMesh& mesh, const Mat4& world);
     int add_vehicle(const VehicleDef& def, const Mat4& world);
     // Inputs in [-1, 1], named after Refractor's c_PI*: yaw +1 = right (cars steer, tanks turn, rudders); roll +1 = right
@@ -171,6 +175,7 @@ public:
     float take_landing(int character);  // downward speed of the last landing (m/s), then 0
     void character_steps(int character, unsigned& jumps, unsigned& landings) const;  // running counts (landings above 3 m/s)
     bool character_swimming(int character) const;  // in water deep enough to swim
+    bool character_climbing(int character) const;  // on a ladder, moving up or down
     bool character_on_ground(int character) const;
 
 private:

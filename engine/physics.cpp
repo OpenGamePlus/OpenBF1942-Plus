@@ -439,8 +439,13 @@ struct Physics::Impl {
         float landing = 0;  // downward speed at the last touch-down
         unsigned jumps = 0, landings = 0;  // counts, for sounds: jumps taken, touch-downs above 3 m/s
         bool swimming = false;  // head held at the surface
+        bool climbing = false;  // on a ladder, moving
     };
     std::vector<Soldier> soldiers;
+    struct Ladder {
+        float lo[3], hi[3];  // world box of its collision mesh
+    };
+    std::vector<Ladder> ladders;
     void soldier(Soldier& s);
     struct Shot {
         Vec3 p, v;
@@ -523,7 +528,7 @@ void Physics::add_static(const std::string& key, const CollisionMesh& mesh, cons
         BodyCreationSettings(shape, RVec3(world.m[12], world.m[13], world.m[14]), rot, EMotionType::Static, kStatic), EActivation::DontActivate);
 }
 
-size_t Physics::add_scene(const std::vector<DrawItem>& items, const Vfs& vfs) {
+size_t Physics::add_scene(const std::vector<DrawItem>& items, const Vfs& vfs, const std::set<std::string>& ladders) {
     size_t before = p_->sys.GetNumBodies();
     std::map<std::string, CollisionMesh> cache;
     for (const DrawItem& item : items) {
@@ -541,6 +546,17 @@ size_t Physics::add_scene(const std::vector<DrawItem>& items, const Vfs& vfs) {
             it = cache.emplace(item.mesh, std::move(c)).first;
         }
         if (!it->second.faces.empty()) add_static(item.mesh, it->second, item.world);
+        if (!it->second.vertices.empty() && ladders.count(item.owner)) {  // its world box
+            Impl::Ladder l{{1e30f, 1e30f, 1e30f}, {-1e30f, -1e30f, -1e30f}};
+            const float* m = item.world.m;
+            const auto& v = it->second.vertices;
+            for (size_t i = 0; i + 2 < v.size(); i += 3)
+                for (int k = 0; k < 3; ++k) {
+                    float w = m[k] * v[i] + m[4 + k] * v[i + 1] + m[8 + k] * v[i + 2] + m[12 + k];
+                    l.lo[k] = std::min(l.lo[k], w), l.hi[k] = std::max(l.hi[k], w);
+                }
+            add_ladder(l.lo, l.hi);
+        }
     }
     p_->sys.OptimizeBroadPhase();
     return p_->sys.GetNumBodies() - before;
@@ -992,10 +1008,37 @@ void Physics::Impl::soldier(Soldier& s) {
         s.fall = std::max(0.0f, -v.GetY());
     }
     float feet = static_cast<float>(ch.GetPosition().GetY());
+    // Ladders: within 0.6 m of a ladder's box (feet from 0.5 m below its foot to its top), walking towards it climbs,
+    // walking away while off the ground climbs down, standing still holds on. shortcut: 2.5 m/s and the reach are
+    // guesses; the original's ladder rules (c_CGLadders) are unread.
+    s.climbing = false;
+    Vec3 move = s.want;
+    {
+        Vec3 pos = ch.GetPosition();
+        float px = static_cast<float>(pos.GetX()), pz = static_cast<float>(pos.GetZ());
+        for (const Ladder& l : ladders) {
+            if (feet < l.lo[1] - 0.5f || feet > l.hi[1]) continue;
+            float cx = std::clamp(px, l.lo[0], l.hi[0]), cz = std::clamp(pz, l.lo[2], l.hi[2]);
+            if ((px - cx) * (px - cx) + (pz - cz) * (pz - cz) > 0.36f) continue;
+            float tx = (l.lo[0] + l.hi[0]) / 2 - px, tz = (l.lo[2] + l.hi[2]) / 2 - pz;
+            float wx = s.want.GetX(), wz = s.want.GetZ(), toward = wx * tx + wz * tz;
+            bool grounded = ch.GetGroundState() == CharacterBase::EGroundState::OnGround;
+            float wl = std::sqrt(wx * wx + wz * wz);
+            if (wl > 0.5f && toward > 0) {  // up, held at the ladder until its last metre, where it steps off on top
+                v = Vec3(0, 2.5f, 0), s.climbing = true;
+                if (feet < l.hi[1] - 1) move = Vec3::sZero();
+            }
+            else if (wl > 0.5f && !grounded) v = Vec3(0, -2.5f, 0), s.climbing = true, move = Vec3::sZero();
+            else if (!grounded) v = Vec3::sZero();
+            else break;
+            s.fall = 0, s.jump = false;
+            break;
+        }
+    }
     s.swimming = feet < water - (s.swimming ? 1.1f : 1.3f);  // around the 1.4 m hold depth, with a margin against flicker
     if (feet < water - 1.4f) v.SetY(std::max(v.GetY(), (water - 1.4f - feet) * 2.0f)), s.fall = 0, s.chute = 0;  // swim: head above the surface
     s.jump = false;
-    ch.SetLinearVelocity(v + s.want);
+    ch.SetLinearVelocity(v + move);
     CharacterVirtual::ExtendedUpdateSettings es;
     ch.ExtendedUpdate(kStep, g, es, sys.GetDefaultBroadPhaseLayerFilter(kMoving), sys.GetDefaultLayerFilter(kMoving), {}, {}, temp);
 }
@@ -1009,6 +1052,9 @@ Ref<Shape> soldier_shape(int posture) {  // a capsule of radius 0.3 standing on 
 
 void Physics::open_parachute(int character, float k) { p_->soldiers.at(static_cast<size_t>(character)).chute = std::max(0.0f, k); }
 bool Physics::parachute_open(int character) const { return p_->soldiers.at(static_cast<size_t>(character)).chute > 0; }
+void Physics::add_ladder(const float lo[3], const float hi[3]) { p_->ladders.push_back({{lo[0], lo[1], lo[2]}, {hi[0], hi[1], hi[2]}}); }
+size_t Physics::ladders() const { return p_->ladders.size(); }
+bool Physics::character_climbing(int character) const { return p_->soldiers.at(static_cast<size_t>(character)).climbing; }
 bool Physics::character_swimming(int character) const { return p_->soldiers.at(static_cast<size_t>(character)).swimming; }
 void Physics::character_steps(int character, unsigned& jumps, unsigned& landings) const {
     const auto& s = p_->soldiers.at(static_cast<size_t>(character));

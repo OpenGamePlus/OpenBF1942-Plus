@@ -126,6 +126,10 @@ Postures (left ctrl held crouches, Z toggles prone):
 - Animations: `Lb_Crouch*` / `Ub_Crouch` and `Lb_Lie*` / `Ub_Lie` (from `animationStatesCrouching.con` and `animationStatesLie.con`). The transitions (`Lb_StandToCrouch`, …) are not played.
 - Hits on a crouching or prone player are mapped to head, chest or limbs as if standing.
 
+Ladders:
+- Ladders are `SimpleObject`s with `addToCollisionGroup c_CGLadders` (17 templates in bf1942; placed: Aberdeen 8, Bocage 7, Wake 5, Kharkov 4, Omaha Beach 1, Battle of Britain 14, Berlin none). Each placed one becomes a climbable box: the world bounds of its collision mesh.
+- Within 0.6 m of the box, feet from 0.5 m below its foot to its top: walking towards it climbs at 2.5 m/s, held at the ladder until the last metre so it steps off on top; walking away while off the ground climbs down; no input holds on. Speeds and reach are guesses (the original's ladder rules are unread); tested on a synthetic ladder. Bots climb when they walk into one (one extra stuck sidestep on Aberdeen in the 78-level sweep, all else unchanged).
+
 Parachute and falls:
 - `setParachuteDrag 24` is used as a quadratic drag over `mass 100`, so the soldier sinks at about 6.4 m/s. `setParachuteSpeed 30` is not read.
 - Space while falling opens it, and it closes on landing. The `Parachute` model is drawn above the soldier while it is open, with its origin (the harness) 1.3 m up at the shoulders, fitted by eye on a screenshot.

@@ -22,7 +22,15 @@ bool hide_3p(const std::string& t) { return t == "parachute" || !(t.rfind("1p", 
 Game::Game(const Vfs& vfs_, Con& con_, const Heightmap& hm_, const TerrainInfo& info_, std::vector<DrawItem>& scene_,
            const std::vector<SpawnPoint>& spawns, const GameOptions& opt_, Camera cam_, bool objects)
     : phys(hm_, info_.world_size, info_.water_level), cam(cam_), vfs(vfs_), con(con_), hm(hm_), info(info_), scene(scene_), opt(opt_) {
-    if (objects) std::printf("physics: %zu static bodies\n", phys.add_scene(scene, vfs));
+    if (objects) {
+        std::set<std::string> ladders;  // templates in collision group c_CGLadders
+        if (auto ts = con.templates.find("objecttemplate"); ts != con.templates.end())
+            for (auto& [name, o] : ts->second)
+                for (auto& [k, a] : o.props)
+                    if (k == "addtocollisiongroup" && !a.empty() && lower(a[0]) == "c_cgladders") ladders.insert(lower(o.name));
+        size_t bodies = phys.add_scene(scene, vfs, ladders);
+        std::printf("physics: %zu static bodies, %zu ladders\n", bodies, phys.ladders());
+    }
     const std::string& drive = opt.drive;
     const std::string& play = opt.play;
     float cx = cam.x, cz = cam.z, yaw = cam.yaw;
@@ -345,6 +353,10 @@ void Game::footsteps(float t, float dt) {
         if (swim) {
             if (moving && t >= s.next) s.next = t + 1, play("soldierswim.ssc", 0);
             if (stopped) play("soldierswimstand.ssc", 0);
+            return;
+        }
+        if (phys.character_climbing(ch)) {  // SoldierClimbLadder every setLadderFrequency (0.46 s)
+            if (t >= s.next) s.next = t + 0.46f, play("soldierclimbladder.ssc", 0);
             return;
         }
         if (!phys.character_on_ground(ch)) return;
