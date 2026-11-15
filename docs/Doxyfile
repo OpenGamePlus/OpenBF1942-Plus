@@ -6,6 +6,7 @@ OUTPUT_DIRECTORY       = build/site
 INPUT                  = docs engine tools
 FILE_PATTERNS          = *.md *.h *.cpp *.py
 RECURSIVE              = YES
+EXCLUDE                = docs/site
 EXCLUDE_PATTERNS       = */test_*
 USE_MDFILE_AS_MAINPAGE = docs/README.md
 IMAGE_PATH             = docs
