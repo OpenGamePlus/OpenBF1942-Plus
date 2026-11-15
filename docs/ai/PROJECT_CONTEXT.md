@@ -4,6 +4,8 @@
 
 Clean-room reimplementation of the Refractor 1 engine (Battlefield 1942, 2002). The game is no longer sold or supported; the goal is to keep it playable and moddable on modern hardware.
 
+Visual identity (README, docs, anything we draw ourselves — not the in-game HUD, which follows the original): [banner](../banner.svg); titles in Stardos Stencil Bold, text in Oswald Medium (both SIL OFL, embedded subset in the banner); colours desert-dusk — navy `#24324f`, sand `#c9935e` / `#7a5434`, accent amber `#f2b766`, cream text `#fff6e2`, dark silhouettes `#221a15`.
+
 ## Goals
 
 - Run retail BF1942 content (base, XPack1, XPack2, mods) on a new engine.

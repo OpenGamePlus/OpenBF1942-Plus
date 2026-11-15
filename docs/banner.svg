@@ -1,24 +1,70 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="260" viewBox="0 0 1200 260" role="img" aria-labelledby="title desc">
-  <title id="title">OpenBF1942-Plus</title>
-  <desc id="desc">A clean-room Refractor 1 engine that runs Battlefield 1942 from your own installation</desc>
-  <defs>
-    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#3d5a7a"/>
-      <stop offset="0.65" stop-color="#b9a67c"/>
-      <stop offset="1" stop-color="#d8c28e"/>
-    </linearGradient>
-  </defs>
-  <rect width="1200" height="260" rx="14" fill="url(#sky)"/>
-  <path d="M0 200 L140 170 L260 185 L420 150 L560 178 L700 160 L860 182 L1000 158 L1200 176 L1200 260 L0 260 Z" fill="#a8925f" opacity="0.8"/>
-  <path d="M0 225 L1200 215 L1200 260 L0 260 Z" fill="#7d6a43"/>
-  <!-- a stylised tank silhouette -->
-  <g fill="#2b2a22" transform="translate(860 168)">
-    <rect x="0" y="22" width="190" height="26" rx="12"/>
-    <rect x="18" y="6" width="150" height="20" rx="4"/>
-    <rect x="60" y="-10" width="70" height="20" rx="6"/>
-    <rect x="128" y="-4" width="110" height="7" rx="3"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="260" viewBox="0 0 1200 260" role="img" aria-labelledby="t d">
+<title id="t">OpenBF1942-Plus</title>
+<desc id="d">A clean-room Refractor 1 engine that runs Battlefield 1942 from your own installation</desc>
+<!-- Fonts: Stardos Stencil and Oswald (SIL Open Font License), subset to the banner text -->
+<defs>
+<style>@font-face{font-family:'Stardos Stencil';font-weight:700;src:url(data:font/woff2;base64,d09GMgABAAAAAAnUAA0AAAAAFNwAAAmAAAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAABmAAgRwRCAqOcIxwC4E0AAE2AiQDgmQTjWoEIAWDZAcgDAcbRhIR1awfItNIWTh/vx/4bf6fy6XGJY0sVD77+/aDcdEmDIzsy9awiLJwUbhs3Jrw6SJ/v/JXYF/7oZuU2ALSCxLb+1QUrjMbYHIZX7KogOXB8//7favvzh6k3kVIJqUREpXU7jqjbzZmbz54kiRmkSF7witR1EOCEgkxUVIFHpXfymuBM0WHLcu+WOmpvAaQ0Muk60ABoPDJzwBg32UviaaGBKwACkof3QElAAIBAIfrtVqqe7vAa/ywbprhv3cAaAY00QsAiS9Hf6BsVL02oooapWUH6NFwOyDDusYDuEefygYvCIcYiAUhpIAIsqEamqAF2qATuq3WGpaGQ3RqElknaf1y09mPA6VCVlqtwFEK0vnKZyhJOg/1zhgwE66725FkcwbKsdFyJ0qKnhISXO+jZLfHM0i1/gYkMtXGCbOnkXm2thxfrhOHx+M62FExnoOrg6O9G4dtwy1CODB4n4FYspSWUIxOyMdM/sBGJiyBFgRDLPonpFoQtUIXgJhMQMiMX2UYKDGtcr+rJRQjMQeMsj1OpuQbxNmg6xpzyF21JdGiHKxiARNprMeAISMkYw+CK/sZjwJnkSVKrJaQEfIxDMwKM6JWTmifBN8omtIKwKgx5+78AosSjKQVtSsViEluIq2QGWWIBR3ciKoVBgZDY4dg2i6slIFJvrgJk4GMYRtXM1XM6qtrj1AvHX8YgLAG6cQNvV5vI2IfTVOfHneYCUB4WiWJoTObzQlmhsYPIYstyv2uF0Kx4884HXBT0fxZYV6ttFSCMd9ImOQmeeNqBfKpG1XZ5kWWVkI49qDK7qb6iy15h+ilZuIRTCs3wYoyI4PRalHK58oGOrkhG8HUZrxvwDG82xgJU7RJXkkIx7o37VI9aeaLBi1a029MQCbidtrrg4GJqK/tRyhql/OaX6l2u7IrymqdAmGVH+C9uxNVbCxXavyQWa1HDUODj7fRrh00AiE31R0O9iEdDh86ujSnfNzx2wEhO6F5jajrpuQP0bYW7SsgWo0bzI111LsRmTBpQ0vXplIN/C+HGbPqidMTcEjbKi6SZfv9Lt9pXcq9Hbdyl7v8W4w9xefw/yzH/iR2zQHVv7NUOw4Q6+uHVJmjq3eKJLULTa/R/70/f2LmelZurEt1ZdPXoi9VZ+Pr/3zdXfot8I8GCkXaTY/ETYG55H2sUmXa/s5k94Zv+2J6fqysPGYP7it1Qfrg7nOjZ9v/Onih+4LydTyqjCgXqvHZp5p1y73bx17DGLW+IMy7mnHXQ3EZrc8sFVd2lAb/kFlrq0gWnf+OXijynNqZnlC34qa+b+3olgfM0uaoHCwknF8ZoZp36HvYoneK7Jsn/vDJs2xIdAIC3ng70W9sikV8Q6hJ5Sd//Hz2uLY2r0iy35Z8ldKlJMqnT6+u39bFO9GC+oaISvLPLOC6EIk+gZOol4TopAvgrd+4NyeLWft4AN+I60KEDxI+Z/13enGuWFqry2B/Fc154565QTnZufik17HKjtQaqkfKis7qPfhP+Cof8aqSX8rJcN3Wi3lq7vgTxZHn029dWcRjT5/mJXXv7J675iZc2GyfWpjyVx/CnT21cORFSPDB2XGzM5u47exVT6+F6BsJJonm3ziBzzdITAmcRJOkYV76NX+qAYuMT9vymYhuuVtZutjf1Fw+ww9PqrJb7Q1tdY+XpL0pCsZtPJyQr9xn7JodRSvfoTUviIAdOeiFPXPcVbsHNzyfG9o2uO0uqy/ZIfbJ/5hDiE9dXjC8mYhdFCwsS+InhS0IPscWxH0RzId9dwp8LtzJTJxs8E/LzNxEq3r65nUtL2lB5IB9dQytfdtdQ88/WHnw3msxLykwiTkrWIxtEHP2imxF03D1+3haQeu1pOwkFXP5X5c5x30WGMJEBzkj2108bzQJJ/fKBOKeffPvB7cMbLqc6tta6DbpBa6d64ucEqpOp6yP7Vhaocjq3dggq805ivXVORWVTKes4bcJc2TS1r5qVY1qM4W3If8Y1neKWi7NScwsl3jsVelCJY23dm0l940xS/CsxNz4X6cNjIVKYcQ22Yeu3bnXM25R8IQlmv59elSW6q8Ft+MWBYYw0clk/qLAwBTpAAAA3qkfgUBK/1Aqt5Sz7G90jL5vhYHfXzl/4veZNnH/H/7vHYYXzQAI0N/RK6TzU/aGGaP/H/7/KMPrs22yAlLSXuGQTM4gjQBfdiITYCSrQXVxzMDcCyKrQVzflBQChAMzQ6/+TZQ7gJPNkAnX50VOhgSZS1Jbm0fWzfvU34g69XT0FhTGexHGpf4WEMSP+ip0mAM/EFgXwA+E1hnwg6VTC3YsZOJZ6wkIBg687Gd9wgpWsorVrGFtWjcsEgRRN5EFl2lWWX/0cOCWd1h/1roV+MBReNEafPjw4cOHD39VHAitP5KWNgLgUKi5FOSF7O5Bf/Akno/pD4EEG17OWCGBRJPF1DpMFxSGJljYOvA0t+tfdNgZ7JrarblHf6TXfmGAQYckj+j/eVK/cUqcFmacTTuPC7Do0tTlBCuukTZ94k2hUH8j4AlPCoW6k8AnrvjEj/Qkck2eqtIaYGJh4/A0t+s3dpS2M9gluVt/tAd7E/Q7gIPqUNpJcQqnYcbZXOZd6JGLU5ZYDqsIghQ8ETxJKIIgij0EQRAESRK5QcHOKV25W7+xJ4QW6A+QAkMBgiAIothI7jEt1B/wSOCEJ8nn9Tf9MRhijYsRb7KoBAMTCxuHp7aXsAM66aKbHnrpZ4BBhphkimlm4plbcF5daMdFYYnlepP1Q7CFC0h4DEkgwRQnTPEgp+JQTsUR02Okq97nUCgUCqWRxsDAwMDAxMTExMTEwsLCwsLCxsbGxsbGwcHBwcGR9uSzAEIIIYQQQgghhBBCCCGEEEIIIYQQQgghhK4YdsWqa4G1ZguJxHeL7VOQi11Ix65vIG0uHZ/dui77d6PwF/2s7XtkcbXLwTDaBSfxY7QrduPr6G0Ix+vR23EZ9aN34ChSR+/ERdyvD04+BChGPepRDcEt3EId8lCLElSjnnwTdZ9ajpuoQi2KcAtRCEQ44lCPHNQiH1WoO1pTgErk5TU34Hu0fTnykYgC1Jb+W1WoxGncwU3cxm3cmRzrNENO02gld8pBPnJQgTpI9gG1vodElndbm3Fn9yDarf0mrWq02LfIl2ufxmXk4Uot1z+NXLTgdM+OPH2UbrZ8UN6LPeqwbqNVgLoSUW5JPm7+x3AxXYhCXK8766Kt0e2vAAA=) format('woff2')}@font-face{font-family:'Oswald';font-weight:500;src:url(data:font/woff2;base64,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) format('woff2')}</style>
+  <clipPath id="card"><rect width="1200" height="260" rx="14"/></clipPath>
+  <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#24324f"/><stop offset=".45" stop-color="#6b6a78"/><stop offset=".75" stop-color="#d79a5c"/><stop offset="1" stop-color="#f2c27a"/>
+  </linearGradient>
+  <radialGradient id="sun" cx="50%" cy="50%" r="50%"><stop offset="0" stop-color="#fff2c8"/><stop offset=".4" stop-color="#ffd27c" stop-opacity=".9"/><stop offset="1" stop-color="#ff9a4a" stop-opacity="0"/></radialGradient>
+  <linearGradient id="d1" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#c9935e"/><stop offset="1" stop-color="#a87648"/></linearGradient>
+  <linearGradient id="d2" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#9c6e44"/><stop offset="1" stop-color="#7a5434"/></linearGradient>
+  <linearGradient id="d3" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#6a4a30"/><stop offset="1" stop-color="#3e2b1e"/></linearGradient>
+  <linearGradient id="title" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff6e2"/><stop offset="1" stop-color="#ead2a4"/></linearGradient>
+  <linearGradient id="smoke" x1="0" y1="1" x2="0" y2="0"><stop offset="0" stop-color="#3a2c24" stop-opacity=".6"/><stop offset="1" stop-color="#3a2c24" stop-opacity="0"/></linearGradient>
+  <linearGradient id="shade" x1="0" x2="1"><stop offset="0" stop-color="#0e1424" stop-opacity=".55"/><stop offset=".55" stop-color="#0e1424" stop-opacity="0"/></linearGradient>
+  <filter id="blur12"><feGaussianBlur stdDeviation="12"/></filter>
+  <filter id="tdrop"><feDropShadow dx="0" dy="3" stdDeviation="3" flood-color="#1a1210" flood-opacity=".75"/></filter>
+  <filter id="grain" x="0" y="0" width="100%" height="100%">
+  <feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" seed="3" result="n"/>
+  <feColorMatrix type="saturate" values="0"/>
+  <feComponentTransfer><feFuncA type="table" tableValues="0 0.07"/></feComponentTransfer>
+  <feComposite in2="SourceGraphic" operator="in"/>
+</filter>
+</defs>
+<g clip-path="url(#card)">
+  <rect width="1200" height="260" fill="url(#sky)"/>
+  <circle cx="1020" cy="170" r="120" fill="url(#sun)"/>
+  <circle cx="1020" cy="170" r="30" fill="#fff4d6" opacity=".9"/>
+  <!-- clouds -->
+  <g fill="#f6d8b0" opacity=".25" filter="url(#blur12)"><ellipse cx="820" cy="80" rx="160" ry="14"/><ellipse cx="1080" cy="110" rx="120" ry="10"/><ellipse cx="560" cy="60" rx="140" ry="10"/></g>
+  <g transform="translate(1040 44) scale(0.5)" fill="#2a1f1a" opacity="0.8">
+  <path d="M-40 0 Q-30 -5 20 -4 L34 -2 Q38 0 34 2 L20 4 Q-30 5 -40 0 Z"/>
+  <path d="M-6 -3 L4 -3 L-2 -34 L-12 -34 Z"/><path d="M-6 3 L4 3 L-2 34 L-12 34 Z"/>
+  <path d="M-36 -1 L-30 -1 L-38 -12 L-44 -12 Z"/><path d="M-36 1 L-30 1 L-38 12 L-44 12 Z"/>
+  <rect x="34" y="-9" width="2" height="18"/></g>
+  <g transform="translate(1110 68) scale(0.36)" fill="#2a1f1a" opacity="0.65">
+  <path d="M-40 0 Q-30 -5 20 -4 L34 -2 Q38 0 34 2 L20 4 Q-30 5 -40 0 Z"/>
+  <path d="M-6 -3 L4 -3 L-2 -34 L-12 -34 Z"/><path d="M-6 3 L4 3 L-2 34 L-12 34 Z"/>
+  <path d="M-36 -1 L-30 -1 L-38 -12 L-44 -12 Z"/><path d="M-36 1 L-30 1 L-38 12 L-44 12 Z"/>
+  <rect x="34" y="-9" width="2" height="18"/></g>
+  <g transform="translate(975 30) scale(0.28)" fill="#2a1f1a" opacity="0.5">
+  <path d="M-40 0 Q-30 -5 20 -4 L34 -2 Q38 0 34 2 L20 4 Q-30 5 -40 0 Z"/>
+  <path d="M-6 -3 L4 -3 L-2 -34 L-12 -34 Z"/><path d="M-6 3 L4 3 L-2 34 L-12 34 Z"/>
+  <path d="M-36 -1 L-30 -1 L-38 -12 L-44 -12 Z"/><path d="M-36 1 L-30 1 L-38 12 L-44 12 Z"/>
+  <rect x="34" y="-9" width="2" height="18"/></g>
+  <!-- dunes -->
+  <path d="M0 200 Q160 170 340 190 T700 182 T1000 176 T1200 186 L1200 260 L0 260 Z" fill="url(#d1)"/>
+  <path d="M0 220 Q220 196 470 214 T900 206 T1200 214 L1200 260 L0 260 Z" fill="url(#d2)"/>
+  <!-- tank -->
+  <g transform="translate(955 204) scale(.85)" fill="#221a15">
+    <path d="M0 22 Q-6 30 4 38 L168 38 Q178 30 172 22 Z"/>
+    <path d="M6 6 L166 6 L176 22 L-4 22 Z"/>
+    <path d="M40 -16 L128 -16 L140 6 L30 6 Z"/>
+    <rect x="128" y="-10" width="120" height="7" rx="2"/>
+    <rect x="240" y="-12" width="12" height="11" rx="2"/>
+    <rect x="70" y="-24" width="30" height="10" rx="3"/>
+    <g fill="#3a2c22"><circle cx="14" cy="30" r="7"/><circle cx="35" cy="30" r="7"/><circle cx="56" cy="30" r="7"/><circle cx="77" cy="30" r="7"/><circle cx="98" cy="30" r="7"/><circle cx="119" cy="30" r="7"/><circle cx="140" cy="30" r="7"/><circle cx="161" cy="30" r="7"/></g>
   </g>
-  <text x="70" y="118" font-family="Georgia, 'Times New Roman', serif" font-size="78" font-weight="bold" fill="#f4ecd6" stroke="#2b2a22" stroke-width="2">OpenBF1942-Plus</text>
-  <text x="74" y="162" font-family="Verdana, Arial, sans-serif" font-size="24" fill="#f4ecd6">Refractor 1, rebuilt from scratch · bring your own Battlefield 1942</text>
-  <rect x="10" y="10" width="1180" height="240" rx="9" fill="none" stroke="#f4ecd6" stroke-opacity="0.4" stroke-width="2"/>
+  <path d="M0 238 Q260 222 560 236 T1200 232 L1200 260 L0 260 Z" fill="url(#d3)"/>
+  <rect width="1200" height="260" fill="url(#shade)"/>
+  <!-- text -->
+  <text x="70" y="120" font-family="'Stardos Stencil', Impact, sans-serif" font-weight="700" font-size="82" fill="url(#title)" filter="url(#tdrop)" letter-spacing="1">OpenBF1942<tspan fill="#f2b766">-Plus</tspan></text>
+  <g transform="translate(72 140)"><rect width="64" height="4" fill="#f2b766"/><rect x="72" y="1.5" width="420" height="1" fill="#fff6e2" opacity=".45"/></g>
+  <text x="72" y="178" font-family="Oswald, 'Arial Narrow', sans-serif" font-weight="500" font-size="25" fill="#fff4de" letter-spacing="1" filter="url(#tdrop)">REFRACTOR 1, REBUILT FROM SCRATCH <tspan fill="#f2b766">·</tspan> BRING YOUR OWN BATTLEFIELD 1942</text>
+  <rect width="1200" height="260" filter="url(#grain)"/>
+</g>
+<rect x="1" y="1" width="1198" height="258" rx="13" fill="none" stroke="#fff2d8" stroke-opacity=".4" stroke-width="2"/>
 </svg>
