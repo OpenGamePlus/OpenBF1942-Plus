@@ -1,5 +1,5 @@
 # Site published to GitHub Pages by .github/workflows/pages.yml.
-# Local: fetch doxygen-awesome-css into docs/site/awesome (see the workflow), then run `doxygen docs/Doxyfile` from the repo root.
+# Local: fetch doxygen-awesome-css into docs/site/awesome (see the workflow), then run `mkdir -p build && doxygen docs/Doxyfile` from the repo root.
 PROJECT_NAME           = "OpenBF1942-Plus"
 PROJECT_BRIEF          = "Refractor 1, rebuilt from scratch"
 OUTPUT_DIRECTORY       = build/site
