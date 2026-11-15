@@ -7,6 +7,7 @@
 ![Platform: Linux | Windows](https://img.shields.io/badge/platform-Linux%20%7C%20Windows-lightgrey)
 ![C++17 | OpenGL 3.3](https://img.shields.io/badge/C%2B%2B17-OpenGL%203.3-lightgrey)
 ![Battlefield 1942](https://img.shields.io/badge/Battlefield-1942-8a7a52)
+[![Docs](https://img.shields.io/badge/docs-online-f2b766)](https://opengameplus.github.io/OpenBF1942-Plus/)
 
 [Español](README.es.md) · [English](README.md) · [Português](README.pt.md) · **Français** · [Deutsch](README.de.md) · [Русский](README.ru.md)
 

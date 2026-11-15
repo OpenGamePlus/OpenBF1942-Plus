@@ -1,0 +1,26 @@
+# Site published to GitHub Pages by .github/workflows/pages.yml.
+# Local: fetch doxygen-awesome-css into docs/site/awesome (see the workflow), then run `doxygen docs/Doxyfile` from the repo root.
+PROJECT_NAME           = "OpenBF1942-Plus"
+PROJECT_BRIEF          = "Refractor 1, rebuilt from scratch"
+OUTPUT_DIRECTORY       = build/site
+INPUT                  = docs engine tools
+FILE_PATTERNS          = *.md *.h *.cpp *.py
+RECURSIVE              = YES
+EXCLUDE_PATTERNS       = */test_*
+USE_MDFILE_AS_MAINPAGE = docs/README.md
+IMAGE_PATH             = docs
+EXTRACT_ALL            = YES
+EXTRACT_STATIC         = YES
+MARKDOWN_ID_STYLE      = GITHUB
+TOC_INCLUDE_HEADINGS   = 3
+WARN_IF_UNDOCUMENTED   = NO
+GENERATE_LATEX         = NO
+GENERATE_TREEVIEW      = YES
+DISABLE_INDEX          = NO
+FULL_SIDEBAR           = NO
+HTML_COLORSTYLE        = LIGHT
+HTML_COPY_CLIPBOARD    = YES
+HTML_CODE_FOLDING      = YES
+HTML_EXTRA_STYLESHEET  = docs/site/awesome/doxygen-awesome.css \
+                         docs/site/awesome/doxygen-awesome-sidebar-only.css \
+                         docs/site/theme.css

@@ -1,0 +1,34 @@
+name: pages
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+concurrency:
+  group: pages
+  cancel-in-progress: true
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - name: Doxygen and theme
+        run: |
+          curl -sL https://github.com/doxygen/doxygen/releases/download/Release_1_16_1/doxygen-1.16.1.linux.bin.tar.gz | tar xz
+          git clone -q --depth 1 --branch v2.5.0 https://github.com/jothepro/doxygen-awesome-css docs/site/awesome
+      - name: Generate
+        run: doxygen-1.16.1/bin/doxygen docs/Doxyfile
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: build/site/html
+  deploy:
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

@@ -2,6 +2,10 @@
 
 Append-only. Newest first. At most 3 bullets per stage.
 
+## 2026-11-15 — Documentation site
+
+- GitHub Pages site built with Doxygen and doxygen-awesome-css (as OpenMOHAA-Plus), themed with the banner's colours and fonts: all `docs/` pages plus the `engine/` and `tools/` reference. Theme fetched at build time, not vendored.
+
 ## 2026-11-15 — New banner and visual identity
 
 - `docs/banner.svg` replaced by the desert-dusk design; its fonts (Stardos Stencil, Oswald) embedded as woff2 subsets so GitHub renders them. Palette and fonts recorded in PROJECT_CONTEXT as the project identity.

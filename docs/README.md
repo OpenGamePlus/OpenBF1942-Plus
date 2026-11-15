@@ -1,5 +1,9 @@
 # Documentation index
 
+![OpenBF1942-Plus](banner.svg)
+
+Clean-room reimplementation of the Refractor 1 engine that runs Battlefield 1942 from your own installation. Start with the [system summary](ai/SYSTEM_SUMMARY.md) for what works today; the pages below hold the format specs, decisions and plans. The engine and tool reference is generated from `engine/` and `tools/`.
+
 | Area | Document |
 |---|---|
 | Format coverage (what is left) | [formats/coverage.md](formats/coverage.md) |

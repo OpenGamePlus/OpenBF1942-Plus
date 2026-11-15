@@ -55,6 +55,7 @@ tools/test_*.py      unit tests (synthetic data only)
 | Map viewer | `build/obf_mapview <BF1942_DIR> <mod> <level> [--shot out.ppm] [--cam x y z yaw pitch] [--mode conquest|ctf|tdm|coop] [--soldier <template>] [--drive <vehicle>] [--play <team or soldier>] [--kit 0-4] [--sim s] [--fire-ahead] [--collision] [--no-objects]` |
 | Headless game run | `build/obf_sim <BF1942_DIR> <mod> <level> (--play <team or soldier> [--kit 0-4] \| --drive <vehicle> [--fire-ahead]) [--cam x y z yaw pitch] [--sim s]` — the `--shot` demo without a window |
 | Doc checks | `python3 tools/check_docs.py` |
+| Docs site | GitHub Pages from `docs/Doxyfile`, built by `.github/workflows/pages.yml` on every push to main |
 | List archive | `python3 tools/rfa.py list <archive.rfa>` |
 | Extract archive | `python3 tools/rfa.py extract <archive.rfa> <out_dir>` |
 | Load mod + level | `python3 tools/con.py <BF1942_DIR> <mod> [level] [mode]` |

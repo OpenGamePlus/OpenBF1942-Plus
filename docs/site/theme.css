@@ -1,0 +1,28 @@
+/* Project identity (docs/ai/PROJECT_CONTEXT.md) on top of doxygen-awesome-css. */
+@import url('https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600&family=Stardos+Stencil:wght@700&display=swap');
+
+html {
+    --primary-color: #a8642a;
+    --primary-dark-color: #7a5434;
+    --primary-light-color: #c9935e;
+    --page-background-color: #fffaf0;
+    --page-foreground-color: #2a1f1a;
+    --page-secondary-foreground-color: #6a4a30;
+    --separator-color: #e6d3b3;
+    --side-nav-background: #24324f;
+    --side-nav-foreground: #fff6e2;
+    --side-nav-arrow-color: #f2b766;
+    --code-background: #f6ecd9;
+    --fragment-background: #24324f;
+    --fragment-foreground: #fff6e2;
+    --font-family-title: 'Stardos Stencil', Impact, sans-serif;
+}
+
+#projectname { font-family: var(--font-family-title); letter-spacing: 1px; color: #fff6e2; }
+#projectbrief { font-family: Oswald, 'Arial Narrow', sans-serif; text-transform: uppercase; color: #f2b766; }
+#titlearea { background: linear-gradient(#24324f, #3a3e55); border-bottom: 4px solid #f2b766; }
+.title, h1, h2, h3 { font-family: Oswald, 'Arial Narrow', sans-serif; font-weight: 500; letter-spacing: .5px; }
+.headertitle .title { font-family: var(--font-family-title); font-weight: 700; }
+#nav-tree .selected { background: #f2b766; }
+#nav-tree .selected a, #nav-tree .selected .arrow { color: #221a15; }
+#nav-tree a, #nav-tree .label { color: var(--side-nav-foreground); }
